@@ -1,0 +1,58 @@
+schema:
+  fields:
+    - issuer_name
+    - investment_description
+    - asset_type
+    - par_value
+    - cost
+    - current_value
+    - units_or_shares
+    - page_number
+    - row_id
+  required:
+    - issuer_name
+    - current_value
+  numeric_fields:
+    - par_value
+    - cost
+    - current_value
+    - units_or_shares
+  header_synonyms:
+    issuer_name:
+      - "issuer"
+      - "name of issuer"
+      - "issuer name"
+      - "name of issuer or borrower"
+      - "issuer or obligor"
+    investment_description:
+      - "description"
+      - "investment description"
+      - "type of investment"
+      - "description of investment"
+      - "title of issue"
+    asset_type:
+      - "asset type"
+      - "type"
+      - "category"
+    par_value:
+      - "par value"
+      - "principal amount"
+      - "face value"
+    cost:
+      - "cost"
+      - "cost of investment"
+      - "book value"
+    current_value:
+      - "current value"
+      - "fair value"
+      - "market value"
+      - "value"
+    units_or_shares:
+      - "units"
+      - "shares"
+      - "units or shares"
+validation:
+  confidence_threshold: 0.75
+  low_confidence_threshold: 0.6
+  max_currency_len: 32
+  allow_negative: true
