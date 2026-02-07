@@ -1,0 +1,681 @@
+================================================================================
+LLM-BASED DATA CLEANUP
+================================================================================
+
+Reading clean investment data...
+Processing 191 rows with LLM analysis...
+
+  [1] UPDATED: GALLIARD SHORT CORE FUND F (Fair value)
+      → Issuer: GALLIARD SHORT CORE FUND F
+      → Description: Common/Collective Trust Fund
+      → Asset Type: Collective Trust
+      → Reason: The issuer name contained the term 'F' which is part of the fund name but does not provide additional asset type information. The asset type was identified as 'Collective Trust' based on the investment description.
+
+  [2] UPDATED: GALLIARD INTERMEDIATE CORE FUND L (Fair value)
+      → Issuer: GALLIARD INTERMEDIATE CORE FUND L
+      → Description: Common/Collective Trust Fund
+      → Asset Type: Collective Trust
+      → Reason: The issuer name contained embedded information indicating it is a fund, which has been separated into the investment description. The asset type has been classified as 'Collective Trust' based on the investment description.
+
+  [4] UPDATED: WF/BLACKROCK SHORT TERM INVESTMENT FUND S
+      → Issuer: WF/BLACKROCK
+      → Description: SHORT TERM INVESTMENT FUND Common/Collective Trust
+      → Asset Type: Common/Collective Trust Fund
+      → Reason: The issuer name contained embedded information about the fund type and description. The issuer name was cleaned to 'WF/BLACKROCK', and the investment description was updated to include 'SHORT TERM INVESTMENT FUND' along with the existing description.
+
+  [5] UPDATED: BLACKROCK LIQ FDS FED FUND INST
+      → Issuer: BLACKROCK LIQUIDITY FUNDS
+      → Description: Money Market/Mutual Fund
+      → Asset Type: Money Market Fund
+      → Reason: The issuer name contained embedded asset type information ('FUND INST' suggests a fund type). The issuer name was cleaned to remove 'LIQ FDS FED FUND INST' and replaced with 'LIQUIDITY FUNDS' for clarity. The asset type was identified as 'Money Market Fund' based on the investment description.
+
+  [6] UPDATED: AECOM
+      → Issuer: AECOM
+      → Description: Common Stock
+      → Asset Type: Common Stock
+      → Reason: The issuer name does not contain embedded asset type or investment description information. The asset type 'Common Stock' was identified and separated from the investment description.
+
+  [7] UPDATED: AIR PRODUCTS & CHEMICALS
+      → Issuer: AIR PRODUCTS & CHEMICALS
+      → Description: Common Stock
+      → Asset Type: Common Stock
+      → Reason: The issuer name did not contain any embedded asset type or investment description information. The asset type was identified as 'Common Stock' and has been populated accordingly.
+
+  [8] UPDATED: ALPHABET INC CL A
+      → Issuer: ALPHABET INC
+      → Description: Common Stock
+      → Asset Type: Common Stock
+      → Reason: The issuer name contained embedded asset type information ('CL A' indicates a class of common stock). The issuer name was cleaned to 'ALPHABET INC', and 'Common Stock' was confirmed as the asset type.
+
+  [12] UPDATED: ARAMARK
+      → Issuer: ARAMARK
+      → Description: Common Stock
+      → Asset Type: Common Stock
+      → Reason: The issuer name does not contain embedded asset type or investment description information. The asset type 'Common Stock' has been separated and placed in the asset_type field, while the investment description remains unchanged.
+
+  [13] UPDATED: AVANTOR INC
+      → Issuer: AVANTOR INC
+      → Description: Common Stock
+      → Asset Type: Common Stock
+      → Reason: The issuer name does not contain embedded asset type or investment description information. The asset type has been classified as 'Common Stock' based on the investment description provided.
+
+  [17] UPDATED: COMCAST CORP CL A
+      → Issuer: COMCAST CORP
+      → Description: Common Stock
+      → Asset Type: Common Stock
+      → Reason: The issuer name contained asset type information ('CL A' indicates a class of common stock), which has been separated. The pure issuer name is 'COMCAST CORP', and the asset type is classified as 'Common Stock'.
+
+  [21] UPDATED: BANK OF NOVA SCOTIA
+      → Issuer: BANK OF NOVA SCOTIA
+      → Description: Common Stock
+      → Asset Type: Common Stock
+      → Reason: The issuer name did not contain any embedded asset type or investment description information. The asset type was identified as 'Common Stock' from the investment description and has been separated into the asset_type field.
+
+  [23] UPDATED: FIDELITY NATL INFORM SVCS
+      → Issuer: FIDELITY NATL INFORM SVCS
+      → Description: Common Stock
+      → Asset Type: Common Stock
+      → Reason: The issuer name does not contain embedded asset type or investment description information. The asset type 'Common Stock' has been separated and placed in the asset_type field, while the investment description remains unchanged.
+
+  [24] UPDATED: FORTIVE CORP
+      → Issuer: FORTIVE CORP
+      → Description: Common Stock
+      → Asset Type: Common Stock
+      → Reason: The issuer name does not contain embedded asset type or investment description information. The asset type 'Common Stock' was identified and separated from the investment description.
+
+  [26] UPDATED: HESS CORP
+      → Issuer: HESS CORP
+      → Description: Common Stock
+      → Asset Type: Common Stock
+      → Reason: The issuer name does not contain any embedded asset type or investment description information. The asset type 'Common Stock' was identified in the investment description and has been separated into the asset_type field.
+
+  [27] UPDATED: HUNT J B TRANSPORT SVCS I
+      → Issuer: HUNT J B TRANSPORT SVCS
+      → Description: Common Stock
+      → Asset Type: Common Stock
+      → Reason: The issuer name contained the asset type 'Common Stock', which has been separated into the asset_type field. The issuer name has been cleaned to remove the asset type information.
+
+  [31] UPDATED: LITHIA MOTORS INC CL A
+      → Issuer: LITHIA MOTORS INC
+      → Description: Common Stock
+      → Asset Type: Common Stock
+      → Reason: The issuer name contained 'CL A', which indicates a share class and should be separated from the pure issuer name. The asset type 'Common Stock' was identified and confirmed, and the issuer name was cleaned to remove the share class designation.
+
+  [36] UPDATED: PERMIAN RESOURCES CORP CL
+      → Issuer: PERMIAN RESOURCES CORP
+      → Description: Common Stock
+      → Asset Type: Common Stock
+      → Reason: The issuer name contained 'CL', which is typically an abbreviation for 'Class' and does not contribute to the pure issuer name. The asset type 'Common Stock' was identified and separated from the issuer name.
+
+  [40] UPDATED: PROLOGIS INC REIT
+      → Issuer: PROLOGIS INC
+      → Description: Common Stock
+      → Asset Type: Common Stock
+      → Reason: The issuer name contained asset type information ('REIT') which was not explicitly listed as an asset type. The issuer name was cleaned to 'PROLOGIS INC', and 'Common Stock' was confirmed as the asset type.
+
+  [43] UPDATED: SANOFI SPON ADR
+      → Issuer: SANOFI
+      → Description: Common Stock
+      → Asset Type: Common Stock
+      → Reason: The issuer name 'SANOFI SPON ADR' contains the asset type 'Common Stock' which has been separated. The issuer name has been cleaned to 'SANOFI'.
+
+  [44] UPDATED: US BANCORP DEL
+      → Issuer: US BANCORP
+      → Description: Common Stock
+      → Asset Type: Common Stock
+      → Reason: The issuer name 'US BANCORP DEL' contained the asset type 'Common Stock', which has been separated into the asset_type field. The issuer name has been cleaned to 'US BANCORP'.
+
+  [46] UPDATED: VICI PPTYS INC
+      → Issuer: VICI PPTYS INC
+      → Description: Common Stock
+      → Asset Type: Common Stock
+      → Reason: The issuer name did not contain embedded asset type or investment description information. The asset type 'Common Stock' was identified from the investment description and moved to the asset_type field.
+
+  [49] UPDATED: XCEL ENERGY INC
+      → Issuer: XCEL ENERGY INC
+      → Description: Common Stock
+      → Asset Type: Common Stock
+      → Reason: The issuer name does not contain embedded asset type or investment description information. The asset type 'Common Stock' was identified and separated from the investment description.
+
+  Processed 50/191 rows... (pausing for rate limit)
+  [52] UPDATED: AXALTA COATING SYS LTD
+      → Issuer: AXALTA COATING SYS LTD
+      → Description: Common Stock
+      → Asset Type: Common Stock
+      → Reason: The issuer name does not contain embedded asset type or investment description information. The asset type has been classified as 'Common Stock' based on the investment description provided.
+
+  [56] UPDATED: BLACKROCK LIQ FDS FED FUND INST
+      → Issuer: BLACKROCK LIQ FDS
+      → Description: Money Market/Mutual Fund
+      → Asset Type: Money Market Fund
+      → Reason: The issuer name contained embedded asset type information ('FED FUND' indicates a Money Market Fund). The issuer name was cleaned to remove this information, and the asset type was classified accordingly.
+
+  [57] UPDATED: ACV AUCTIONS INC CL A
+      → Issuer: ACV AUCTIONS INC
+      → Description: Common Stock
+      → Asset Type: Common Stock
+      → Reason: The issuer name contained embedded asset type information ('CL A' indicates a class of common stock). The issuer name was cleaned to remove this, and the asset type was explicitly classified as 'Common Stock'.
+
+  [61] UPDATED: AVANTOR INC
+      → Issuer: AVANTOR INC
+      → Description: Common Stock
+      → Asset Type: Common Stock
+      → Reason: The issuer name does not contain embedded asset type or investment description information. The asset type 'Common Stock' was identified in the investment description and has been separated into the asset_type field.
+
+  [63] UPDATED: BALDWIN INSURANCE GROUP I
+      → Issuer: BALDWIN INSURANCE GROUP
+      → Description: Common Stock
+      → Asset Type: Common Stock
+      → Reason: The issuer name contained 'INSURANCE GROUP', which is not part of the pure issuer name. The asset type 'Common Stock' was identified and separated from the issuer name.
+
+  [67] UPDATED: BRIGHT HORIZONS FAMILY SO
+      → Issuer: BRIGHT HORIZONS FAMILY
+      → Description: Common Stock
+      → Asset Type: Common Stock
+      → Reason: The issuer name contained embedded asset type information ('Common Stock') which has been separated into the asset_type field. The issuer name has been cleaned to remove this information.
+
+  [68] UPDATED: BRINKS CO
+      → Issuer: BRINKS CO
+      → Description: Common Stock
+      → Asset Type: Common Stock
+      → Reason: The issuer name does not contain embedded asset type or investment description information. The asset type 'Common Stock' has been separated and placed in the asset_type field, while the investment description remains unchanged.
+
+  [72] UPDATED: CASELLA WASTE SYS INC CL
+      → Issuer: CASELLA WASTE SYS INC
+      → Description: Common Stock
+      → Asset Type: Common Stock
+      → Reason: The issuer name contained embedded asset type information ('CL' indicates a class of stock). The issuer name was cleaned to remove this, and the asset type was explicitly classified as 'Common Stock'.
+
+  [88] UPDATED: EVOLENT HEALTH INC A
+      → Issuer: EVOLENT HEALTH INC
+      → Description: Common Stock
+      → Asset Type: Common Stock
+      → Reason: The issuer name contained the asset type 'Common Stock', which has been separated into the asset_type field. The issuer name has been cleaned to remove the asset type information.
+
+  [89] UPDATED: EXACT SCIENCES CORP
+      → Issuer: EXACT SCIENCES CORP
+      → Description: Common Stock
+      → Asset Type: Common Stock
+      → Reason: The issuer name does not contain embedded asset type or investment description information. The asset type 'Common Stock' was identified and separated from the investment description.
+
+  [97] UPDATED: INSMED INC
+      → Issuer: INSMED INC
+      → Description: Common Stock
+      → Asset Type: Common Stock
+      → Reason: The issuer name does not contain embedded asset type or investment description information. The asset type 'Common Stock' has been separated and placed in the asset_type field, while the investment description remains unchanged.
+
+  Processed 100/191 rows... (pausing for rate limit)
+  [104] UPDATED: MADRIGAL PHARMACEUTICALS
+      → Issuer: MADRIGAL PHARMACEUTICALS
+      → Description: Common Stock
+      → Asset Type: Common Stock
+      → Reason: The issuer name does not contain embedded asset type or investment description information. The asset type 'Common Stock' has been separated and placed in the asset_type field, while the investment description remains unchanged.
+
+  [106] UPDATED: MERCURY SYS INC
+      → Issuer: MERCURY SYS INC
+      → Description: Common Stock
+      → Asset Type: Common Stock
+      → Reason: The issuer name does not contain embedded asset type or investment description information. The asset type 'Common Stock' has been separated and placed in the asset_type field, while the investment description remains unchanged.
+
+  [111] UPDATED: NICE LTD SPON ADR
+      → Issuer: NICE LTD
+      → Description: Common Stock
+      → Asset Type: Common Stock
+      → Reason: The issuer name contained asset type information ('Common Stock') which has been separated into the asset_type field. The investment description remains as is.
+
+  [114] UPDATED: PENUMBRA INC
+      → Issuer: PENUMBRA INC
+      → Description: Common Stock
+      → Asset Type: Common Stock
+      → Reason: The issuer name did not contain embedded asset type or investment description information. The asset type 'Common Stock' was identified from the investment description and moved to the asset_type field.
+
+  [115] UPDATED: PLANET FITNESS INC CL A Common Stock
+      → Issuer: PLANET FITNESS INC
+      → Description: 
+      → Asset Type: Common Stock
+      → Reason: The issuer name contained asset type information ('Common Stock') which has been separated into the asset_type field. The pure issuer/company name has been extracted.
+
+  [116] UPDATED: POOL CORP Common Stock
+      → Issuer: POOL CORP
+      → Description: 
+      → Asset Type: Common Stock
+      → Reason: The issuer name contained asset type information ('Common Stock') which has been extracted and placed in the asset_type field. The issuer name has been cleaned to only include the company name.
+
+  [117] UPDATED: PRIMO BRANDS CORP A Common Stock
+      → Issuer: PRIMO BRANDS CORP
+      → Description: 
+      → Asset Type: Common Stock
+      → Reason: Extracted 'Common Stock' as the asset type from the issuer name and removed it from the issuer name to ensure consistency.
+
+  [118] UPDATED: PURE STORAGE INC CL A Common Stock
+      → Issuer: PURE STORAGE INC
+      → Description: 
+      → Asset Type: Common Stock
+      → Reason: The issuer name contained asset type information ('Common Stock') which has been separated into the asset_type field. The pure issuer/company name has been extracted.
+
+  [119] UPDATED: Q2 HLDGS INC Common Stock
+      → Issuer: Q2 HLDGS INC
+      → Description: 
+      → Asset Type: Common Stock
+      → Reason: The issuer name contained asset type information ('Common Stock') which has been extracted and placed in the asset_type field. The pure issuer name has been separated from the asset type.
+
+  [120] UPDATED: RANGE RESOURCES CORP Common Stock
+      → Issuer: RANGE RESOURCES CORP
+      → Description: 
+      → Asset Type: Common Stock
+      → Reason: The issuer name contained asset type information ('Common Stock') which has been extracted and placed in the asset_type field. The pure issuer name has been separated from the asset type.
+
+  [121] UPDATED: REGAL REXNORD CORP Common Stock
+      → Issuer: REGAL REXNORD CORP
+      → Description: 
+      → Asset Type: Common Stock
+      → Reason: The issuer name contained embedded asset type information ('Common Stock') which has been separated. The pure issuer name has been extracted.
+
+  [122] UPDATED: REVOLVE GROUP INC Common Stock
+      → Issuer: REVOLVE GROUP INC
+      → Description: 
+      → Asset Type: Common Stock
+      → Reason: The issuer name contained asset type information ('Common Stock') which has been separated into the asset_type field. The issuer name has been cleaned to remove this information.
+
+  [123] UPDATED: STRIDE INC Common Stock
+      → Issuer: STRIDE INC
+      → Description: 
+      → Asset Type: Common Stock
+      → Reason: The issuer name contained asset type information ('Common Stock') which has been separated into the asset_type field. The issuer name has been cleaned to only include the company name.
+
+  [124] UPDATED: TPG INC Common Stock
+      → Issuer: TPG INC
+      → Description: 
+      → Asset Type: Common Stock
+      → Reason: Extracted 'Common Stock' as the asset type from the issuer name and removed it from the issuer name to ensure consistency.
+
+  [125] UPDATED: TALEN ENERGY CORP Common Stock
+      → Issuer: TALEN ENERGY CORP
+      → Description: 
+      → Asset Type: Common Stock
+      → Reason: The issuer name contained asset type information ('Common Stock') which has been separated into the asset_type field. The issuer name has been cleaned to remove the asset type.
+
+  [126] UPDATED: TENABLE HLDGS INC Common Stock
+      → Issuer: TENABLE HLDGS INC
+      → Description: 
+      → Asset Type: Common Stock
+      → Reason: The issuer name contained asset type information ('Common Stock') which has been extracted and placed in the asset_type field. The issuer name has been cleaned to remove the asset type.
+
+  [127] UPDATED: TWIST BIOSCIENCE CORP Common Stock
+      → Issuer: TWIST BIOSCIENCE CORP
+      → Description: 
+      → Asset Type: Common Stock
+      → Reason: The issuer name contained asset type information ('Common Stock') which has been separated into the asset_type field. The pure issuer name has been extracted.
+
+  [128] UPDATED: VARONIS SYS INC Common Stock
+      → Issuer: VARONIS SYS INC
+      → Description: 
+      → Asset Type: Common Stock
+      → Reason: The issuer name contained asset type information ('Common Stock') which has been separated into the asset_type field. The clean issuer/company name has been extracted.
+
+  [129] UPDATED: WESTERN ALLIANCE BANCORP Common Stock
+      → Issuer: WESTERN ALLIANCE BANCORP
+      → Description: 
+      → Asset Type: Common Stock
+      → Reason: The issuer name contained embedded asset type information ('Common Stock') which has been extracted and placed in the asset_type field. The issuer name has been cleaned to remove this information.
+
+  [130] UPDATED: Total William Blair Small-Mid Cap Growth  Common S
+      → Issuer: Total William Blair Small-Mid Cap Growth
+      → Description: 
+      → Asset Type: Common Stock
+      → Reason: Extracted 'Common Stock' as the asset type from the issuer name and separated it from the issuer name. The issuer name was cleaned to remove the asset type information.
+
+  [131] UPDATED: WHITECAP RESOURCES INC Common Stock
+      → Issuer: WHITECAP RESOURCES INC
+      → Description: 
+      → Asset Type: Common Stock
+      → Reason: The issuer name contained asset type information ('Common Stock') which has been separated into the asset_type field. The pure issuer name has been extracted.
+
+  [132] UPDATED: NVENT ELECTRIC PLC Common Stock
+      → Issuer: NVENT ELECTRIC PLC
+      → Description: 
+      → Asset Type: Common Stock
+      → Reason: The issuer name contained asset type information ('Common Stock') which has been extracted and placed in the asset_type field. The pure issuer name has been separated from the asset type.
+
+  [133] UPDATED: FIRSTSVCS CORP Common Stock
+      → Issuer: FIRSTSVCS CORP
+      → Description: 
+      → Asset Type: Common Stock
+      → Reason: The issuer name contained asset type information ('Common Stock') which has been separated into the asset_type field. The issuer name has been cleaned to only include the company name.
+
+  [134] UPDATED: CREDO TECH GROUP HLDGS LT Common Stock
+      → Issuer: CREDO TECH GROUP HLDGS LT
+      → Description: 
+      → Asset Type: Common Stock
+      → Reason: The issuer name contained embedded asset type information ('Common Stock') which has been separated. The pure issuer name has been extracted.
+
+  [135] UPDATED: FTAI AVIATION LTD Common Stock
+      → Issuer: FTAI AVIATION LTD
+      → Description: 
+      → Asset Type: Common Stock
+      → Reason: The issuer name contained the asset type 'Common Stock', which has been extracted and placed in the asset_type field. The issuer name has been cleaned to remove the asset type information.
+
+  [136] UPDATED: SHARKNINJA INC Common Stock
+      → Issuer: SHARKNINJA INC
+      → Description: 
+      → Asset Type: Common Stock
+      → Reason: The issuer name contained asset type information ('Common Stock') which has been extracted and placed in the asset_type field. The pure issuer name has been separated from the asset type.
+
+  [137] UPDATED: ABIOMED INC CVR Common Stock
+      → Issuer: ABIOMED INC
+      → Description: 
+      → Asset Type: Common Stock
+      → Reason: The issuer name contained the asset type 'Common Stock', which has been extracted and placed in the asset_type field. The issuer name has been cleaned to remove the asset type information.
+
+  [138] UPDATED: CANADIAN DOLLAR Currency
+      → Issuer: CANADIAN DOLLAR
+      → Description: 
+      → Asset Type: Currency
+      → Reason: The issuer name contained asset type information ('Currency') which has been extracted and placed in the asset_type field. The issuer name has been cleaned to remove the asset type reference.
+
+  [139] UPDATED: BLACKROCK GLOBAL LIFEPATH INDEX 2030 ACCOUNT A
+      → Issuer: BLACKROCK
+      → Description: GLOBAL LIFEPATH INDEX 2030 ACCOUNT A
+      → Asset Type: Common/Collective Trust Fund
+      → Reason: The issuer name contained embedded investment description information. The issuer name was separated into 'BLACKROCK' as the clean issuer name and 'GLOBAL LIFEPATH INDEX 2030 ACCOUNT A' as the investment description.
+
+  [140] UPDATED: BLACKROCK GLOBAL LIFEPATH INDEX 2035 ACCOUNT A
+      → Issuer: BLACKROCK GLOBAL LIFEPATH INDEX 2035
+      → Description: 
+      → Asset Type: Common/Collective Trust Fund
+      → Reason: The issuer name contained embedded information about the investment strategy (Lifepath Index 2035), which is part of the investment description. The issuer name was cleaned to remove the 'ACCOUNT A' part, which is not necessary for the issuer identification.
+
+  [141] UPDATED: BLACKROCK GLOBAL LIFEPATH INDEX 2040 ACCOUNT A
+      → Issuer: BLACKROCK GLOBAL LIFEPATH INDEX 2040
+      → Description: ACCOUNT A
+      → Asset Type: Common/Collective Trust Fund
+      → Reason: The issuer name contained both the investment description ('ACCOUNT A') and the asset type information ('Common/Collective Trust Fund'). The issuer name was cleaned to remove the account designation, and the investment description was updated to include 'ACCOUNT A'.
+
+  [142] UPDATED: BLACKROCK GLOBAL LIFEPATH INDEX 2045 ACCOUNT A
+      → Issuer: BLACKROCK
+      → Description: GLOBAL LIFEPATH INDEX 2045 ACCOUNT A
+      → Asset Type: Common/Collective Trust Fund
+      → Reason: The issuer name contained both the issuer and the investment description. The issuer was separated as 'BLACKROCK', and the investment description was extracted as 'GLOBAL LIFEPATH INDEX 2045 ACCOUNT A'. No changes were made to the asset type.
+
+  [143] UPDATED: BLACKROCK GLOBAL LIFEPATH INDEX 2050 ACCOUNT A
+      → Issuer: BLACKROCK
+      → Description: GLOBAL LIFEPATH INDEX 2050 ACCOUNT A
+      → Asset Type: Common/Collective Trust Fund
+      → Reason: The issuer name contained both the issuer (BLACKROCK) and an embedded investment description (GLOBAL LIFEPATH INDEX 2050 ACCOUNT A). The issuer name was separated from the investment description for clarity.
+
+  [144] UPDATED: BLACKROCK GLOBAL LIFEPATH INDEX 2055 ACCOUNT A
+      → Issuer: BLACKROCK
+      → Description: GLOBAL LIFEPATH INDEX 2055 ACCOUNT A
+      → Asset Type: Common/Collective Trust Fund
+      → Reason: The issuer name contained both the issuer and a detailed investment description. The issuer name was cleaned to 'BLACKROCK', and the investment description was extracted as 'GLOBAL LIFEPATH INDEX 2055 ACCOUNT A'. No changes were made to the asset type.
+
+  [145] UPDATED: BLACKROCK GLOBAL LIFEPATH INDEX 2060 ACCOUNT A
+      → Issuer: BLACKROCK
+      → Description: GLOBAL LIFEPATH INDEX 2060 ACCOUNT A
+      → Asset Type: Common/Collective Trust Fund
+      → Reason: The issuer name contained both the issuer/company name and an embedded investment description. The issuer name was cleaned to 'BLACKROCK', and the investment description was extracted as 'GLOBAL LIFEPATH INDEX 2060 ACCOUNT A'. No changes were made to the asset type.
+
+  [146] UPDATED: BLACKROCK GLOBAL LIFEPATH INDEX 2065 ACCOUNT A
+      → Issuer: BLACKROCK GLOBAL LIFEPATH INDEX 2065
+      → Description: ACCOUNT A
+      → Asset Type: Common/Collective Trust Fund
+      → Reason: The issuer name contained both the investment description ('ACCOUNT A') and the asset type information ('Common/Collective Trust Fund'). The issuer name was cleaned to remove the account designation, and the investment description was updated to include 'ACCOUNT A'.
+
+  [147] UPDATED: BLACKROCK GLOBAL LIFEPATH INDEX 2070 ACCOUNT A
+      → Issuer: BLACKROCK GLOBAL LIFEPATH
+      → Description: INDEX 2070 ACCOUNT A
+      → Asset Type: Common/Collective Trust Fund
+      → Reason: The issuer name contained both asset type information and an investment description. The asset type 'Common/Collective Trust Fund' was identified and separated, while 'INDEX 2070 ACCOUNT A' was extracted as the investment description. The clean issuer name was simplified to 'BLACKROCK GLOBAL LIFEPATH'.
+
+  [148] UPDATED: BLACKROCK GLOBAL LIFEPATH INDEX RETIREMENT ACCOUNT
+      → Issuer: BLACKROCK
+      → Description: GLOBAL LIFEPATH INDEX RETIREMENT ACCOUNT A
+      → Asset Type: Common/Collective Trust Fund
+      → Reason: The issuer name contained both the company name and an embedded investment description. The pure issuer name was extracted as 'BLACKROCK', and the investment description was identified as 'GLOBAL LIFEPATH INDEX RETIREMENT ACCOUNT A'. No changes were made to the asset type.
+
+  [149] UPDATED: VANGUARD TOTAL BOND MARKET INDEX TRUST
+      → Issuer: Vanguard
+      → Description: Total Bond Market Index Trust
+      → Asset Type: Common/Collective Trust Fund
+      → Reason: The issuer name contained embedded investment description information ('Total Bond Market Index Trust') which has been extracted and placed in the investment_description field. The pure issuer name has been simplified to 'Vanguard'.
+
+  Processed 150/191 rows... (pausing for rate limit)
+  [150] UPDATED: EATON VANCE HIGH YIELD CIT V
+      → Issuer: EATON VANCE
+      → Description: HIGH YIELD CIT V
+      → Asset Type: Common/Collective Trust Fund
+      → Reason: The issuer name contained embedded investment description information ('HIGH YIELD CIT V') which has been separated from the issuer name. The asset type remains unchanged.
+
+  [151] UPDATED: LOOMIS SAYLES CORE PLUS FIXED INCOME CIT F
+      → Issuer: LOOMIS SAYLES
+      → Description: CORE PLUS FIXED INCOME CIT F
+      → Asset Type: Common/Collective Trust Fund
+      → Reason: Separated the issuer name from the investment description. The issuer name was identified as 'LOOMIS SAYLES', while 'CORE PLUS FIXED INCOME CIT F' is treated as the investment description.
+
+  [152] UPDATED: VANGUARD INSTITUTIONAL 500 INDEX TRUST
+      → Issuer: VANGUARD INSTITUTIONAL
+      → Description: 500 INDEX TRUST
+      → Asset Type: Common/Collective Trust Fund
+      → Reason: The issuer name contained embedded investment description information ('500 INDEX TRUST') which has been separated from the issuer name. The asset type remains unchanged.
+
+  [153] UPDATED: FIDELITY CONTRA COMM POOL CL 3 *
+      → Issuer: FIDELITY CONTRA
+      → Description: COMM POOL CL 3
+      → Asset Type: Common/Collective Trust Fund
+      → Reason: The issuer name contained embedded information that was separated into the issuer name and investment description. The asset type remains unchanged.
+
+  [154] UPDATED: AB US SMALL AND MID CAP VALUE CIT (W SERIES)
+      → Issuer: AB
+      → Description: US SMALL AND MID CAP VALUE CIT (W SERIES)
+      → Asset Type: Common/Collective Trust Fund
+      → Reason: The issuer name contained embedded investment description information. The pure issuer name 'AB' was extracted, and the investment description was updated to include 'US SMALL AND MID CAP VALUE CIT (W SERIES)'. No changes were made to the asset type.
+
+  [156] UPDATED: BAILLIE GIFFORD INTERNATIONAL ALPHA CIT C
+      → Issuer: BAILLIE GIFFORD
+      → Description: INTERNATIONAL ALPHA CIT C
+      → Asset Type: Common/Collective Trust Fund
+      → Reason: The issuer name contained embedded investment description information ('INTERNATIONAL ALPHA CIT C') which has been separated from the issuer name. The asset type remains unchanged.
+
+  [157] UPDATED: VANGUARD TOTAL INTL STOCK INDEX TRUST
+      → Issuer: Vanguard
+      → Description: TOTAL INTL STOCK INDEX TRUST
+      → Asset Type: Common/Collective Trust Fund
+      → Reason: The issuer name contained both the issuer and a description of the investment. The issuer name was simplified to 'Vanguard', and the investment description was extracted as 'TOTAL INTL STOCK INDEX TRUST'. No changes were made to the asset type.
+
+  [158] UPDATED: BNY MELLON EB GLOBAL REAL ESTATE SEC II
+      → Issuer: BNY MELLON
+      → Description: EB GLOBAL REAL ESTATE SEC II
+      → Asset Type: Common/Collective Trust Fund
+      → Reason: Separated the issuer name from the investment description. The issuer name was cleaned to 'BNY MELLON', and 'EB GLOBAL REAL ESTATE SEC II' was moved to the investment description field.
+
+  [159] UPDATED: BROKERGE ACCOUNT Various Accounts
+      → Issuer: BROKERGE ACCOUNT
+      → Description: Various Accounts
+      → Asset Type: 
+      → Reason: The issuer name contained embedded information indicating 'Various Accounts' which is treated as an investment description. The pure issuer name has been extracted, and the investment description has been populated accordingly.
+
+  [160] UPDATED: Participant Loans * Interest rates ranging from 4.
+      → Issuer: Participant Loans
+      → Description: Interest rates ranging from 4.25% to 9.50%
+      → Asset Type: 
+      → Reason: The issuer name contained embedded information about interest rates, which has been moved to the investment description field. The asset type field remains empty as no common asset type was identified.
+
+  [161] UPDATED: Nuveen
+      → Issuer: Nuveen
+      → Description: Large Cap Responsible Equity Fund R6
+      → Asset Type: Mutual Fund
+      → Reason: The issuer name 'Nuveen' does not contain embedded asset type or investment description information. The asset type 'Mutual Fund' has been identified based on the investment description provided.
+
+  [162] UPDATED: PIMCO
+      → Issuer: PIMCO
+      → Description: Income Fund Institutional Class
+      → Asset Type: Mutual Fund
+      → Reason: The issuer name 'PIMCO' does not contain embedded asset type information, but the investment description indicates that it is a 'Mutual Fund'. The asset type has been classified accordingly.
+
+  [163] UPDATED: * The Vanguard Group, Inc.
+      → Issuer: The Vanguard Group, Inc.
+      → Description: 500 Index Fund Institutional Select
+      → Asset Type: Mutual Fund
+      → Reason: The issuer name did not contain any asset type information or investment description. The asset type 'Mutual Fund' was identified based on the investment description provided.
+
+  [164] UPDATED: * The Vanguard Group, Inc.
+      → Issuer: The Vanguard Group, Inc.
+      → Description: Cash Reserves Federal MM Fund Admiral
+      → Asset Type: Money Market Fund
+      → Reason: The issuer name did not contain any asset type or investment description information. The asset type 'Money Market Fund' was identified based on the investment description provided.
+
+  [165] UPDATED: * The Vanguard Group, Inc.
+      → Issuer: The Vanguard Group, Inc.
+      → Description: Emerging Markets Index Fund Institutional Plus
+      → Asset Type: Mutual Fund
+      → Reason: The issuer name does not contain embedded investment description or asset type information. The asset type 'Mutual Fund' has been identified based on the investment description.
+
+  [166] UPDATED: * The Vanguard Group, Inc.
+      → Issuer: The Vanguard Group, Inc.
+      → Description: Real Estate Index Fund Institutional
+      → Asset Type: Mutual Fund
+      → Reason: The issuer name did not contain any asset type information or investment description. The asset type 'Mutual Fund' was identified based on the investment description provided.
+
+  [167] UPDATED: * The Vanguard Group, Inc.
+      → Issuer: The Vanguard Group, Inc.
+      → Description: Total International Bond Index Fund Institutional
+      → Asset Type: Mutual Fund
+      → Reason: The issuer name did not contain embedded asset type or investment description information. The asset type 'Mutual Fund' was identified based on the investment description provided.
+
+  [168] UPDATED: * The Vanguard Group, Inc.
+      → Issuer: The Vanguard Group, Inc.
+      → Description: Wellesley Income Fund Admiral
+      → Asset Type: Mutual Fund
+      → Reason: The issuer name does not contain embedded investment description or asset type information. The asset type 'Mutual Fund' has been identified based on the investment description provided.
+
+  [169] UPDATED: * The Vanguard Group, Inc.
+      → Issuer: The Vanguard Group, Inc.
+      → Description: Target Retirement Trust 2020
+      → Asset Type: Mutual Fund
+      → Reason: The issuer name did not contain embedded investment description or asset type information. The asset type 'Mutual Fund' was identified based on the investment description provided.
+
+  [170] UPDATED: * The Vanguard Group, Inc.
+      → Issuer: The Vanguard Group, Inc.
+      → Description: Target Retirement Trust 2025
+      → Asset Type: Mutual Fund
+      → Reason: The issuer name did not contain embedded asset type information, but the investment description indicates that it is a Mutual Fund. The asset type field has been populated accordingly.
+
+  [171] UPDATED: * The Vanguard Group, Inc.
+      → Issuer: The Vanguard Group, Inc.
+      → Description: Target Retirement Trust 2030
+      → Asset Type: Mutual Fund
+      → Reason: The issuer name does not contain embedded investment description or asset type information. The asset type 'Mutual Fund' has been identified based on the investment description provided.
+
+  [172] UPDATED: * The Vanguard Group, Inc.
+      → Issuer: The Vanguard Group, Inc.
+      → Description: Target Retirement Trust 2035
+      → Asset Type: Mutual Fund
+      → Reason: The issuer name does not contain embedded investment description or asset type information. The asset type 'Mutual Fund' has been identified based on the investment description provided.
+
+  [173] UPDATED: * The Vanguard Group, Inc.
+      → Issuer: The Vanguard Group, Inc.
+      → Description: Target Retirement Trust 2040
+      → Asset Type: Mutual Fund
+      → Reason: The issuer name does not contain embedded investment description or asset type information. The asset type 'Mutual Fund' has been identified based on the investment description provided.
+
+  [174] UPDATED: * The Vanguard Group, Inc.
+      → Issuer: The Vanguard Group, Inc.
+      → Description: Target Retirement Trust 2045
+      → Asset Type: Mutual Fund
+      → Reason: The issuer name does not contain embedded investment description or asset type information. However, the investment description indicates that it is a mutual fund, which has been classified as the asset type.
+
+  [175] UPDATED: * The Vanguard Group, Inc.
+      → Issuer: The Vanguard Group, Inc.
+      → Description: Target Retirement Trust 2050
+      → Asset Type: Mutual Fund
+      → Reason: The issuer name does not contain embedded investment description or asset type information. The asset type 'Mutual Fund' has been identified based on the investment description provided.
+
+  [176] UPDATED: * The Vanguard Group, Inc.
+      → Issuer: The Vanguard Group, Inc.
+      → Description: Target Retirement Trust 2055
+      → Asset Type: Mutual Fund
+      → Reason: The issuer name did not contain embedded asset type or investment description information. The asset type 'Mutual Fund' was identified based on the investment description, which is a common classification for target retirement trusts.
+
+  [177] UPDATED: * The Vanguard Group, Inc.
+      → Issuer: The Vanguard Group, Inc.
+      → Description: Target Retirement Trust 2060
+      → Asset Type: Mutual Fund
+      → Reason: The issuer name does not contain embedded investment description or asset type information. The asset type 'Mutual Fund' has been identified based on the investment description provided.
+
+  [178] UPDATED: * The Vanguard Group, Inc.
+      → Issuer: The Vanguard Group, Inc.
+      → Description: Target Retirement Trust 2065
+      → Asset Type: Mutual Fund
+      → Reason: The issuer name did not contain embedded investment description or asset type information. However, the investment description indicates that it is a mutual fund, which has been classified as the asset type.
+
+  [179] UPDATED: * The Vanguard Group, Inc.
+      → Issuer: The Vanguard Group, Inc.
+      → Description: Target Retirement Trust 2070
+      → Asset Type: Mutual Fund
+      → Reason: The issuer name did not contain embedded investment description or asset type information. However, the investment description indicates that it is a mutual fund, which has been classified as the asset type.
+
+  [180] UPDATED: * The Vanguard Group, Inc.
+      → Issuer: The Vanguard Group, Inc.
+      → Description: Target Retirement Income and Growth Trust
+      → Asset Type: Mutual Fund
+      → Reason: The issuer name did not contain embedded asset type or investment description information. The asset type 'Mutual Fund' was identified based on the investment description provided.
+
+  [181] UPDATED: * The Vanguard Group, Inc.
+      → Issuer: The Vanguard Group, Inc.
+      → Description: Target Retirement Income Trust
+      → Asset Type: Collective Trust
+      → Reason: The issuer name does not contain embedded investment description or asset type information. The asset type 'Collective Trust' was identified based on the investment description provided.
+
+  [182] UPDATED: * The Vanguard Group, Inc.
+      → Issuer: The Vanguard Group, Inc.
+      → Description: Developed Markets Index Trust
+      → Asset Type: Mutual Fund
+      → Reason: The issuer name did not contain any embedded asset type or investment description information. However, based on the investment description, it has been classified as a 'Mutual Fund'.
+
+  [183] UPDATED: * The Vanguard Group, Inc.
+      → Issuer: The Vanguard Group, Inc.
+      → Description: Institutional Extended Market Index Trust
+      → Asset Type: Collective Trust
+      → Reason: The issuer name does not contain embedded asset type or investment description information. The asset type 'Collective Trust' has been identified based on the investment description provided.
+
+  [184] UPDATED: * The Vanguard Group, Inc.
+      → Issuer: The Vanguard Group, Inc.
+      → Description: Institutional Total Bond Market Index Trust
+      → Asset Type: Collective Trust
+      → Reason: The issuer name does not contain embedded asset type or investment description information. The asset type 'Collective Trust' was identified based on the investment description and added accordingly.
+
+  [186] UPDATED: Fidelity Investments
+      → Issuer: Fidelity
+      → Description: Diversified Commingled Pool Fund, Class C
+      → Asset Type: Mutual Fund
+      → Reason: The issuer name 'Fidelity Investments' was simplified to 'Fidelity'. The asset type 'Mutual Fund' was identified based on the investment description, which indicates a pooled investment vehicle.
+
+  [188] UPDATED: Metropolitan West Funds
+      → Issuer: Metropolitan West
+      → Description: MetWest Total Return Bond Fund (CIT)
+      → Asset Type: Mutual Fund
+      → Reason: The issuer name was cleaned to remove 'Funds' for clarity. The asset type 'Mutual Fund' was identified based on the investment description and added to the asset_type field.
+
+  [190] UPDATED: * Vanguard Brokerage Option
+      → Issuer: Vanguard
+      → Description: Self Directed Brokerage Accounts
+      → Asset Type: 
+      → Reason: The issuer name contained the term 'Brokerage Option', which could imply a service rather than an asset type. The issuer name was cleaned to 'Vanguard' to reflect only the company name. No asset type was identified in the issuer name, and the investment description remains unchanged.
+
+  [191] UPDATED: Notes Receivable from Participants
+      → Issuer: Participants
+      → Description: ‐ with maturities from January 2025 to August 2035
+      → Asset Type: Notes Receivable
+      → Reason: The issuer name contained embedded asset type information ('Notes Receivable') which has been separated into the asset_type field. The pure issuer name has been extracted as 'Participants'.
+
+
+Saving cleaned data to data/outputs/investments_clean_llm.csv...
+
+================================================================================
+✓ LLM CLEANUP COMPLETE!
+================================================================================
+Total rows processed: 191
+Rows modified: 110
+Rows unchanged: 81
+Output file: data/outputs/investments_clean_llm.csv
+

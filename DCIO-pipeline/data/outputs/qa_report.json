@@ -1,0 +1,2486 @@
+{
+  "summary": {
+    "total_rows": 284,
+    "low_confidence_rows": 0,
+    "validation_failures": 317
+  },
+  "issues": [
+    {
+      "page": 4,
+      "row_id": 1,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 4,
+      "row_id": 2,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 4,
+      "row_id": 3,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 4,
+      "row_id": 4,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 4,
+      "row_id": 5,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 4,
+      "row_id": 6,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 4,
+      "row_id": 7,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 4,
+      "row_id": 8,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 4,
+      "row_id": 9,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 4,
+      "row_id": 10,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 4,
+      "row_id": 11,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 4,
+      "row_id": 12,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 4,
+      "row_id": 13,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 4,
+      "row_id": 14,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 4,
+      "row_id": 15,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 4,
+      "row_id": 16,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 4,
+      "row_id": 17,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 4,
+      "row_id": 18,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 4,
+      "row_id": 19,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 4,
+      "row_id": 20,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 4,
+      "row_id": 21,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 4,
+      "row_id": 22,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 4,
+      "row_id": 23,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 4,
+      "row_id": 24,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 4,
+      "row_id": 25,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 4,
+      "row_id": 26,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 4,
+      "row_id": 27,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 4,
+      "row_id": 28,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 4,
+      "row_id": 29,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 4,
+      "row_id": 30,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 4,
+      "row_id": 31,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 4,
+      "row_id": 32,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 4,
+      "row_id": 33,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 1,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 2,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 3,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 4,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 5,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 6,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 7,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 8,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 9,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 10,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 1,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 2,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 3,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 4,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 5,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 6,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 7,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 8,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 9,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 10,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 11,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 12,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 13,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 14,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 15,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 16,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 17,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 18,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 19,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 20,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 21,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 22,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 23,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 24,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 25,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 26,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 27,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 28,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 29,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 30,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 31,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 32,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 33,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 34,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 35,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 36,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 37,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 38,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 39,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 40,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 41,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 42,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 43,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 44,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 45,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 46,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 47,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 48,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 49,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 50,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 51,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 56,
+      "row_id": 52,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 60,
+      "row_id": 1,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 60,
+      "row_id": 2,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name"
+      ]
+    },
+    {
+      "page": 60,
+      "row_id": 2,
+      "issue": "Invalid numeric format: current_value",
+      "value": "(1) Employer contributions ........................................................................."
+    },
+    {
+      "page": 60,
+      "row_id": 3,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 60,
+      "row_id": 4,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name"
+      ]
+    },
+    {
+      "page": 60,
+      "row_id": 4,
+      "issue": "Invalid numeric format: current_value",
+      "value": "(2) Participant contributions ........................................................................"
+    },
+    {
+      "page": 60,
+      "row_id": 5,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 60,
+      "row_id": 6,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name"
+      ]
+    },
+    {
+      "page": 60,
+      "row_id": 6,
+      "issue": "Invalid numeric format: current_value",
+      "value": "(3) Other ...................................................................................................."
+    },
+    {
+      "page": 60,
+      "row_id": 7,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name"
+      ]
+    },
+    {
+      "page": 60,
+      "row_id": 7,
+      "issue": "Invalid numeric format: current_value",
+      "value": "c General investments:"
+    },
+    {
+      "page": 60,
+      "row_id": 8,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name"
+      ]
+    },
+    {
+      "page": 60,
+      "row_id": 8,
+      "issue": "Invalid numeric format: current_value",
+      "value": "(1) Interest-bearing cash (include money market accounts & certificates"
+    },
+    {
+      "page": 60,
+      "row_id": 9,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 60,
+      "row_id": 10,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 60,
+      "row_id": 11,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name"
+      ]
+    },
+    {
+      "page": 60,
+      "row_id": 11,
+      "issue": "Invalid numeric format: current_value",
+      "value": "of deposit) ..........................................................................................."
+    },
+    {
+      "page": 60,
+      "row_id": 12,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 60,
+      "row_id": 13,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name"
+      ]
+    },
+    {
+      "page": 60,
+      "row_id": 13,
+      "issue": "Invalid numeric format: current_value",
+      "value": "(2) U.S. Government securities .................................................................."
+    },
+    {
+      "page": 60,
+      "row_id": 14,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name"
+      ]
+    },
+    {
+      "page": 60,
+      "row_id": 14,
+      "issue": "Invalid numeric format: current_value",
+      "value": "(3) Corporate debt instruments (other than employer securities):"
+    },
+    {
+      "page": 60,
+      "row_id": 15,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 60,
+      "row_id": 16,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name"
+      ]
+    },
+    {
+      "page": 60,
+      "row_id": 16,
+      "issue": "Invalid numeric format: current_value",
+      "value": "(A) Preferred ........................................................................................"
+    },
+    {
+      "page": 60,
+      "row_id": 17,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 60,
+      "row_id": 18,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name"
+      ]
+    },
+    {
+      "page": 60,
+      "row_id": 18,
+      "issue": "Invalid numeric format: current_value",
+      "value": "(B) All other .........................................................................................."
+    },
+    {
+      "page": 60,
+      "row_id": 19,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name"
+      ]
+    },
+    {
+      "page": 60,
+      "row_id": 19,
+      "issue": "Invalid numeric format: current_value",
+      "value": "(4) Corporate stocks (other than employer securities):"
+    },
+    {
+      "page": 60,
+      "row_id": 20,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 60,
+      "row_id": 21,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name"
+      ]
+    },
+    {
+      "page": 60,
+      "row_id": 21,
+      "issue": "Invalid numeric format: current_value",
+      "value": "(A) Preferred ........................................................................................"
+    },
+    {
+      "page": 60,
+      "row_id": 22,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 60,
+      "row_id": 23,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name"
+      ]
+    },
+    {
+      "page": 60,
+      "row_id": 23,
+      "issue": "Invalid numeric format: current_value",
+      "value": "(B) Common ........................................................................................"
+    },
+    {
+      "page": 60,
+      "row_id": 24,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 60,
+      "row_id": 25,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name"
+      ]
+    },
+    {
+      "page": 60,
+      "row_id": 25,
+      "issue": "Invalid numeric format: current_value",
+      "value": "(5) Partnership/joint venture interests ........................................................."
+    },
+    {
+      "page": 60,
+      "row_id": 26,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 60,
+      "row_id": 27,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name"
+      ]
+    },
+    {
+      "page": 60,
+      "row_id": 27,
+      "issue": "Invalid numeric format: current_value",
+      "value": "(6) Real estate (other than employer real property) ...................................."
+    },
+    {
+      "page": 60,
+      "row_id": 28,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 60,
+      "row_id": 29,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name"
+      ]
+    },
+    {
+      "page": 60,
+      "row_id": 29,
+      "issue": "Invalid numeric format: current_value",
+      "value": "(7) Loans (other than to participants) .........................................................."
+    },
+    {
+      "page": 60,
+      "row_id": 30,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 60,
+      "row_id": 31,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name"
+      ]
+    },
+    {
+      "page": 60,
+      "row_id": 31,
+      "issue": "Invalid numeric format: current_value",
+      "value": "(8) Participant loans ..................................................................................."
+    },
+    {
+      "page": 60,
+      "row_id": 32,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 60,
+      "row_id": 33,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name"
+      ]
+    },
+    {
+      "page": 60,
+      "row_id": 33,
+      "issue": "Invalid numeric format: current_value",
+      "value": "(9) Value of interest in common/collective trusts ........................................."
+    },
+    {
+      "page": 60,
+      "row_id": 34,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 60,
+      "row_id": 35,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name"
+      ]
+    },
+    {
+      "page": 60,
+      "row_id": 35,
+      "issue": "Invalid numeric format: current_value",
+      "value": "(10) Value of interest in pooled separate accounts ......................................."
+    },
+    {
+      "page": 60,
+      "row_id": 36,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 60,
+      "row_id": 37,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name"
+      ]
+    },
+    {
+      "page": 60,
+      "row_id": 37,
+      "issue": "Invalid numeric format: current_value",
+      "value": "(11) Value of interest in master trust investment accounts ............................"
+    },
+    {
+      "page": 60,
+      "row_id": 38,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 60,
+      "row_id": 39,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name"
+      ]
+    },
+    {
+      "page": 60,
+      "row_id": 39,
+      "issue": "Invalid numeric format: current_value",
+      "value": "(12) Value of interest in 103-12 investment entities ......................................"
+    },
+    {
+      "page": 60,
+      "row_id": 40,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name"
+      ]
+    },
+    {
+      "page": 60,
+      "row_id": 40,
+      "issue": "Invalid numeric format: current_value",
+      "value": "(13) Value of interest in registered investment companies (e.g., mutual"
+    },
+    {
+      "page": 60,
+      "row_id": 41,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 60,
+      "row_id": 42,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name"
+      ]
+    },
+    {
+      "page": 60,
+      "row_id": 42,
+      "issue": "Invalid numeric format: current_value",
+      "value": "funds) ..................................................................................."
+    },
+    {
+      "page": 60,
+      "row_id": 43,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name"
+      ]
+    },
+    {
+      "page": 60,
+      "row_id": 43,
+      "issue": "Invalid numeric format: current_value",
+      "value": "(14) Value of funds held in insurance company general account (unallocated"
+    },
+    {
+      "page": 60,
+      "row_id": 44,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 60,
+      "row_id": 45,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name"
+      ]
+    },
+    {
+      "page": 60,
+      "row_id": 45,
+      "issue": "Invalid numeric format: current_value",
+      "value": "contracts).............................................................................................."
+    },
+    {
+      "page": 60,
+      "row_id": 46,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 60,
+      "row_id": 47,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name"
+      ]
+    },
+    {
+      "page": 60,
+      "row_id": 47,
+      "issue": "Invalid numeric format: current_value",
+      "value": "(15) Other ....................................................................................................."
+    },
+    {
+      "page": 61,
+      "row_id": 1,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 61,
+      "row_id": 2,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 61,
+      "row_id": 3,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 61,
+      "row_id": 4,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 61,
+      "row_id": 5,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 61,
+      "row_id": 6,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 61,
+      "row_id": 7,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 61,
+      "row_id": 8,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 61,
+      "row_id": 9,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 61,
+      "row_id": 10,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 61,
+      "row_id": 11,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 61,
+      "row_id": 12,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 61,
+      "row_id": 13,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 61,
+      "row_id": 14,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 61,
+      "row_id": 15,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 61,
+      "row_id": 16,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 61,
+      "row_id": 17,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 61,
+      "row_id": 18,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 61,
+      "row_id": 19,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 61,
+      "row_id": 20,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 61,
+      "row_id": 21,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 61,
+      "row_id": 22,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 61,
+      "row_id": 23,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 61,
+      "row_id": 24,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 61,
+      "row_id": 25,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 62,
+      "row_id": 1,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 62,
+      "row_id": 2,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 62,
+      "row_id": 2,
+      "issue": "Invalid numeric format: cost",
+      "value": "(3) Recordkeeping fees .............................................................................."
+    },
+    {
+      "page": 62,
+      "row_id": 3,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 62,
+      "row_id": 4,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 62,
+      "row_id": 4,
+      "issue": "Invalid numeric format: cost",
+      "value": "(4) IQPA audit fees ....................................................................................."
+    },
+    {
+      "page": 62,
+      "row_id": 5,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 62,
+      "row_id": 6,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 62,
+      "row_id": 6,
+      "issue": "Invalid numeric format: cost",
+      "value": "(5) Investment advisory and investment management fees ........................"
+    },
+    {
+      "page": 62,
+      "row_id": 7,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 62,
+      "row_id": 8,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 62,
+      "row_id": 8,
+      "issue": "Invalid numeric format: cost",
+      "value": "(6) Bank or trust company trustee/custodial fees ........................................"
+    },
+    {
+      "page": 62,
+      "row_id": 9,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 62,
+      "row_id": 10,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 62,
+      "row_id": 10,
+      "issue": "Invalid numeric format: cost",
+      "value": "(7) Actuarial fees ........................................................................................"
+    },
+    {
+      "page": 62,
+      "row_id": 11,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 62,
+      "row_id": 12,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 62,
+      "row_id": 12,
+      "issue": "Invalid numeric format: cost",
+      "value": "(8) Legal fees ............................................................................................."
+    },
+    {
+      "page": 62,
+      "row_id": 13,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 62,
+      "row_id": 14,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 62,
+      "row_id": 14,
+      "issue": "Invalid numeric format: cost",
+      "value": "(9) Valuation/appraisal fees ........................................................................"
+    },
+    {
+      "page": 62,
+      "row_id": 15,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 64,
+      "row_id": 1,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 64,
+      "row_id": 2,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 64,
+      "row_id": 3,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 64,
+      "row_id": 4,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 64,
+      "row_id": 5,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 64,
+      "row_id": 6,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 64,
+      "row_id": 7,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 64,
+      "row_id": 8,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 64,
+      "row_id": 9,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 64,
+      "row_id": 10,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 65,
+      "row_id": 1,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 65,
+      "row_id": 2,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 65,
+      "row_id": 3,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 65,
+      "row_id": 4,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 65,
+      "row_id": 5,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 65,
+      "row_id": 6,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 65,
+      "row_id": 7,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 65,
+      "row_id": 8,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 65,
+      "row_id": 9,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 65,
+      "row_id": 10,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 65,
+      "row_id": 11,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 65,
+      "row_id": 12,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 65,
+      "row_id": 13,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 65,
+      "row_id": 14,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 85,
+      "row_id": 1,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 85,
+      "row_id": 2,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 85,
+      "row_id": 3,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 85,
+      "row_id": 4,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 85,
+      "row_id": 5,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 85,
+      "row_id": 6,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 85,
+      "row_id": 7,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 85,
+      "row_id": 8,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 85,
+      "row_id": 9,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 85,
+      "row_id": 10,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 85,
+      "row_id": 11,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 85,
+      "row_id": 12,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 85,
+      "row_id": 13,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 85,
+      "row_id": 14,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 85,
+      "row_id": 15,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 85,
+      "row_id": 16,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 85,
+      "row_id": 17,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 85,
+      "row_id": 18,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 85,
+      "row_id": 19,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 85,
+      "row_id": 20,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 85,
+      "row_id": 21,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 85,
+      "row_id": 22,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 85,
+      "row_id": 23,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 85,
+      "row_id": 24,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 85,
+      "row_id": 25,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 85,
+      "row_id": 26,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 85,
+      "row_id": 27,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 85,
+      "row_id": 28,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 85,
+      "row_id": 29,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 85,
+      "row_id": 30,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 85,
+      "row_id": 31,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 85,
+      "row_id": 32,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 85,
+      "row_id": 33,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 85,
+      "row_id": 34,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 85,
+      "row_id": 35,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 85,
+      "row_id": 36,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 85,
+      "row_id": 37,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 85,
+      "row_id": 38,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name"
+      ]
+    },
+    {
+      "page": 85,
+      "row_id": 38,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 86,
+      "row_id": 1,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 86,
+      "row_id": 2,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 86,
+      "row_id": 3,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 86,
+      "row_id": 4,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 86,
+      "row_id": 5,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 86,
+      "row_id": 6,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 86,
+      "row_id": 7,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 86,
+      "row_id": 8,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 86,
+      "row_id": 9,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 86,
+      "row_id": 10,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 86,
+      "row_id": 11,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 86,
+      "row_id": 12,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 86,
+      "row_id": 13,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 86,
+      "row_id": 14,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 86,
+      "row_id": 15,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 86,
+      "row_id": 16,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 86,
+      "row_id": 17,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 86,
+      "row_id": 18,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 86,
+      "row_id": 19,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 86,
+      "row_id": 20,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 86,
+      "row_id": 21,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 86,
+      "row_id": 22,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 86,
+      "row_id": 23,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 86,
+      "row_id": 24,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 86,
+      "row_id": 25,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 86,
+      "row_id": 26,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 86,
+      "row_id": 27,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 86,
+      "row_id": 28,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 86,
+      "row_id": 29,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 86,
+      "row_id": 30,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 86,
+      "row_id": 31,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 86,
+      "row_id": 32,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 86,
+      "row_id": 33,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 86,
+      "row_id": 34,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    },
+    {
+      "page": 86,
+      "row_id": 35,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 86,
+      "row_id": 36,
+      "issue": "Missing required fields",
+      "missing": [
+        "current_value"
+      ]
+    },
+    {
+      "page": 86,
+      "row_id": 37,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name",
+        "current_value"
+      ]
+    },
+    {
+      "page": 86,
+      "row_id": 38,
+      "issue": "Missing required fields",
+      "missing": [
+        "issuer_name"
+      ]
+    },
+    {
+      "page": 86,
+      "row_id": 38,
+      "issue": "Invalid numeric format: cost",
+      "value": "**"
+    }
+  ],
+  "confidence_threshold": 0.75
+}

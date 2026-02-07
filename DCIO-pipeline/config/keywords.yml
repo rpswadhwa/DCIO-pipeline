@@ -1,0 +1,19 @@
+supplemental_schedule_keywords:
+  - "SUPPLEMENTAL SCHEDULE"
+  - "SCHEDULE OF INVESTMENTS"
+  - "STATEMENT OF ASSETS"
+  - "SCHEDULE H"
+  - "SCHEDULE I"
+  - "SCHEDULE H, LINE 4i"
+  - "SCHEDULE H, LINE 4j"
+  - "SCHEDULE I, LINE 4i"
+  - "SCHEDULE I, LINE 4j"
+negative_keywords:
+  - "SIGNATURE"
+  - "INDEPENDENT AUDITOR"
+  - "ACCOUNTANT"
+  - "SUMMARY"
+  - "INCOME STATEMENT"
+  - "BALANCE SHEET"
+min_keyword_hits: 1
+header_scan_max_lines: 12
