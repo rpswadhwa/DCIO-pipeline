@@ -1,4 +1,5 @@
 import json
+import os
 import re
 from typing import Dict, List, Tuple, Optional
 
@@ -348,7 +349,11 @@ def extract_tables_and_map(
     pages_arg = ",".join(str(p) for p in supplemental_pages)
     tables = camelot.read_pdf(pdf_path, pages=pages_arg, flavor="stream")
 
-    client = OpenAI() if use_llm else None
+    if use_llm:
+        api_key = os.getenv("OPENAI_API_KEY")
+        client = OpenAI(api_key=api_key) if api_key else None
+    else:
+        client = None
     mapped_pages: Dict[int, List[Dict]] = {}
     
     # Track which pages had tables extracted
