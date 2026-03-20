@@ -446,8 +446,8 @@ def extract_tables_and_map(
                     continue
                 field = column_map.get(col_idx)
                 if field:
-                    if row_data[field]:
-                        row_data[field] = normalize_whitespace(row_data[field] + " " + text)
+                    if row_data.get(field):
+                        row_data[field] = normalize_whitespace(str(row_data[field]) + " " + text)
                     else:
                         row_data[field] = text
             mapped_pages.setdefault(page_num, []).append(row_data)
