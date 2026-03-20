@@ -1,6 +1,7 @@
 import json
 import os
 
+import boto3
 from dotenv import load_dotenv
 from .ingest import ingest_pdfs
 from .classify_pages import classify_pages
@@ -13,6 +14,46 @@ from .validate import validate_pages
 from .load_db import init_db, load_to_db
 from .export_csv import export_csv
 from .utils import ensure_dir, read_env
+
+
+def upload_to_s3(file_path: str, s3_path: str):
+    """
+    Upload a file to S3 after pipeline completion.
+    
+    Args:
+        file_path: Local path to the file
+        s3_path: S3 path in format 's3://bucket/prefix/filename' or 's3://bucket/prefix/'
+    """
+    if not os.path.exists(file_path):
+        print(f"  ❌ File not found: {file_path}")
+        return False
+    
+    try:
+        # Parse S3 path
+        if not s3_path.startswith("s3://"):
+            print(f"  ❌ Invalid S3 path: {s3_path}")
+            return False
+        
+        s3_path = s3_path.replace("s3://", "")
+        parts = s3_path.split("/", 1)
+        bucket = parts[0]
+        key_prefix = parts[1] if len(parts) > 1 else ""
+        
+        # If key_prefix ends with /, append filename
+        if key_prefix.endswith("/"):
+            key_prefix += os.path.basename(file_path)
+        elif not key_prefix:
+            key_prefix = os.path.basename(file_path)
+        
+        # Upload to S3
+        s3_client = boto3.client("s3")
+        print(f"  📤 Uploading {os.path.basename(file_path)} to S3...")
+        s3_client.upload_file(file_path, bucket, key_prefix)
+        print(f"  ✅ Successfully uploaded to s3://{bucket}/{key_prefix}")
+        return True
+    except Exception as e:
+        print(f"  ❌ S3 upload failed: {e}")
+        return False
 
 
 def main():
@@ -76,6 +117,15 @@ def main():
     load_to_db(db_path, supplemental_pages, pages, plan_info_map)
 
     export_csv(supplemental_pages, schema_yml, csv_path)
+
+    # Upload pipeline.db to S3 after successful completion
+    s3_bucket = read_env("S3_BUCKET_PATH", "")
+    if s3_bucket:
+        print("\n🔄 Uploading results to S3...")
+        upload_to_s3(db_path, s3_bucket)
+    else:
+        print("\n⚠️  S3_BUCKET_PATH not set. Skipping S3 upload.")
+        print("   Set S3_BUCKET_PATH env var to enable automatic S3 upload (e.g., s3://bucket/prefix/)")
 
 
 if __name__ == "__main__":
