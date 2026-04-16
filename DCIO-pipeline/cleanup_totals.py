@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Remove "Total" rows from clean CSV and update database
+Remove "Total" rows from clean CSV and update database as needed
 """
 import csv
 import sqlite3
