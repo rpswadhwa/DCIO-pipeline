@@ -13,6 +13,65 @@ import pandas as pd
 from .data_cleaner import handle_split_rows, parse_investment_row
 from .utils import load_yaml, normalize_whitespace
 
+# (pattern to match, canonical asset type name) — ordered most-specific first
+_SECTION_ASSET_TYPES = [
+    (r'Common\s*/\s*Collective\s+Trust\s+Funds?', 'Common/Collective Trust Fund'),
+    (r'Collective\s+Investment\s+Trusts?', 'Common/Collective Trust Fund'),
+    (r'Collective\s+Trust\s+Funds?', 'Common/Collective Trust Fund'),
+    (r'Common\s+Collective\s+Trusts?', 'Common/Collective Trust Fund'),
+    (r'Separately\s+Managed\s+Accounts?', 'Separately Managed Account'),
+    (r'Self[\-\s]Directed\s+Brokerage\s+Accounts?', 'Self-Directed Brokerage Account'),
+    (r'Commingled\s+Funds?', 'Commingled Fund'),
+    (r'Stable\s+Value\s+Funds?', 'Stable Value Fund'),
+    (r'Money\s+Market\s+Funds?', 'Money Market Fund'),
+    (r'Index\s+Funds?', 'Index Fund'),
+    (r'Mutual\s+Funds?', 'Mutual Fund'),
+    (r'Common\s+Stocks?', 'Common Stock'),
+    (r'Publicly[\-\s]traded\s+Stocks?', 'Publicly-traded Stock'),
+    (r'Preferred\s+Stocks?', 'Preferred Stock'),
+    (r'Employer\s+Stocks?', 'Employer Stock'),
+    (r'Employer\s+Securities', 'Employer Stock'),
+    (r'Partnership\s+Interests?', 'Partnership Interest'),
+    (r'ETFs?', 'ETF'),
+    (r'Participant\s+Loans?', 'Participant Loan'),
+    (r'Currenc(?:y|ies)', 'Currency'),
+]
+
+
+def _detect_section_heading(row_data: Dict, fields: List[str]) -> Optional[str]:
+    """
+    Returns canonical asset type string if this row is a section heading
+    (an asset-type label row with no investment value), otherwise None.
+    """
+    current_value = str(row_data.get('current_value', '')).strip()
+    if current_value and current_value not in ('', 'nan', '-', '**', '0'):
+        return None
+
+    # Count fields that have meaningful content (excluding page/row metadata)
+    meta_fields = {'page_number', 'row_id'}
+    non_empty = sum(
+        1 for f in fields
+        if f not in meta_fields
+        and str(row_data.get(f, '')).strip()
+        and str(row_data.get(f, '')).strip() not in ('nan', '-', '**')
+    )
+    # A heading row has at most 2 non-empty data fields
+    if non_empty > 2:
+        return None
+
+    # Check each text field for an exact asset-type match
+    # Strip trailing colon/plural suffix so "Mutual Funds:" matches "Mutual Fund"
+    for field in ('issuer_name', 'investment_description', 'asset_type'):
+        text = str(row_data.get(field, '')).strip()
+        if not text or text == 'nan':
+            continue
+        text_clean = text.rstrip(':').strip()
+        for pattern, canonical in _SECTION_ASSET_TYPES:
+            if re.fullmatch(pattern, text_clean, re.IGNORECASE):
+                return canonical
+
+    return None
+
 
 def _best_header_match(header: str, synonyms: Dict[str, List[str]]) -> Tuple[str, int]:
     header = header.lower()
@@ -376,6 +435,10 @@ def extract_tables_and_map(
     # Separate storage for text-extracted pages (no DataFrame processing needed)
     text_extracted_pages: Dict[int, List[Dict]] = {}
 
+    # Persists across pages: once a section heading is seen, all following rows
+    # inherit its type until a new heading overrides it
+    current_section_type = ""
+
     for table in tables:
         df = table.df
         if df.shape[0] < 2:
@@ -450,6 +513,18 @@ def extract_tables_and_map(
                         row_data[field] = normalize_whitespace(str(row_data[field]) + " " + text)
                     else:
                         row_data[field] = text
+
+            # If this row is just an asset-type section heading, record the type and skip it
+            section_type = _detect_section_heading(row_data, fields)
+            if section_type is not None:
+                current_section_type = section_type
+                print(f"    Section heading detected: '{section_type}' (row {row_idx})")
+                continue
+
+            # Propagate the current section type to rows that have no asset_type yet
+            if not row_data.get('asset_type') and current_section_type:
+                row_data['asset_type'] = current_section_type
+
             mapped_pages.setdefault(page_num, []).append(row_data)
 
     # FALLBACK: Check if table extraction produced mostly empty data

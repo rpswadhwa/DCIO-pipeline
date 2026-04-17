@@ -12,7 +12,9 @@ def parse_investment_row(row):
     # Asset type patterns (ordered from most specific to least specific)
     asset_type_patterns = [
         r'Common/Collective Trust Fund',
+        r'Common Collective Trust',
         r'Collective Trust Fund',
+        r'Collective Investment Trust',
         r'Separately Managed Account',
         r'Self-Directed Brokerage Account',
         r'Commingled Fund',
@@ -21,6 +23,9 @@ def parse_investment_row(row):
         r'Mutual Fund',
         r'Index Fund',
         r'Common Stock',
+        r'Publicly.traded Stock',
+        r'Employer Stock',
+        r'Employer Securities',
         r'Preferred Stock',
         r'Currency',
         r'Partnership Interest',
@@ -168,7 +173,11 @@ def remove_total_rows(rows, verbose=True):
         if issuer_lower == "total" or any(indicator in combined for indicator in total_indicators):
             is_total = True
         
-        # SECOND: Check if issuer starts with 'Total' or contains 'TOT' abbreviation
+        # SECOND: Check if description starts with 'Total' when issuer is empty
+        elif not issuer and description.lower().startswith('total'):
+            is_total = True
+
+        # THIRD: Check if issuer starts with 'Total' or contains 'TOT' abbreviation
         elif issuer_lower.startswith('total') or ' tot ' in issuer_lower:
             # Could be either a fund name or a subtotal row
             is_subtotal = True
@@ -336,6 +345,45 @@ def remove_duplicates(rows, verbose=True):
     return deduped_rows
 
 
+_EXCLUDED_ASSET_TYPES = {
+    # Common Stock / Publicly traded equity
+    'common stock',
+    'publicly-traded stock',
+    'publicly traded stock',
+    'publicly-traded stocks',
+    'publicly traded stocks',
+    # CIT variants
+    'common/collective trust fund',
+    'common collective trust',
+    'common collective trusts',
+    'collective trust fund',
+    'collective investment trust',
+    'cit',
+    # Currency
+    'currency',
+    'currencies',
+    # Employer Stock
+    'employer stock',
+    'employer stocks',
+    'employer securities',
+}
+
+
+def filter_excluded_asset_types(rows, verbose=True):
+    kept, removed = [], []
+    for row in rows:
+        asset_type = str(row.get('asset_type', '')).strip().lower()
+        # Also check description for CIT label rows that weren't caught upstream
+        description = str(row.get('investment_description', '')).strip().lower()
+        if asset_type in _EXCLUDED_ASSET_TYPES or description in _EXCLUDED_ASSET_TYPES:
+            removed.append(row)
+        else:
+            kept.append(row)
+    if verbose:
+        print(f"  Removed {len(removed)} excluded asset type records (CIT, Common Stock, Currency, Employer Stock)")
+    return kept
+
+
 def clean_investment_data(rows, preserve_loans=True, remove_dupes=True, verbose=True):
     """
     Comprehensive cleanup: remove totals, metadata, and duplicates
@@ -354,11 +402,14 @@ def clean_investment_data(rows, preserve_loans=True, remove_dupes=True, verbose=
     
     # Step 1: Remove total/summary rows
     filtered_rows, removed_totals = remove_total_rows(rows, verbose=verbose)
-    
-    # Step 2: Remove metadata rows
+
+    # Step 2: Remove excluded asset types (CIT, Common Stock, Currency, Employer Stock)
+    filtered_rows = filter_excluded_asset_types(filtered_rows, verbose=verbose)
+
+    # Step 3: Remove metadata rows
     filtered_rows = remove_metadata_rows(filtered_rows, preserve_loans=preserve_loans, verbose=verbose)
-    
-    # Step 3: Remove duplicates (optional)
+
+    # Step 4: Remove duplicates (optional)
     if remove_dupes:
         filtered_rows = remove_duplicates(filtered_rows, verbose=verbose)
     
