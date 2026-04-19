@@ -1,69 +1,251 @@
 issuer_name,investment_description,asset_type,par_value,cost,current_value,units_or_shares,page_number,row_id,pdf_name,pdf_stem
-Fidelity,"14,848.96 shares of Fidelity Cash Reserves",,,,"14,848",,34,1,Progressive 401k.pdf,Progressive 401k
-Fidelity,"235,783,162.20 shares of Fidelity Managed Income Portfolio II Class 3",,,,"235,783,162",,34,2,Progressive 401k.pdf,Progressive 401k
-Brokerage Account,Various Common Stocks,,,,"201,452,409",,34,3,Progressive 401k.pdf,Progressive 401k
-Brokerage Account,Various s,Mutual Fund,,,"128,159,304",,34,4,Progressive 401k.pdf,Progressive 401k
-Brokerage Account,Various s,Preferred Stock,,,"749,765",,34,5,Progressive 401k.pdf,Progressive 401k
-Brokerage Account,Various Unitized Investment Funds,,,,"79,297,324",,34,6,Progressive 401k.pdf,Progressive 401k
-Brokerage Account,Various Rights/Warrants/Options,,,,"246,808",,34,7,Progressive 401k.pdf,Progressive 401k
-Brokerage Account,Various Certificates of Deposit,,,,"5,699,189",,34,8,Progressive 401k.pdf,Progressive 401k
-Brokerage Account,Various Corporate Bonds,,,,"345,701",,34,9,Progressive 401k.pdf,Progressive 401k
-Brokerage Account,Various Government Bonds,,,,"4,996,872",,34,10,Progressive 401k.pdf,Progressive 401k
-Brokerage Account,Various Municipal Bonds,,,,"622,275",,34,11,Progressive 401k.pdf,Progressive 401k
-Pacific Investment Management Company,"8,618,154.61 shares of PIMCO Total Return Fund Institutional Class",,,,"73,081,951",,34,12,Progressive 401k.pdf,Progressive 401k
-The Vanguard Group,"3,478,894.31 shares of Vanguard Value Index Fund Institutional Shares",,,,"229,711,391",,34,14,Progressive 401k.pdf,Progressive 401k
-The Vanguard Group,"689,861.62 shares of Vanguard Total International Stock Index Fund Institutional Shares",,,,"87,419,265",,34,15,Progressive 401k.pdf,Progressive 401k
-The Vanguard Group,"1,098,408.05 shares of Vanguard Mid-Cap Index Fund Institutional Plus Shares",,,,"391,154,092",,34,16,Progressive 401k.pdf,Progressive 401k
-The Vanguard Group,"3,035,203.80 shares of Vanguard Growth Index Fund Institutional Shares",,,,"641,126,099",,34,17,Progressive 401k.pdf,Progressive 401k
-The Vanguard Group,"135,133,732.12 shares of Vanguard Federal",Money Market Fund,,,"135,133,732",,34,18,Progressive 401k.pdf,Progressive 401k
-The Vanguard Group,"928,549.57 shares of Vanguard Small Cap Index Fund Institutional Plus Shares",,,,"308,622,020",,34,19,Progressive 401k.pdf,Progressive 401k
-The Vanguard Group,"13,746,734.20 shares of Vanguard Total Bond Market Fund Institutional Plus Shares",,,,"130,319,040",,34,20,Progressive 401k.pdf,Progressive 401k
-The Vanguard Group,"2,036,582.09 shares of Vanguard Institutional Index Fund Institutional Plus Shares",,,,"975,278,430",,34,21,Progressive 401k.pdf,Progressive 401k
-The Vanguard Group,"5,073,421.24 shares of Vanguard Target Retirement Income Fund Investor Shares",,,,"66,461,818",,34,22,Progressive 401k.pdf,Progressive 401k
-The Vanguard Group,"2,760,677.76 shares of Vanguard Target Retirement 2020 Fund Investor Shares",,,,"73,102,747",,34,23,Progressive 401k.pdf,Progressive 401k
-The Vanguard Group,"12,555,521.90 shares of Vanguard Target Retirement 2025 Fund Investor Shares",,,,"234,662,704",,34,24,Progressive 401k.pdf,Progressive 401k
-The Vanguard Group,"13,740,973.75 shares of Vanguard Target Retirement 2030 Fund Investor Shares",,,,"520,508,086",,34,25,Progressive 401k.pdf,Progressive 401k
-The Vanguard Group,"23,711,038.79 shares of Vanguard Target Retirement 2035 Fund Investor Shares",,,,"568,590,710",,34,26,Progressive 401k.pdf,Progressive 401k
-The Vanguard Group,"13,125,531.31 shares of Vanguard Target Retirement 2040 Fund Investor Shares",,,,"567,285,463",,34,27,Progressive 401k.pdf,Progressive 401k
-The Vanguard Group,"19,326,743.03 shares of Vanguard Target Retirement 2045 Fund Investor Shares",,,,"573,424,466",,34,28,Progressive 401k.pdf,Progressive 401k
-The Vanguard Group,"8,845,246.01 shares of Vanguard Target Retirement 2050 Fund Investor Shares",,,,"440,847,061",,34,29,Progressive 401k.pdf,Progressive 401k
-The Vanguard Group,"5,457,255.72 shares of Vanguard Target Retirement 2055 Fund Investor Shares",,,,"303,477,991",,34,30,Progressive 401k.pdf,Progressive 401k
-The Vanguard Group,"3,239,755.48 shares of Vanguard Target Retirement 2060 Fund Investor Shares",,,,"166,037,469",,34,31,Progressive 401k.pdf,Progressive 401k
-The Vanguard Group,"1,519,358.16 shares of Vanguard Target Retirement 2065 Fund Investor Shares",,,,"51,080,822",,34,32,Progressive 401k.pdf,Progressive 401k
-,"220,556.42 shares of Vanguard Target Retirement 2070 Fund Investor Shares",,,,"7,412,620,712",,34,33,Progressive 401k.pdf,Progressive 401k
-The Progressive Corporation,"16,554,047.85 shares of The Progressive Corporation Common Shares",,,,"3,966,515,404",,34,36,Progressive 401k.pdf,Progressive 401k
-Participant Loans,4.25% and 9.50% at various maturities; participant account balances as collateral,,,,"154,364,279",,34,37,Progressive 401k.pdf,Progressive 401k
-,,,,,"$ 11,533,500,395",,34,38,Progressive 401k.pdf,Progressive 401k
-Party-in-interest,,,,,,,34,39,Progressive 401k.pdf,Progressive 401k
-Included in The Progressive Corporation Stock Fund for the recordkeeping of fractional shares of stock,,,,,,,34,40,Progressive 401k.pdf,Progressive 401k
-"Fidelity 14,974,806.03 shares of Fidelity Diversified International Fund - Class K6",,,,,212043253,,41,1,Progressive 401k.pdf,Progressive 401k
-"1 Fidelity 14,848.96 shares of Fidelity Cash Reserves 1",,,,,4848,,41,2,Progressive 401k.pdf,Progressive 401k
-"Fidelity 235,783,162.20 shares of Fidelity Managed Income Portfolio II Class 3",,,,,235783162,,41,3,Progressive 401k.pdf,Progressive 401k
-Brokerage Account Various Common Stocks,,,,,201452409,,41,4,Progressive 401k.pdf,Progressive 401k
-Brokerage Account Various Preferred Stocks 7,,Mutual Fund,,,49765,,41,5,Progressive 401k.pdf,Progressive 401k
-Brokerage Account Various Unitized Investment Funds,,Mutual Fund,,,79297324,,41,6,Progressive 401k.pdf,Progressive 401k
-Brokerage Account Various Rights/Warrants/Options 2,,Mutual Fund,,,46808,,41,7,Progressive 401k.pdf,Progressive 401k
-Brokerage Account Various Certificates of Deposit 5,,Mutual Fund,,,699189,,41,8,Progressive 401k.pdf,Progressive 401k
-Brokerage Account Various Corporate Bonds 3,,Mutual Fund,,,45701,,41,9,Progressive 401k.pdf,Progressive 401k
-Brokerage Account Various Government Bonds 4,,Mutual Fund,,,996872,,41,10,Progressive 401k.pdf,Progressive 401k
-Brokerage Account Various Municipal Bonds 6,,Mutual Fund,,,22275,,41,11,Progressive 401k.pdf,Progressive 401k
-"The Vanguard Group 3,478,894.31 shares of Vanguard Value Index Fund Institutional Shares",,Mutual Fund,,,229711391,,41,12,Progressive 401k.pdf,Progressive 401k
-"The Vanguard Group 1,098,408.05 shares of Vanguard Mid-Cap Index Fund Institutional Plus Shares",,Mutual Fund,,,391154092,,41,13,Progressive 401k.pdf,Progressive 401k
-"The Vanguard Group 3,035,203.80 shares of Vanguard Growth Index Fund Institutional Shares",,Mutual Fund,,,641126099,,41,14,Progressive 401k.pdf,Progressive 401k
-"The Vanguard Group 135,133,732.12 shares of Vanguard Federal Money Market Fund",,Mutual Fund,,,135133732,,41,15,Progressive 401k.pdf,Progressive 401k
-"The Vanguard Group 928,549.57 shares of Vanguard Small Cap Index Fund Institutional Plus Shares",,Mutual Fund,,,308622020,,41,16,Progressive 401k.pdf,Progressive 401k
-"The Vanguard Group 2,036,582.09 shares of Vanguard Institutional Index Fund Institutional Plus Shares",,Mutual Fund,,,975278430,,41,17,Progressive 401k.pdf,Progressive 401k
-"The Vanguard Group 5,073,421.24 shares of Vanguard Target Retirement Income Fund Investor Shares",,Mutual Fund,,,66461818,,41,18,Progressive 401k.pdf,Progressive 401k
-"The Vanguard Group 2,760,677.76 shares of Vanguard Target Retirement 2020 Fund Investor Shares",,Mutual Fund,,,73102747,,41,19,Progressive 401k.pdf,Progressive 401k
-"The Vanguard Group 12,555,521.90 shares of Vanguard Target Retirement 2025 Fund Investor Shares",,Mutual Fund,,,234662704,,41,20,Progressive 401k.pdf,Progressive 401k
-"The Vanguard Group 13,740,973.75 shares of Vanguard Target Retirement 2030 Fund Investor Shares",,Mutual Fund,,,520508086,,41,21,Progressive 401k.pdf,Progressive 401k
-"The Vanguard Group 23,711,038.79 shares of Vanguard Target Retirement 2035 Fund Investor Shares",,Mutual Fund,,,568590710,,41,22,Progressive 401k.pdf,Progressive 401k
-"The Vanguard Group 13,125,531.31 shares of Vanguard Target Retirement 2040 Fund Investor Shares",,Mutual Fund,,,567285463,,41,23,Progressive 401k.pdf,Progressive 401k
-"The Vanguard Group 19,326,743.03 shares of Vanguard Target Retirement 2045 Fund Investor Shares",,Mutual Fund,,,573424466,,41,24,Progressive 401k.pdf,Progressive 401k
-"The Vanguard Group 8,845,246.01 shares of Vanguard Target Retirement 2050 Fund Investor Shares",,Mutual Fund,,,440847061,,41,25,Progressive 401k.pdf,Progressive 401k
-"The Vanguard Group 5,457,255.72 shares of Vanguard Target Retirement 2055 Fund Investor Shares",,Mutual Fund,,,303477991,,41,26,Progressive 401k.pdf,Progressive 401k
-"The Vanguard Group 3,239,755.48 shares of Vanguard Target Retirement 2060 Fund Investor Shares",,Mutual Fund,,,166037469,,41,27,Progressive 401k.pdf,Progressive 401k
-"The Vanguard Group 1,519,358.16 shares of Vanguard Target Retirement 2065 Fund Investor Shares",,Mutual Fund,,,51080822,,41,28,Progressive 401k.pdf,Progressive 401k
-"The Vanguard Group 220,556.42 shares of Vanguard Target Retirement 2070 Fund Investor Shares 5",,Mutual Fund,,,884445,,41,29,Progressive 401k.pdf,Progressive 401k
-"The Progressive Corporation 16,554,047.85 shares of The Progressive Corporation Common Shares",,Mutual Fund,,,3966515404,,41,30,Progressive 401k.pdf,Progressive 401k
-Participant Loans 4.25% and 9.50% at various maturities; participant account balances as collateral,,Mutual Fund,,,154364279,,41,31,Progressive 401k.pdf,Progressive 401k
+TIAA Traditional Non-benefit Responsive Annuity,Unallocated Annuity Contracts,,,(1),"1,104,176,184",,40,1,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001
+TIAA Traditional Benefit Responsive Annuity,Unallocated Annuity Contracts,,,(1),"2,020",,40,2,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001
+TIAA Real Estate Fund,,,,(1),"140,642,456",,40,3,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001
+TIAA-CREF Self Directed Account,s,Self-directed brokerage account,,(1),"130,201,825",,40,4,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001
+BlackRock Total Return K,,,,(1),"30,718,627",,40,5,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001
+CREF Core Bond Market Fund R3,,,,(1),"67,242,574",,40,6,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001
+CREF Equity Index Fund R3,,,,(1),"163,218,770",,40,7,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001
+CREF Global Equities Fund R3,,,,(1),"215,268,287",,40,8,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001
+CREF Growth Fund R3,,,,(1),"175,204,876",,40,9,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001
+CREF Inflation-Linked Bond Fund R3,,,,(1),"37,984,514",,40,10,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001
+CREF  R3,,Money Market Fund,,(1),"34,214,509",,40,11,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001
+CREF Social Choice Fund R3,,,,(1),"122,853,711",,40,12,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001
+CREF Stock Fund R3,,,,(1),"653,212,709",,40,13,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001
+CREF Social Choice Fund R4,,,,(1),"48,733,446",,40,14,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001
+Vanguard Developed Markets Index Plus,,,,(1),"143,960,192",,40,15,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001
+Vanguard Emerging Markets Stock Index Fund: Inst'l Plus Shares,,,,(1),"73,966,063",,40,16,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001
+Vanguard Federal,,Money Market Fund,,(1),"65,974,654",,40,17,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001
+Vanguard Growth Index Fund Institutional Shares,,,,(1),"228,285,326",,40,18,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001
+Vanguard Inflation-Protected Securities Fund Investor Shares,,,,(1),"47,263,539",,40,19,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001
+Vanguard Institutional Index Fund Plus Shares,,,,(1),"481,629,419",,40,20,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001
+Vanguard Institutional Target Retirement 2020 Fund,,,,(1),"167,808,102",,40,21,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001
+Vanguard Institutional Target Retirement 2025 Fund,,,,(1),"285,982,177",,40,22,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001
+Vanguard Institutional Target Retirement 2030 Fund,,,,(1),"397,720,293",,40,23,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001
+Vanguard Institutional Target Retirement 2035 Fund,,,,(1),"355,156,868",,40,24,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001
+Vanguard Institutional Target Retirement 2040 Fund,,,,(1),"362,775,878",,40,25,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001
+Vanguard Institutional Target Retirement 2045 Fund,,,,(1),"321,233,429",,40,26,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001
+Vanguard Institutional Target Retirement 2050 Fund,,,,(1),"188,131,627",,40,27,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001
+Vanguard Institutional Target Retirement 2055 Fund,,,,(1),"75,647,895",,40,28,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001
+Vanguard Institutional Target Retirement 2060 Fund,,,,(1),"24,762,205",,40,29,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001
+Vanguard Institutional Target Retirement 2065 Fund,,,,(1),"13,915,514",,40,30,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001
+Vanguard Institutional Target Retirement 2070 Fund,,,,(1),"1,556,974",,40,31,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001
+Vanguard Institutional Target Retirement Income Fund,,,,(1),"166,673,561",,40,32,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001
+Vanguard Intermediate-Term Treasury Fund Investor Shares,,,,(1),"25,626,733",,40,33,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001
+Vanguard Mid-Cap Index Institutional,,,,(1),"93,656,567",,40,34,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001
+Vanguard Real Estate Index Institutional,,,,(1),"37,590,157",,40,35,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001
+Vanguard Small-Cap Index Fund Investor Shares,,,,(1),"169,344,505",,40,36,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001
+Vanguard Total Bond Market Index Fund Inst'l Shares,,,,(1),"99,410,006",,40,37,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001
+Vanguard Total International Stock Index Fund,,,,(1),"45,933,671",,40,38,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001
+Vanguard Value Index Institutional,,,,(1),"150,295,793",,40,39,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001
+Total assets held at end of year,,,,,"6,947,975,656",,40,40,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001
+"October 6,",,,,,2025,,29,1,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001
+Fidelity Institutional Asset Management,,,,**,"FIAM Index TD Income R $ 16,943,258",,37,1,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001
+Fidelity Institutional Asset Management,,,,**,"FIAM Index TD 2010 R 7,669,477",,37,2,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001
+Fidelity Institutional Asset Management,,,,**,"FIAM Index TD 2015 R 15,410,985",,37,3,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001
+Fidelity Institutional Asset Management,,,,**,"FIAM Index TD 2020 R 80,551,347",,37,4,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001
+Fidelity Institutional Asset Management,,,,**,"FIAM Index TD 2025 R 177,560,977",,37,5,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001
+Fidelity Institutional Asset Management,,,,**,"FIAM Index TD 2030 R 355,474,674",,37,6,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001
+Fidelity Institutional Asset Management,,,,**,"FIAM Index TD 2035 R 457,748,889",,37,7,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001
+Fidelity Institutional Asset Management,,,,**,"FIAM Index TD 2040 R 528,327,474",,37,8,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001
+Fidelity Institutional Asset Management,,,,**,"FIAM Index TD 2045 R 435,269,129",,37,9,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001
+Fidelity Institutional Asset Management,,,,**,"FIAM Index TD 2050 R 323,123,337",,37,10,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001
+Fidelity Institutional Asset Management,,,,**,"FIAM Index TD 2055 R 211,735,499",,37,11,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001
+Fidelity Institutional Asset Management,,,,**,"FIAM Index TD 2060 R 105,589,392",,37,12,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001
+Fidelity Institutional Asset Management,,,,**,"FIAM Index TD 2065 R 58,637,522",,37,13,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001
+Columbia Contrarian,,,,**,"Col Contr Large Cap Core 285,130,773",,37,14,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001
+Atlanta Capital,,,,**,"AC High Qual Smid 123,632,755",,37,15,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001
+MFS Investment,,,,**,"MFS International Equity Fund Class 3A 107,840,730",,37,16,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001
+Prudential,,,,**,"Pru Core PL Bond Class 5 90,502,370",,37,17,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001
+Northern Trust,,,,**,"NT Collective All Country World ex-US Investable MFI 181,440,182",,37,18,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001
+Northern Trust,,,,**,"NT S&P 500 Index 1,307,164,572",,37,19,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001
+Northern Trust,,,,**,"NT Bond Index Fund 108,775,876",,37,20,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001
+Northern Trust,,,,**,"NT Extended Equity MarketIndex Fund 424,363,958",,37,21,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001
+Fidelity Institutional Asset Management,,,,**,"FIAM Index TD Income R $ 16,943,258",,39,1,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001
+Fidelity Institutional Asset Management,,,,**,"FIAM Index TD 2010 R 7,669,477",,39,2,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001
+Fidelity Institutional Asset Management,,,,**,"FIAM Index TD 2015 R 15,410,985",,39,3,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001
+Fidelity Institutional Asset Management,,,,**,"FIAM Index TD 2020 R 80,551,347",,39,4,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001
+Fidelity Institutional Asset Management,,,,**,"FIAM Index TD 2025 R 177,560,977",,39,5,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001
+Fidelity Institutional Asset Management,,,,**,"FIAM Index TD 2030 R 355,474,674",,39,6,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001
+Fidelity Institutional Asset Management,,,,**,"FIAM Index TD 2035 R 457,748,889",,39,7,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001
+Fidelity Institutional Asset Management,,,,**,"FIAM Index TD 2040 R 528,327,474",,39,8,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001
+Fidelity Institutional Asset Management,,,,**,"FIAM Index TD 2045 R 435,269,129",,39,9,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001
+Fidelity Institutional Asset Management,,,,**,"FIAM Index TD 2050 R 323,123,337",,39,10,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001
+Fidelity Institutional Asset Management,,,,**,"FIAM Index TD 2055 R 211,735,499",,39,11,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001
+Fidelity Institutional Asset Management,,,,**,"FIAM Index TD 2060 R 105,589,392",,39,12,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001
+Fidelity Institutional Asset Management,,,,**,"FIAM Index TD 2065 R 58,637,522",,39,13,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001
+Columbia Contrarian,,,,**,"Col Contr Large Cap Core 285,130,773",,39,14,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001
+Atlanta Capital,,,,**,"AC High Qual Smid 123,632,755",,39,15,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001
+MFS Investment,,,,**,"MFS International Equity Fund Class 3A 107,840,730",,39,16,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001
+Prudential,,,,**,"Pru Core PL Bond Class 5 90,502,370",,39,17,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001
+Northern Trust,,,,**,"NT Collective All Country World ex-US Investable MFI 181,440,182",,39,18,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001
+Northern Trust,,,,**,"NT S&P 500 Index 1,307,164,572",,39,19,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001
+Northern Trust,,,,**,"NT Bond Index Fund 108,775,876",,39,20,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001
+Northern Trust,,,,**,"NT Extended Equity MarketIndex Fund 424,363,958",,39,21,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001
+,,,Contributions,Contributions corrected pending,,,38,1,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+,,,transferred,not outside correction,,,38,2,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+,,,late to plan,corrected VFCP in VFCP,,,38,3,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+,,,"$ 5,313","$ 5,313",,,38,4,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+,,,,,,,38,5,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+Vanguard Institutional 500 Index Trust,"Collective Trust, 48,101,314 units",,,X,"$ 2,896,180,136",,39,1,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+Vanguard Institutional Total Bond Index Trust,"Collective Trust, 3,002,006 units",,,X,"328,179,254",,39,2,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+BlackRock Extended Market Fund,"Collective Trust, 2,314,980 units",,,X,"441,057,358",,39,3,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+BlackRock MSCI ACWI Equity Fund,"Collective Trust, 37,621,834 units",,,X,"715,947,259",,39,4,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+State Street TIPS Index Fund,"Collective Trust, 11,321,218 units",,,X,"143,774,872",,39,5,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+,,,,,"4,525,138,879",,39,6,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+American EuroPacific Growth Fund,"5,770,653 shares",Mutual Fund,,X,"309,999,469",,39,7,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+MFS International New Discovery Fund,"390,093 shares",Mutual Fund,,X,"11,148,850",,39,8,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+MFS Emerging Markets Debt,"2,114,594 shares",Mutual Fund,,X,"25,290,546",,39,9,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+Dodge & Cox International Stock Fund,"4,579,908 shares",Mutual Fund,,X,"228,537,392",,39,10,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+Dodge & Cox Income,"12,450,713 shares",Mutual Fund,,X,"154,264,337",,39,11,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+Artisan Mid-Cap Fund Investor,"6,759,141 shares",Mutual Fund,,X,"229,134,879",,39,12,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+Vanguard Intermediate Term US Treasury,"2,242,410 shares",Mutual Fund,,X,"54,490,554",,39,13,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+Vanguard Explorer Fund,"3,863,570 shares",Mutual Fund,,X,"412,822,410",,39,14,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+Vanguard High Yield Corp,"32,167,518 shares",Mutual Fund,,X,"174,347,945",,39,15,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+Fidelity Real Estate Index,"7,394,526 shares",Mutual Fund,,X,"119,125,813",,39,16,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+Vanguard Short-Term Bond Index Fund,"33,479,204 shares",Mutual Fund,,X,"339,144,339",,39,17,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+Pimco Income Fund,"4,937,304 shares",Mutual Fund,,X,"51,940,438",,39,18,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+DFA U.S. Sustainability Core 1,"11,679,642 shares",Mutual Fund,,X,"532,825,267",,39,19,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+JP Morgan Emerging Mkts Equity Fund,"1,500,852 shares",Mutual Fund,,X,"45,415,779",,39,20,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+JP Morgan Mid Cap Val Fund,"6,511,621 shares",Mutual Fund,,X,"239,106,731",,39,21,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+JP Morgan Large Cap Growth,"12,852,275 shares",Mutual Fund,,X,"1,076,249,541",,39,22,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+"Hotchkis &Wiley Small Cap Value Investment Fund , 4,453,261 shares",,Mutual Fund,,X,"331,144,493",,39,23,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+MFS Value Fund,"10,744,801 shares",Mutual Fund,,X,"520,370,711",,39,24,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+Fidelity Advisor Real Estate Income Fund,"6,146,849 shares",Mutual Fund,,X,"72,717,224",,39,25,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+PIMCO Total Return ESG,"544,248 shares",Mutual Fund,,X,"4,109,073",,39,26,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+,,,,,"4,932,185,791",,39,27,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+BlackRock FedFund,Money Market,Mutual Fund,,X,"586,053,577",,39,28,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+BLF FedFund,Money Market Deposit Account,,,X,"4,135,068",,39,29,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+,,,,,"590,188,645",,39,30,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+Participant loans,Notes receivable from participants,,,X,"53,505,211",,39,31,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+,Interest rates from 3.25% to 8.50%,,,,,,39,32,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+,Maturities through 2043,,,,,,39,33,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+Vanguard Institutional 500 Index Trust,"Collective Trust, 48,101,314 units",,,X,"$ 2,896,180,136",,40,1,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+Vanguard Institutional Total Bond Index Trust,"Collective Trust, 3,002,006 units",,,X,"328,179,254",,40,2,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+BlackRock Extended Market Fund,"Collective Trust, 2,314,980 units",,,X,"441,057,358",,40,3,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+BlackRock MSCI ACWI Equity Fund,"Collective Trust, 37,621,834 units",,,X,"715,947,259",,40,4,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+State Street TIPS Index Fund,"Collective Trust, 11,321,218 units",,,X,"143,774,872",,40,5,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+,,,,,"4,525,138,879",,40,6,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+American EuroPacific Growth Fund,"5,770,653 shares",Mutual Fund,,X,"309,999,469",,40,7,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+MFS International New Discovery Fund,"390,093 shares",Mutual Fund,,X,"11,148,850",,40,8,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+MFS Emerging Markets Debt,"2,114,594 shares",Mutual Fund,,X,"25,290,546",,40,9,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+Dodge & Cox International Stock Fund,"4,579,908 shares",Mutual Fund,,X,"228,537,392",,40,10,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+Dodge & Cox Income,"12,450,713 shares",Mutual Fund,,X,"154,264,337",,40,11,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+Artisan Mid-Cap Fund Investor,"6,759,141 shares",Mutual Fund,,X,"229,134,879",,40,12,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+Vanguard Intermediate Term US Treasury,"2,242,410 shares",Mutual Fund,,X,"54,490,554",,40,13,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+Vanguard Explorer Fund,"3,863,570 shares",Mutual Fund,,X,"412,822,410",,40,14,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+Vanguard High Yield Corp,"32,167,518 shares",Mutual Fund,,X,"174,347,945",,40,15,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+Fidelity Real Estate Index,"7,394,526 shares",Mutual Fund,,X,"119,125,813",,40,16,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+Vanguard Short-Term Bond Index Fund,"33,479,204 shares",Mutual Fund,,X,"339,144,339",,40,17,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+Pimco Income Fund,"4,937,304 shares",Mutual Fund,,X,"51,940,438",,40,18,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+DFA U.S. Sustainability Core 1,"11,679,642 shares",Mutual Fund,,X,"532,825,267",,40,19,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+JP Morgan Emerging Mkts Equity Fund,"1,500,852 shares",Mutual Fund,,X,"45,415,779",,40,20,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+JP Morgan Mid Cap Val Fund,"6,511,621 shares",Mutual Fund,,X,"239,106,731",,40,21,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+JP Morgan Large Cap Growth,"12,852,275 shares",Mutual Fund,,X,"1,076,249,541",,40,22,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+"Hotchkis &Wiley Small Cap Value Investment Fund , 4,453,261 shares",,Mutual Fund,,X,"331,144,493",,40,23,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+MFS Value Fund,"10,744,801 shares",Mutual Fund,,X,"520,370,711",,40,24,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+Fidelity Advisor Real Estate Income Fund,"6,146,849 shares",Mutual Fund,,X,"72,717,224",,40,25,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+PIMCO Total Return ESG,"544,248 shares",Mutual Fund,,X,"4,109,073",,40,26,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+,,,,,"4,932,185,791",,40,27,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+BlackRock FedFund,Money Market,Mutual Fund,,X,"586,053,577",,40,28,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+BLF FedFund,Money Market Deposit Account,,,X,"4,135,068",,40,29,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+,,,,,"590,188,645",,40,30,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+Participant loans,Notes receivable from participants,,,X,"53,505,211",,40,31,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+,Interest rates from 3.25% to 8.50%,,,,,,40,32,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+,Maturities through 2043,,,,,,40,33,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001
+TIAA Real Estate TIAA pooled separate account,,,,,"169,053,617",,43,1,20251013124617NAL0001248673001.pdf,20251013124617NAL0001248673001
+CREF Core Bond R3 College Retirement Equities Fund variable annuities,,,,,"36,321,453",,43,2,20251013124617NAL0001248673001.pdf,20251013124617NAL0001248673001
+CREF Equity Index R3 College Retirement Equities Fund variable annuities,,,,,"84,589,503",,43,3,20251013124617NAL0001248673001.pdf,20251013124617NAL0001248673001
+CREF Global Equities R3 College Retirement Equities Fund variable annuities,,,,,"193,404,228",,43,4,20251013124617NAL0001248673001.pdf,20251013124617NAL0001248673001
+CREF Global Equities R4 College Retirement Equities Fund variable annuities,,,,,"17,168,775",,43,5,20251013124617NAL0001248673001.pdf,20251013124617NAL0001248673001
+CREF Growth R3 College Retirement Equities Fund variable annuities,,,,,"167,217,877",,43,6,20251013124617NAL0001248673001.pdf,20251013124617NAL0001248673001
+CREF Inflation-Linked Bond R3 College Retirement Equities Fund variable annuities,,,,,"26,538,365",,43,7,20251013124617NAL0001248673001.pdf,20251013124617NAL0001248673001
+CREF Money Market R3 College Retirement Equities Fund variable annuities,,,,,"38,950,256",,43,8,20251013124617NAL0001248673001.pdf,20251013124617NAL0001248673001
+CREF Money Market R4 College Retirement Equities Fund variable annuities,,,,,"5,517,932",,43,9,20251013124617NAL0001248673001.pdf,20251013124617NAL0001248673001
+CREF Social Choice R3 College Retirement Equities Fund variable annuities,,,,,"92,423,946",,43,10,20251013124617NAL0001248673001.pdf,20251013124617NAL0001248673001
+CREF Social Choice R4 College Retirement Equities Fund variable annuities,,,,,"5,382,441",,43,11,20251013124617NAL0001248673001.pdf,20251013124617NAL0001248673001
+CREF Stock R3 College Retirement Equities Fund variable annuities,,,,,"608,063,745",,43,12,20251013124617NAL0001248673001.pdf,20251013124617NAL0001248673001
+CREF Stock R4 College Retirement Equities Fund variable annuities,,,,,"27,121,907",,43,13,20251013124617NAL0001248673001.pdf,20251013124617NAL0001248673001
+TIAA-CREF Self Directed Acct TIAA Brokerage Account,,,,,"66,467,508",,43,14,20251013124617NAL0001248673001.pdf,20251013124617NAL0001248673001
+Nuveen Internatl Eq Idx R6 Nuveen s,,mutual fund,,,"285,184,133",,43,15,20251013124617NAL0001248673001.pdf,20251013124617NAL0001248673001
+Nuveen Large Cap Resp Eq R6 Nuveen s,,mutual fund,,,"65,845,784",,43,16,20251013124617NAL0001248673001.pdf,20251013124617NAL0001248673001
+American Funds New World R6,,Mutual fund,,,"38,806,032",,43,17,20251013124617NAL0001248673001.pdf,20251013124617NAL0001248673001
+BlackRock Mid Cap Growth Eq K,,Mutual fund,,,"53,042,068",,43,18,20251013124617NAL0001248673001.pdf,20251013124617NAL0001248673001
+BlackRock Total Return K,,Mutual fund,,,"83,943,993",,43,19,20251013124617NAL0001248673001.pdf,20251013124617NAL0001248673001
+JPM Small Cap Value Fund R6,,Mutual fund,,,"21,960,474",,43,20,20251013124617NAL0001248673001.pdf,20251013124617NAL0001248673001
+JPMorgan Large Cap Growth R6,,Mutual fund,,,"70,321,919",,43,21,20251013124617NAL0001248673001.pdf,20251013124617NAL0001248673001
+Principal Small Cap Grwth I R6,,Mutual fund,,,"4,685,792",,43,22,20251013124617NAL0001248673001.pdf,20251013124617NAL0001248673001
+Victory Sycamore Estab Val R6,,Mutual fund,,,"99,449,101",,43,23,20251013124617NAL0001248673001.pdf,20251013124617NAL0001248673001
+Vanguard Equity Income Adm Vanguard sponsored s,,mutual fund,,,"272,415,590",,43,24,20251013124617NAL0001248673001.pdf,20251013124617NAL0001248673001
+Vanguard Infl Protect Sec Inst Vanguard sponsored s,,mutual fund,,,"53,735,587",,43,25,20251013124617NAL0001248673001.pdf,20251013124617NAL0001248673001
+Vanguard Inst Idx Inst Plus Vanguard sponsored s,,mutual fund,,,"738,965,053",,43,26,20251013124617NAL0001248673001.pdf,20251013124617NAL0001248673001
+Vanguard Intl Growth Adm Vanguard sponsored s,,mutual fund,,,"119,905,308",,43,27,20251013124617NAL0001248673001.pdf,20251013124617NAL0001248673001
+Vanguard MCap Idx Instit Plus Vanguard sponsored s,,mutual fund,,,"98,335,413",,43,28,20251013124617NAL0001248673001.pdf,20251013124617NAL0001248673001
+Vanguard PRIMECAP Adm Vanguard sponsored s,,mutual fund,,,"245,698,746",,43,29,20251013124617NAL0001248673001.pdf,20251013124617NAL0001248673001
+Vanguard Real Estate Idx Inst Vanguard sponsored s,,mutual fund,,,"79,438,653",,43,30,20251013124617NAL0001248673001.pdf,20251013124617NAL0001248673001
+Vanguard Sm Cap Idx Inst Plus Vanguard sponsored s,,mutual fund,,,"237,583,093",,43,31,20251013124617NAL0001248673001.pdf,20251013124617NAL0001248673001
+Vanguard Target Retire 2020 Vanguard sponsored s,,mutual fund,,,"52,019,434",,43,32,20251013124617NAL0001248673001.pdf,20251013124617NAL0001248673001
+Vanguard Target Retire 2025 Vanguard sponsored s,,mutual fund,,,"94,731,134",,43,33,20251013124617NAL0001248673001.pdf,20251013124617NAL0001248673001
+Vanguard Target Retire 2030 Vanguard sponsored s,,mutual fund,,,"141,618,753",,43,34,20251013124617NAL0001248673001.pdf,20251013124617NAL0001248673001
+Vanguard Target Retire 2035 Vanguard sponsored s,,mutual fund,,,"217,960,392",,43,35,20251013124617NAL0001248673001.pdf,20251013124617NAL0001248673001
+Vanguard Target Retire 2040 Vanguard sponsored s,,mutual fund,,,"264,315,558",,43,36,20251013124617NAL0001248673001.pdf,20251013124617NAL0001248673001
+Vanguard Target Retire 2045 Vanguard sponsored s,,mutual fund,,,"267,815,059",,43,37,20251013124617NAL0001248673001.pdf,20251013124617NAL0001248673001
+Vanguard Target Retire 2050 Vanguard sponsored s,,mutual fund,,,"219,123,830",,43,38,20251013124617NAL0001248673001.pdf,20251013124617NAL0001248673001
+Vanguard Target Retire 2055 Vanguard sponsored s,,mutual fund,,,"112,042,565",,43,39,20251013124617NAL0001248673001.pdf,20251013124617NAL0001248673001
+Vanguard Target Retire 2060 Vanguard sponsored s,,mutual fund,,,"37,428,723",,43,40,20251013124617NAL0001248673001.pdf,20251013124617NAL0001248673001
+Vanguard Target Retire 2065 Vanguard sponsored s,,mutual fund,,,"10,527,129",,43,41,20251013124617NAL0001248673001.pdf,20251013124617NAL0001248673001
+Vanguard Target Retire 2070 Vanguard sponsored s,,mutual fund,,,"1,799,137",,43,42,20251013124617NAL0001248673001.pdf,20251013124617NAL0001248673001
+Vanguard Target Retire Income Vanguard sponsored s,,mutual fund,,,"35,394,566",,43,43,20251013124617NAL0001248673001.pdf,20251013124617NAL0001248673001
+Vanguard Treasury MoneyMkt Inv Vanguard sponsored s,,mutual fund,,,"91,214,279",,43,44,20251013124617NAL0001248673001.pdf,20251013124617NAL0001248673001
+Vanguard Ttl Bd Mkt Idx InstPl Vanguard sponsored s,,mutual fund,,,"207,556,531",,43,45,20251013124617NAL0001248673001.pdf,20251013124617NAL0001248673001
+Vanguard Wellington Adm Vanguard sponsored s,,mutual fund,,,"156,296,953",,43,46,20251013124617NAL0001248673001.pdf,20251013124617NAL0001248673001
+,,,,,"7,429,203,738",,43,47,20251013124617NAL0001248673001.pdf,20251013124617NAL0001248673001
+"Notes Receivable From Participant Loan Fund, various maturity dates through 2034,",,,,,"20,525,047",,43,48,20251013124617NAL0001248673001.pdf,20251013124617NAL0001248673001
+interest rates from 4.25% to 9.50%.,,,,,,,43,49,20251013124617NAL0001248673001.pdf,20251013124617NAL0001248673001
+,,,,,"In our opinion, the information in the accompanying schedule is fairly stated, in all material respects, in",,45,1,20251113121430NAL0001050211001.pdf,20251113121430NAL0001050211001
+,,,,,"relation to the financial statements as a whole, and the form and content are presented in conformity",,45,2,20251113121430NAL0001050211001.pdf,20251113121430NAL0001050211001
+,,,,,with the Department of Labor’s Rules and Regulations for Reporting and Disclosure under ERISA.,,45,3,20251113121430NAL0001050211001.pdf,20251113121430NAL0001050211001
+Schwab 401(k) Equity Unit Fund,,,,,"396,895,422",,54,1,20251113121430NAL0001050211001.pdf,20251113121430NAL0001050211001
+Schwab Employee Stock Option Plan Equity Unit Fund,,,,,"164,899,814",,54,2,20251113121430NAL0001050211001.pdf,20251113121430NAL0001050211001
+Schwab Ameritrade Converted Equity Unit Fund,,,,,"63,717,862",,54,3,20251113121430NAL0001050211001.pdf,20251113121430NAL0001050211001
+Total common stock funds of The Charles Schwab Corporation,,,,,"625,513,098",,54,4,20251113121430NAL0001050211001.pdf,20251113121430NAL0001050211001
+Schwab 1000 Index® Fund,,Mutual Fund,,,"1,959,495,209",,54,6,20251113121430NAL0001050211001.pdf,20251113121430NAL0001050211001
+Vanguard Total Bond Market Index Fund,,Mutual Fund,,,"798,806,496",,54,7,20251113121430NAL0001050211001.pdf,20251113121430NAL0001050211001
+Schwab International Index Fund®,,Mutual Fund,,,"656,731,748",,54,8,20251113121430NAL0001050211001.pdf,20251113121430NAL0001050211001
+Schwab Fundamental US Large Company Index Fund,,Mutual Fund,,,"464,158,555",,54,9,20251113121430NAL0001050211001.pdf,20251113121430NAL0001050211001
+Fidelity Small Cap Index Fund,,Mutual Fund,,,"447,102,536",,54,10,20251113121430NAL0001050211001.pdf,20251113121430NAL0001050211001
+Schwab Treasury Inflation Protected Securities Index Fund,,Mutual Fund,,,"355,437,339",,54,11,20251113121430NAL0001050211001.pdf,20251113121430NAL0001050211001
+Vanguard Emerging Markets Stock Index Fund,,Mutual Fund,,,"297,396,388",,54,12,20251113121430NAL0001050211001.pdf,20251113121430NAL0001050211001
+Schwab Fundamental US Small Company Index Fund,,Mutual Fund,,,"214,177,281",,54,13,20251113121430NAL0001050211001.pdf,20251113121430NAL0001050211001
+Schwab Fundamental International Equity Index Fund,,Mutual Fund,,,"196,210,616",,54,14,20251113121430NAL0001050211001.pdf,20251113121430NAL0001050211001
+Vanguard Real Estate Index Fund,,Mutual Fund,,,"184,976,919",,54,15,20251113121430NAL0001050211001.pdf,20251113121430NAL0001050211001
+,,Mutual Fund,,,,,54,16,20251113121430NAL0001050211001.pdf,20251113121430NAL0001050211001
+Schwab Fundamental Emerging Markets Equity Index Fund,,Mutual Fund,,,"55,520,225",,54,17,20251113121430NAL0001050211001.pdf,20251113121430NAL0001050211001
+Schwab Fundamental International Small Equity Index Fund,,Mutual Fund,,,"42,366,289",,54,18,20251113121430NAL0001050211001.pdf,20251113121430NAL0001050211001
+Total mutual funds,,Mutual Fund,,,"5,672,379,601",,54,19,20251113121430NAL0001050211001.pdf,20251113121430NAL0001050211001
+Self-directed brokerage accounts,,Mutual Fund,,,"2,198,004,419",,54,20,20251113121430NAL0001050211001.pdf,20251113121430NAL0001050211001
+Vanguard Treasury Money Market Fund,,Money Market Fund,,,"333,677,910",,54,22,20251113121430NAL0001050211001.pdf,20251113121430NAL0001050211001
+Participant Notes Receivable:,,Money Market Fund,,,,,54,23,20251113121430NAL0001050211001.pdf,20251113121430NAL0001050211001
+"10,172 loans with interest rates ranging from 4.15% to 9.50% maturing through 2046",,Money Market Fund,,,"100,917,529",,54,24,20251113121430NAL0001050211001.pdf,20251113121430NAL0001050211001
+Total,,Money Market Fund,,,"8,930,492,557",,54,25,20251113121430NAL0001050211001.pdf,20251113121430NAL0001050211001
+Cost information is not required as investments are participant-directed.,,Money Market Fund,,,,,54,26,20251113121430NAL0001050211001.pdf,20251113121430NAL0001050211001
+A party in interest as defined by ERISA.,,Money Market Fund,,,,,54,27,20251113121430NAL0001050211001.pdf,20251113121430NAL0001050211001
+Managed by a party in interest as defined by ERISA.,,Money Market Fund,,,,,54,28,20251113121430NAL0001050211001.pdf,20251113121430NAL0001050211001
+VANGUARD TRSY MONEY MKT INVSTR,Money Market / Cash Equivalent,Money Market Fund,,,"333,677,910",,62,1,20251113121430NAL0001050211001.pdf,20251113121430NAL0001050211001
+SCHWAB ESOP EQUITY UNIT FUND,Employer Securities,Money Market Fund,,,"164,899,814",,62,2,20251113121430NAL0001050211001.pdf,20251113121430NAL0001050211001
+SCHWAB 401K EQUITY UNIT FUND,Employer Securities,Money Market Fund,,,"396,895,422",,62,3,20251113121430NAL0001050211001.pdf,20251113121430NAL0001050211001
+SCHWAB AMERITRADE CONV EQTY UNIT FD,Employer Securities,Money Market Fund,,,"63,717,862",,62,4,20251113121430NAL0001050211001.pdf,20251113121430NAL0001050211001
+PCRA,Self-Directed Brokerage Account,Money Market Fund,,,"2,198,004,419",,62,5,20251113121430NAL0001050211001.pdf,20251113121430NAL0001050211001
+FIDELITY SMALL CAP INDEX,Registered Investment Company,Money Market Fund,,,"447,102,536",,62,6,20251113121430NAL0001050211001.pdf,20251113121430NAL0001050211001
+SCH TREAS INFL PRO SECS IDX,Registered Investment Company,Money Market Fund,,,"355,437,339",,62,7,20251113121430NAL0001050211001.pdf,20251113121430NAL0001050211001
+SCHWAB 1000 INDEX FUND,Registered Investment Company,Money Market Fund,,,"1,959,495,209",,62,8,20251113121430NAL0001050211001.pdf,20251113121430NAL0001050211001
+SCHWAB FDMTL EMERGING MKTS EQ IDX,Registered Investment Company,Money Market Fund,,,"55,520,225",,62,9,20251113121430NAL0001050211001.pdf,20251113121430NAL0001050211001
+SCHWAB FDMTL INTL EQ IDX,Registered Investment Company,Money Market Fund,,,"196,210,616",,62,10,20251113121430NAL0001050211001.pdf,20251113121430NAL0001050211001
+SCHWAB FDMTL US LG CO IDX,Registered Investment Company,Money Market Fund,,,"464,158,555",,62,11,20251113121430NAL0001050211001.pdf,20251113121430NAL0001050211001
+SCHWAB FDMTL US SM MID CO IDX,Registered Investment Company,Money Market Fund,,,"214,177,281",,62,12,20251113121430NAL0001050211001.pdf,20251113121430NAL0001050211001
+SCHWAB FDMTL INTL SMALL EQ IDX,Registered Investment Company,Money Market Fund,,,"42,366,289",,62,13,20251113121430NAL0001050211001.pdf,20251113121430NAL0001050211001
+SCHWAB INTERNATIONAL INDEX FD,Registered Investment Company,Money Market Fund,,,"656,731,748",,62,14,20251113121430NAL0001050211001.pdf,20251113121430NAL0001050211001
+VANGUARD EMERGING MKTS STOCK I,Registered Investment Company,Money Market Fund,,,"297,396,388",,62,15,20251113121430NAL0001050211001.pdf,20251113121430NAL0001050211001
+VANGUARD REAL ESTATE INX INSTL,Registered Investment Company,Money Market Fund,,,"184,976,919",,62,16,20251113121430NAL0001050211001.pdf,20251113121430NAL0001050211001
+VANGUARD TOT BND MKT IDX INSTL,Registered Investment Company,Money Market Fund,,,"798,806,496",,62,17,20251113121430NAL0001050211001.pdf,20251113121430NAL0001050211001
+Party-in-interest,,Money Market Fund,,,,,62,18,20251113121430NAL0001050211001.pdf,20251113121430NAL0001050211001
