@@ -120,7 +120,7 @@ def enhance_asset_types(db_path, verbose=True):
             inferred_types[inferred_type] = inferred_types.get(inferred_type, 0) + 1
             
             if verbose:
-                print(f"    ✓ {issuer[:50]:50} -> {inferred_type}")
+                print(f"    [OK] {issuer[:50]:50} -> {inferred_type}")
     
     conn.commit()
     
@@ -130,7 +130,7 @@ def enhance_asset_types(db_path, verbose=True):
         if inferred_types:
             print(f"    Asset types assigned:")
             for asset_type, count in sorted(inferred_types.items(), key=lambda x: -x[1]):
-                print(f"      • {asset_type}: {count}")
+                print(f"      - {asset_type}: {count}")
         
         # Check remaining gaps
         cursor.execute("""
@@ -141,10 +141,10 @@ def enhance_asset_types(db_path, verbose=True):
         remaining = cursor.fetchone()[0]
         
         if remaining > 0:
-            print(f"\n    ⚠ {remaining} records still missing asset_type")
+            print(f"\n    [!] {remaining} records still missing asset_type")
             print(f"      (These may need manual classification)")
         else:
-            print(f"\n    ✓ All records now have asset_type populated!")
+            print(f"\n    [OK] All records now have asset_type populated!")
     
     conn.close()
     
@@ -161,5 +161,5 @@ if __name__ == '__main__':
     updated = enhance_asset_types(db_path, verbose=True)
     
     print("\n" + "=" * 70)
-    print(f"✓ Enhancement complete: {updated} records updated")
+    print(f"[OK] Enhancement complete: {updated} records updated")
     print("=" * 70)
