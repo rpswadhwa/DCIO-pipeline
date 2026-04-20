@@ -1,133 +1,29 @@
-issuer_name,investment_description,asset_type,par_value,cost,current_value,units_or_shares,page_number,row_id,pdf_name,pdf_stem,fund_name
-American Funds The Bond Fund of America Class R-6,,Mutual Fund,,,93680984,"8,409,424",88,2,20250925101201NAL0008396353001.pdf,20250925101201NAL0008396353001,American Funds The Bond Fund of America Class R-6
-American Funds EuroPacific Growth Fund — Class R6,,Mutual Fund,,,166877304,"3,106,428",88,3,20250925101201NAL0008396353001.pdf,20250925101201NAL0008396353001,American Funds EuroPacific Growth Fund — Class R6
-Fidelity Mid-Cap Index Fund,,Mutual Fund,,,223423865,"6,616,046",88,4,20250925101201NAL0008396353001.pdf,20250925101201NAL0008396353001,Fidelity Mid-Cap Index Fund
-Fidelity Puritan K6 Fund,,Mutual Fund,,,187629185,"11,603,536",88,5,20250925101201NAL0008396353001.pdf,20250925101201NAL0008396353001,Fidelity Puritan K6 Fund
-Fidelity Small-Cap Growth K6 Fund,,Mutual Fund,,,143121921,"8,031,533",88,6,20250925101201NAL0008396353001.pdf,20250925101201NAL0008396353001,Fidelity Small-Cap Growth K6 Fund
-Fidelity Small-Cap Index Fund,,Mutual Fund,,,155753035,"5,626,916",88,7,20250925101201NAL0008396353001.pdf,20250925101201NAL0008396353001,Fidelity Small-Cap Index Fund
-Janus Henderson Enterprise Fund — Class N,,Mutual Fund,,,313350252,"2,178,161",88,8,20250925101201NAL0008396353001.pdf,20250925101201NAL0008396353001,Janus Henderson Enterprise Fund — Class N
-JPMorgan Equity Income Fund — Class R6,,Mutual Fund,,,226533036,"9,462,533",88,9,20250925101201NAL0008396353001.pdf,20250925101201NAL0008396353001,JPMorgan Equity Income Fund — Class R6
-JPMorgan Large Cap Growth Fund — Class R6,,Mutual Fund,,,1049438167,"12,532,101",88,10,20250925101201NAL0008396353001.pdf,20250925101201NAL0008396353001,JPMorgan Large Cap Growth Fund — Class R6
-Neuberger Berman Genesis Fund — Class R6,,Mutual Fund,,,157674007,"2,412,762",88,11,20250925101201NAL0008396353001.pdf,20250925101201NAL0008396353001,Neuberger Berman Genesis Fund — Class R6
-Vanguard Institutional Index Fund — Plus Shares,,Mutual Fund,,,1918036912,"4,005,256",88,12,20250925101201NAL0008396353001.pdf,20250925101201NAL0008396353001,Vanguard Institutional Index Fund — Plus Shares
-Vanguard Mid-Cap Value Index Fund — Admiral Shares,,Mutual Fund,,,97739459,"1,166,481",88,13,20250925101201NAL0008396353001.pdf,20250925101201NAL0008396353001,Vanguard Mid-Cap Value Index Fund — Admiral Shares
-Vanguard Small-Cap Value Index Fund — Institutional Shares,,Mutual Fund,,,65443405,"1,374,573",88,14,20250925101201NAL0008396353001.pdf,20250925101201NAL0008396353001,Vanguard Small-Cap Value Index Fund — Institutional Shares
-Vanguard Total Bond Market Index Fund — Institutional Plus Shares,,Mutual Fund,,,540513382,"57,016,180",88,15,20250925101201NAL0008396353001.pdf,20250925101201NAL0008396353001,Vanguard Total Bond Market Index Fund — Institutional Plus Shares
-Vanguard U.S. Treasury Money Market Fund — Investor Shares,,Mutual Fund,,,143071967,"143,071,967",88,16,20250925101201NAL0008396353001.pdf,20250925101201NAL0008396353001,Vanguard U.S. Treasury Money Market Fund — Investor Shares
-State Street Emerging Markets Index Non-Lending Series Fund — Class A,,Mutual Fund,,,152501326,"4,182,932",88,19,20250925101201NAL0008396353001.pdf,20250925101201NAL0008396353001,State Street Emerging Markets Index Non-Lending Series Fund — Class A
-State Street World ex. U.S. Index Non-Lending Series Fund — Class A,,Mutual Fund,,,362582856,"18,605,442",88,20,20250925101201NAL0008396353001.pdf,20250925101201NAL0008396353001,State Street World ex. U.S. Index Non-Lending Series Fund — Class A
-Vanguard Target Retirement Income Trust Select,,Mutual Fund,,,79462101,"1,766,610",88,21,20250925101201NAL0008396353001.pdf,20250925101201NAL0008396353001,Vanguard Target Retirement Income Trust Select
-Vanguard Target Retirement 2020 Trust Select,,Mutual Fund,,,91316685,"1,801,118",88,22,20250925101201NAL0008396353001.pdf,20250925101201NAL0008396353001,Vanguard Target Retirement 2020 Trust Select
-Vanguard Target Retirement 2025 Trust Select,,Mutual Fund,,,291564446,"5,371,489",88,23,20250925101201NAL0008396353001.pdf,20250925101201NAL0008396353001,Vanguard Target Retirement 2025 Trust Select
-Vanguard Target Retirement 2030 Trust Select,,Mutual Fund,,,327677884,"5,735,653",88,24,20250925101201NAL0008396353001.pdf,20250925101201NAL0008396353001,Vanguard Target Retirement 2030 Trust Select
-Vanguard Target Retirement 2035 Trust Select,,Mutual Fund,,,386869379,"6,434,953",88,25,20250925101201NAL0008396353001.pdf,20250925101201NAL0008396353001,Vanguard Target Retirement 2035 Trust Select
-Vanguard Target Retirement 2040 Trust Select,,Mutual Fund,,,288649363,"4,578,103",88,26,20250925101201NAL0008396353001.pdf,20250925101201NAL0008396353001,Vanguard Target Retirement 2040 Trust Select
-Vanguard Target Retirement 2045 Trust Select,,Mutual Fund,,,461356263,"7,005,106",88,27,20250925101201NAL0008396353001.pdf,20250925101201NAL0008396353001,Vanguard Target Retirement 2045 Trust Select
-Vanguard Target Retirement 2050 Trust Select,,Mutual Fund,,,370114737,"5,536,496",88,28,20250925101201NAL0008396353001.pdf,20250925101201NAL0008396353001,Vanguard Target Retirement 2050 Trust Select
-Vanguard Target Retirement 2055 Trust Select,,Mutual Fund,,,279290953,"4,181,002",88,29,20250925101201NAL0008396353001.pdf,20250925101201NAL0008396353001,Vanguard Target Retirement 2055 Trust Select
-Vanguard Target Retirement 2060 Trust Select,,Mutual Fund,,,85428031,"1,276,951",88,30,20250925101201NAL0008396353001.pdf,20250925101201NAL0008396353001,Vanguard Target Retirement 2060 Trust Select
-Vanguard Target Retirement 2065 Trust Select,,Mutual Fund,,,36654005,"911,791",88,31,20250925101201NAL0008396353001.pdf,20250925101201NAL0008396353001,Vanguard Target Retirement 2065 Trust Select
-Vanguard Target Retirement 2070 Trust Select,,Mutual Fund,,,2244421,"91,646",88,32,20250925101201NAL0008396353001.pdf,20250925101201NAL0008396353001,Vanguard Target Retirement 2070 Trust Select
-TIAA Real Estate Fund,,Mutual Fund,,(1),140642456,,40,3,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001,TIAA Real Estate Fund
-TIAA-CREF Self Directed Account,s,Self-directed brokerage account,,(1),130201825,,40,4,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001,TIAA-CREF Self Directed Account
-BlackRock Total Return K,,Mutual Fund,,(1),30718627,,40,5,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001,BlackRock Total Return K
-CREF Core Bond Market Fund R3,,Mutual Fund,,(1),67242574,,40,6,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001,CREF Core Bond Market Fund R3
-CREF Equity Index Fund R3,,Mutual Fund,,(1),163218770,,40,7,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001,CREF Equity Index Fund R3
-CREF Global Equities Fund R3,,Mutual Fund,,(1),215268287,,40,8,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001,CREF Global Equities Fund R3
-CREF Growth Fund R3,,Mutual Fund,,(1),175204876,,40,9,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001,CREF Growth Fund R3
-CREF Inflation-Linked Bond Fund R3,,Mutual Fund,,(1),37984514,,40,10,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001,CREF Inflation-Linked Bond Fund R3
-CREF  R3,,Money Market Fund,,(1),34214509,,40,11,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001,CREF  R3
-CREF Social Choice Fund R3,,Mutual Fund,,(1),122853711,,40,12,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001,CREF Social Choice Fund R3
-CREF Stock Fund R3,,Mutual Fund,,(1),653212709,,40,13,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001,CREF Stock Fund R3
-CREF Social Choice Fund R4,,Mutual Fund,,(1),48733446,,40,14,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001,CREF Social Choice Fund R4
-Vanguard Developed Markets Index Plus,,Mutual Fund,,(1),143960192,,40,15,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001,Vanguard Developed Markets Index Plus
-Vanguard Emerging Markets Stock Index Fund: Inst'l Plus Shares,,Mutual Fund,,(1),73966063,,40,16,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001,Vanguard Emerging Markets Stock Index Fund: Inst'l Plus Shares
-Vanguard Federal,,Money Market Fund,,(1),65974654,,40,17,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001,Vanguard Federal
-Vanguard Growth Index Fund Institutional Shares,,Mutual Fund,,(1),228285326,,40,18,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001,Vanguard Growth Index Fund Institutional Shares
-Vanguard Inflation-Protected Securities Fund Investor Shares,,Mutual Fund,,(1),47263539,,40,19,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001,Vanguard Inflation-Protected Securities Fund Investor Shares
-Vanguard Institutional Index Fund Plus Shares,,Mutual Fund,,(1),481629419,,40,20,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001,Vanguard Institutional Index Fund Plus Shares
-Vanguard Institutional Target Retirement 2020 Fund,,Mutual Fund,,(1),167808102,,40,21,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001,Vanguard Institutional Target Retirement 2020 Fund
-Vanguard Institutional Target Retirement 2025 Fund,,Mutual Fund,,(1),285982177,,40,22,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001,Vanguard Institutional Target Retirement 2025 Fund
-Vanguard Institutional Target Retirement 2030 Fund,,Mutual Fund,,(1),397720293,,40,23,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001,Vanguard Institutional Target Retirement 2030 Fund
-Vanguard Institutional Target Retirement 2035 Fund,,Mutual Fund,,(1),355156868,,40,24,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001,Vanguard Institutional Target Retirement 2035 Fund
-Vanguard Institutional Target Retirement 2040 Fund,,Mutual Fund,,(1),362775878,,40,25,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001,Vanguard Institutional Target Retirement 2040 Fund
-Vanguard Institutional Target Retirement 2045 Fund,,Mutual Fund,,(1),321233429,,40,26,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001,Vanguard Institutional Target Retirement 2045 Fund
-Vanguard Institutional Target Retirement 2050 Fund,,Mutual Fund,,(1),188131627,,40,27,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001,Vanguard Institutional Target Retirement 2050 Fund
-Vanguard Institutional Target Retirement 2055 Fund,,Mutual Fund,,(1),75647895,,40,28,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001,Vanguard Institutional Target Retirement 2055 Fund
-Vanguard Institutional Target Retirement 2060 Fund,,Mutual Fund,,(1),24762205,,40,29,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001,Vanguard Institutional Target Retirement 2060 Fund
-Vanguard Institutional Target Retirement 2065 Fund,,Mutual Fund,,(1),13915514,,40,30,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001,Vanguard Institutional Target Retirement 2065 Fund
-Vanguard Institutional Target Retirement 2070 Fund,,Mutual Fund,,(1),1556974,,40,31,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001,Vanguard Institutional Target Retirement 2070 Fund
-Vanguard Institutional Target Retirement Income Fund,,Mutual Fund,,(1),166673561,,40,32,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001,Vanguard Institutional Target Retirement Income Fund
-Vanguard Intermediate-Term Treasury Fund Investor Shares,,Mutual Fund,,(1),25626733,,40,33,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001,Vanguard Intermediate-Term Treasury Fund Investor Shares
-Vanguard Mid-Cap Index Institutional,,Mutual Fund,,(1),93656567,,40,34,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001,Vanguard Mid-Cap Index Institutional
-Vanguard Real Estate Index Institutional,,Mutual Fund,,(1),37590157,,40,35,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001,Vanguard Real Estate Index Institutional
-Vanguard Small-Cap Index Fund Investor Shares,,Mutual Fund,,(1),169344505,,40,36,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001,Vanguard Small-Cap Index Fund Investor Shares
-Vanguard Total Bond Market Index Fund Inst'l Shares,,Mutual Fund,,(1),99410006,,40,37,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001,Vanguard Total Bond Market Index Fund Inst'l Shares
-Vanguard Total International Stock Index Fund,,Mutual Fund,,(1),45933671,,40,38,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001,Vanguard Total International Stock Index Fund
-Vanguard Value Index Institutional,,Mutual Fund,,(1),150295793,,40,39,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001,Vanguard Value Index Institutional
-"October 6,",,Mutual Fund,,,2025,,29,1,20251008102359NAL0009553392001.pdf,20251008102359NAL0009553392001,"October 6,"
-Fidelity Institutional Asset Management,FIAM Index TD Income R,Mutual Fund,,**,16943258,,37,1,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001,FIAM Index TD Income R
-Fidelity Institutional Asset Management,FIAM Index TD 2010 R,Mutual Fund,,**,7669477,,37,2,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001,FIAM Index TD 2010 R
-Fidelity Institutional Asset Management,FIAM Index TD 2015 R,Mutual Fund,,**,15410985,,37,3,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001,FIAM Index TD 2015 R
-Fidelity Institutional Asset Management,FIAM Index TD 2020 R,Mutual Fund,,**,80551347,,37,4,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001,FIAM Index TD 2020 R
-Fidelity Institutional Asset Management,FIAM Index TD 2025 R,Mutual Fund,,**,177560977,,37,5,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001,FIAM Index TD 2025 R
-Fidelity Institutional Asset Management,FIAM Index TD 2030 R,Mutual Fund,,**,355474674,,37,6,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001,FIAM Index TD 2030 R
-Fidelity Institutional Asset Management,FIAM Index TD 2035 R,Mutual Fund,,**,457748889,,37,7,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001,FIAM Index TD 2035 R
-Fidelity Institutional Asset Management,FIAM Index TD 2040 R,Mutual Fund,,**,528327474,,37,8,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001,FIAM Index TD 2040 R
-Fidelity Institutional Asset Management,FIAM Index TD 2045 R,Mutual Fund,,**,435269129,,37,9,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001,FIAM Index TD 2045 R
-Fidelity Institutional Asset Management,FIAM Index TD 2050 R,Mutual Fund,,**,323123337,,37,10,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001,FIAM Index TD 2050 R
-Fidelity Institutional Asset Management,FIAM Index TD 2055 R,Mutual Fund,,**,211735499,,37,11,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001,FIAM Index TD 2055 R
-Fidelity Institutional Asset Management,FIAM Index TD 2060 R,Mutual Fund,,**,105589392,,37,12,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001,FIAM Index TD 2060 R
-Fidelity Institutional Asset Management,FIAM Index TD 2065 R,Mutual Fund,,**,58637522,,37,13,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001,FIAM Index TD 2065 R
-Columbia Contrarian,Col Contr Large Cap Core,Mutual Fund,,**,285130773,,37,14,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001,Col Contr Large Cap Core
-Atlanta Capital,AC High Qual Smid,Mutual Fund,,**,123632755,,37,15,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001,AC High Qual Smid
-MFS Investment,MFS International Equity Fund Class 3A,Mutual Fund,,**,107840730,,37,16,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001,MFS International Equity Fund Class 3A
-Prudential,Pru Core PL Bond Class,Mutual Fund,,**,90502370,,37,17,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001,Pru Core PL Bond Class
-Northern Trust,NT Collective All Country World ex-US Investable MFI,Mutual Fund,,**,181440182,,37,18,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001,NT Collective All Country World ex-US Investable MFI
-Northern Trust,NT S&P 500 Index,Mutual Fund,,**,1307164572,,37,19,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001,NT S&P 500 Index
-Northern Trust,NT Bond Index Fund,Mutual Fund,,**,108775876,,37,20,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001,NT Bond Index Fund
-Northern Trust,NT Extended Equity MarketIndex Fund,Mutual Fund,,**,424363958,,37,21,20251008163343NAL0003432819001.pdf,20251008163343NAL0003432819001,NT Extended Equity MarketIndex Fund
-TIAA Tra di ti ona l Annui ty Contra ct,Non-Benefi t Res pons i ve,Mutual Fund,,**,1128472997,,43,2,20251009122116NAL0011444720001.pdf,20251009122116NAL0011444720001,TIAA Tra di ti ona l Annui ty Contra ct
-TIAA Tra di ti ona l Annui ty Contra ct,Benefi t Res pons i ve,Mutual Fund,,**,1354610480,,43,3,20251009122116NAL0011444720001.pdf,20251009122116NAL0011444720001,TIAA Tra di ti ona l Annui ty Contra ct
-CREF Core Bond R3,Regi s tered Inves tment Compa ny,Mutual Fund,,**,71561834,,43,9,20251009122116NAL0011444720001.pdf,20251009122116NAL0011444720001,CREF Core Bond R3
-CREF Equi ty Index R3,Regi s tered Inves tment Compa ny,Mutual Fund,,**,115647590,,43,10,20251009122116NAL0011444720001.pdf,20251009122116NAL0011444720001,CREF Equi ty Index R3
-CREF Gl oba l Equi ti es R3,Regi s tered Inves tment Compa ny,Mutual Fund,,**,118508088,,43,11,20251009122116NAL0011444720001.pdf,20251009122116NAL0011444720001,CREF Gl oba l Equi ti es R3
-CREF Gl oba l Equi ti es R4,Regi s tered Inves tment Compa ny,Mutual Fund,,**,33168444,,43,12,20251009122116NAL0011444720001.pdf,20251009122116NAL0011444720001,CREF Gl oba l Equi ti es R4
-CREF Growth R3,Regi s tered Inves tment Compa ny,Mutual Fund,,**,205501019,,43,13,20251009122116NAL0011444720001.pdf,20251009122116NAL0011444720001,CREF Growth R3
-CREF Infl a ti on-Li nked Bond R3,Regi s tered Inves tment Compa ny,Mutual Fund,,**,39376437,,43,14,20251009122116NAL0011444720001.pdf,20251009122116NAL0011444720001,CREF Infl a ti on-Li nked Bond R3
-CREF Money Ma rket R3,Regi s tered Inves tment Compa ny,Mutual Fund,,**,47861945,,43,15,20251009122116NAL0011444720001.pdf,20251009122116NAL0011444720001,CREF Money Ma rket R3
-CREF Soci a l Choi ce R3,Regi s tered Inves tment Compa ny,Mutual Fund,,**,79599538,,43,16,20251009122116NAL0011444720001.pdf,20251009122116NAL0011444720001,CREF Soci a l Choi ce R3
-CREF Soci a l Choi ce R4,Regi s tered Inves tment Compa ny,Mutual Fund,,**,16268191,,43,17,20251009122116NAL0011444720001.pdf,20251009122116NAL0011444720001,CREF Soci a l Choi ce R4
-CREF Stock R3,Regi s tered Inves tment Compa ny,Mutual Fund,,**,758780437,,43,18,20251009122116NAL0011444720001.pdf,20251009122116NAL0011444720001,CREF Stock R3
-VAN Devel oped Mkts Idx Ins Pl us,Regi s tered Inves tment Compa ny,Mutual Fund,,**,794313658,,43,19,20251009122116NAL0011444720001.pdf,20251009122116NAL0011444720001,VAN Devel oped Mkts Idx Ins Pl us
-VAN Emergi ng Mkts Idx Ins Pl us,Regi s tered Inves tment Compa ny,Mutual Fund,,**,354044367,,43,20,20251009122116NAL0011444720001.pdf,20251009122116NAL0011444720001,VAN Emergi ng Mkts Idx Ins Pl us
-Va ngua rd Federa l Money Mkt Inv,Regi s tered Inves tment Compa ny,Mutual Fund,,**,68161032,,43,21,20251009122116NAL0011444720001.pdf,20251009122116NAL0011444720001,Va ngua rd Federa l Money Mkt Inv
-Va ngua rd Infl Protect Sec Ins t,Regi s tered Inves tment Compa ny,Mutual Fund,,**,47115623,,43,22,20251009122116NAL0011444720001.pdf,20251009122116NAL0011444720001,Va ngua rd Infl Protect Sec Ins t
-Va ngua rd Rea l Es ta te Idx Ins t,Regi s tered Inves tment Compa ny,Mutual Fund,,**,434186789,,43,23,20251009122116NAL0011444720001.pdf,20251009122116NAL0011444720001,Va ngua rd Rea l Es ta te Idx Ins t
-Va ngua rd Tota l St Mk Ix In Pl,Regi s tered Inves tment Compa ny,Mutual Fund,,**,2151560996,,43,24,20251009122116NAL0011444720001.pdf,20251009122116NAL0011444720001,Va ngua rd Tota l St Mk Ix In Pl
-Va ngua rd Ttl Bd Mkt Idx Ins t,Regi s tered Inves tment Compa ny,Mutual Fund,,**,69278816,,43,25,20251009122116NAL0011444720001.pdf,20251009122116NAL0011444720001,Va ngua rd Ttl Bd Mkt Idx Ins t
-Registered Investment Companies,Regi s tered Inves tment Compa ny,Mutual Fund,,**,5404934804,,43,26,20251009122116NAL0011444720001.pdf,20251009122116NAL0011444720001,Registered Investment Companies
-TIAA-CREF Sel f Di rected Accounts,Sel f-Di rected Accounts,Mutual Fund,,**,294626228,,43,28,20251009122116NAL0011444720001.pdf,20251009122116NAL0011444720001,TIAA-CREF Sel f Di rected Accounts
-Pa rti ci pa nt Loa n Fund,Ma turi ty da tes through 10/15/2034,Mutual Fund,,**,22863260,,43,31,20251009122116NAL0011444720001.pdf,20251009122116NAL0011444720001,Pa rti ci pa nt Loa n Fund
-American EuroPacific Growth Fund,"5,770,653 shares",Mutual Fund,,X,309999469,,39,7,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001,American EuroPacific Growth Fund
-MFS International New Discovery Fund,"390,093 shares",Mutual Fund,,X,11148850,,39,8,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001,MFS International New Discovery Fund
-MFS Emerging Markets Debt,"2,114,594 shares",Mutual Fund,,X,25290546,,39,9,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001,MFS Emerging Markets Debt
-Dodge & Cox International Stock Fund,"4,579,908 shares",Mutual Fund,,X,228537392,,39,10,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001,Dodge & Cox International Stock Fund
-Dodge & Cox Income,"12,450,713 shares",Mutual Fund,,X,154264337,,39,11,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001,Dodge & Cox Income
-Artisan Mid-Cap Fund Investor,"6,759,141 shares",Mutual Fund,,X,229134879,,39,12,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001,Artisan Mid-Cap Fund Investor
-Vanguard Intermediate Term US Treasury,"2,242,410 shares",Mutual Fund,,X,54490554,,39,13,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001,Vanguard Intermediate Term US Treasury
-Vanguard Explorer Fund,"3,863,570 shares",Mutual Fund,,X,412822410,,39,14,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001,Vanguard Explorer Fund
-Vanguard High Yield Corp,"32,167,518 shares",Mutual Fund,,X,174347945,,39,15,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001,Vanguard High Yield Corp
-Fidelity Real Estate Index,"7,394,526 shares",Mutual Fund,,X,119125813,,39,16,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001,Fidelity Real Estate Index
-Vanguard Short-Term Bond Index Fund,"33,479,204 shares",Mutual Fund,,X,339144339,,39,17,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001,Vanguard Short-Term Bond Index Fund
-Pimco Income Fund,"4,937,304 shares",Mutual Fund,,X,51940438,,39,18,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001,Pimco Income Fund
-DFA U.S. Sustainability Core 1,"11,679,642 shares",Mutual Fund,,X,532825267,,39,19,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001,DFA U.S. Sustainability Core 1
-JP Morgan Emerging Mkts Equity Fund,"1,500,852 shares",Mutual Fund,,X,45415779,,39,20,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001,JP Morgan Emerging Mkts Equity Fund
-JP Morgan Mid Cap Val Fund,"6,511,621 shares",Mutual Fund,,X,239106731,,39,21,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001,JP Morgan Mid Cap Val Fund
-JP Morgan Large Cap Growth,"12,852,275 shares",Mutual Fund,,X,1076249541,,39,22,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001,JP Morgan Large Cap Growth
-"Hotchkis &Wiley Small Cap Value Investment Fund , 4,453,261 shares",,Mutual Fund,,X,331144493,,39,23,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001,"Hotchkis &Wiley Small Cap Value Investment Fund , 4,453,261 shares"
-MFS Value Fund,"10,744,801 shares",Mutual Fund,,X,520370711,,39,24,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001,MFS Value Fund
-Fidelity Advisor Real Estate Income Fund,"6,146,849 shares",Mutual Fund,,X,72717224,,39,25,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001,Fidelity Advisor Real Estate Income Fund
-PIMCO Total Return ESG,"544,248 shares",Mutual Fund,,X,4109073,,39,26,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001,PIMCO Total Return ESG
-BlackRock FedFund,Money Market,Mutual Fund,,X,586053577,,39,28,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001,BlackRock FedFund
-BLF FedFund,Money Market Deposit Account,Mutual Fund,,X,4135068,,39,29,20251010165504NAL0008042401001.pdf,20251010165504NAL0008042401001,Money Market Deposit Account
+sponsor_ein,plan_number,plan_year,sponsor,plan_name,sponsor_plan_key,issuer_name,investment_description,asset_type,morningstar_ticker,par_value,cost,current_value,units_or_shares,page_number,row_id,confidence
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,BrokerageLink,BrokerageLink Account,Other,,,,919465000.0,,380,4,1.0
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,PIMCO,Total Return II,Mutual Fund,PODIX,,,261383000.0,,380,5,1.0
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,Vanguard,Target Retirement Income Fund,Target Date Fund,VTSAX,,,133475000.0,,380,6,1.0
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,Vanguard,Target Retirement 2020 Fund,Target Date Fund,VTSAX,,,117070000.0,,380,7,1.0
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,Vanguard,Target Retirement 2025 Fund,Target Date Fund,VTSAX,,,408188000.0,,380,8,1.0
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,Vanguard,Target Retirement 2030 Fund,Target Date Fund,VTSAX,,,903324000.0,,380,9,1.0
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,Vanguard,Target Retirement 2035 Fund,Target Date Fund,VTSAX,,,1522365000.0,,380,10,1.0
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,Vanguard,Target Retirement 2040 Fund,Target Date Fund,VTSAX,,,2075308000.0,,380,11,1.0
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,Vanguard,Target Retirement 2045 Fund,Target Date Fund,VTSAX,,,2955142000.0,,380,12,1.0
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,Vanguard,Target Retirement 2050 Fund,Target Date Fund,VTSAX,,,3784002000.0,,380,13,1.0
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,Vanguard,Target Retirement 2055 Fund,Target Date Fund,VTSAX,,,3890499000.0,,380,14,1.0
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,Vanguard,Target Retirement 2060 Fund,Target Date Fund,VTSAX,,,2643382000.0,,380,15,1.0
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,Vanguard,Target Retirement 2065 Fund,Target Date Fund,VTSAX,,,1142405000.0,,380,16,1.0
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,Harris Associates,Oakmark International Fund Class 3,Mutual Fund,,,,76869000.0,,380,17,1.0
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,Vanguard,Retirement Savings Trust II,Mutual Fund,VTSAX,,,422946000.0,,380,18,1.0
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,Vanguard,Target Retirement 2070 Fund,Target Date Fund,VTSAX,,,123119000.0,,380,19,1.0
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,Vanguard,Small Value Index Fund Institutional,Mutual Fund,VTSAX,,,340985000.0,,380,20,1.0
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,Vanguard,FTSE Social Index Fund Institutional Shares,Mutual Fund,VTSAX,,,873714000.0,,380,21,1.0
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,Vanguard,Total International Stock Market Index Fund Institutional Shares,Common Stock,,,,634822000.0,,380,22,1.0
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,Vanguard,Total Bond Market Index Fund Institutional Shares,Corporate Bond,,,,313836000.0,,380,23,1.0
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,Vanguard,Institutional 500 Index Trust,Mutual Fund,VFIAX,,,4619443000.0,,380,24,1.0
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,Vanguard,Federal Money Market Fund Admiral Shares,Money Market Fund,,,,59815000.0,,380,25,1.0
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,Vanguard,Explorer Fund Admiral Shares,Mutual Fund,VTSAX,,,527308000.0,,380,26,1.0
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,American Funds,EuroPacific Growth Fund Class R-6,Mutual Fund,,,,180005000.0,,380,27,1.0
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,AMAZONCOM,AMAZON.COM,Other,,,,2701378000.0,,380,28,1.0
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,State Street Global Advisors,Large Cap Value Collective Trust Fund,Common/Collective Trust Fund,,,,451719000.0,,380,29,1.0
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,State Street Global Advisors,Large Cap Growth Collective Trust Fund,Common/Collective Trust Fund,,,,1822800000.0,,380,30,1.0
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,State Street Global Advisors,Small/Mid Cap Collective Trust Fund,Common/Collective Trust Fund,,,,262857000.0,,380,31,1.0

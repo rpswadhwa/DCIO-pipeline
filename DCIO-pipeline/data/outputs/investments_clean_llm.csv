@@ -1,91 +1,29 @@
-issuer_name,investment_description,asset_type,par_value,cost,current_value,units_or_shares,page_number,row_id,pdf_name,pdf_stem
-BROKERAGE LINK SELF,DIRECTED BROKERAGE ACCOUNT,,,,919465,,380,13,AMAZON_401K_FORM5500_2024.pdf,AMAZON_401K_FORM5500_2024
-PIMCO TOTAL RTN,II COLLECTIVE INVESTMENT TRUST,Collective Trust,,,261383,,380,14,AMAZON_401K_FORM5500_2024.pdf,AMAZON_401K_FORM5500_2024
-VANGUARD TARGET INC,COLLECTIVE INVESTMENT TRUST,Collective Trust,,,133475,,380,15,AMAZON_401K_FORM5500_2024.pdf,AMAZON_401K_FORM5500_2024
-VANGUARD TARGET 2020,COLLECTIVE INVESTMENT TRUST,Collective Trust,,,117070,,380,16,AMAZON_401K_FORM5500_2024.pdf,AMAZON_401K_FORM5500_2024
-VANGUARD TARGET 2025,COLLECTIVE INVESTMENT TRUST,Collective Trust,,,408188,,380,17,AMAZON_401K_FORM5500_2024.pdf,AMAZON_401K_FORM5500_2024
-VANGUARD TARGET 2030,COLLECTIVE INVESTMENT TRUST,Collective Trust,,,903324,,380,18,AMAZON_401K_FORM5500_2024.pdf,AMAZON_401K_FORM5500_2024
-VANGUARD TARGET 2035,COLLECTIVE INVESTMENT TRUST,Collective Trust,,,1522365,,380,19,AMAZON_401K_FORM5500_2024.pdf,AMAZON_401K_FORM5500_2024
-VANGUARD TARGET 2040,COLLECTIVE INVESTMENT TRUST,Collective Trust,,,2075308,,380,20,AMAZON_401K_FORM5500_2024.pdf,AMAZON_401K_FORM5500_2024
-VANGUARD TARGET 2045,COLLECTIVE INVESTMENT TRUST,Collective Trust,,,2955142,,380,21,AMAZON_401K_FORM5500_2024.pdf,AMAZON_401K_FORM5500_2024
-VANGUARD TARGET 2050,COLLECTIVE INVESTMENT TRUST,Collective Trust,,,3784002,,380,22,AMAZON_401K_FORM5500_2024.pdf,AMAZON_401K_FORM5500_2024
-VANGUARD TARGET 2055,COLLECTIVE INVESTMENT TRUST,Collective Trust,,,3890499,,380,23,AMAZON_401K_FORM5500_2024.pdf,AMAZON_401K_FORM5500_2024
-VANGUARD TARGET 2060,COLLECTIVE INVESTMENT TRUST,Collective Trust,,,2643382,,380,24,AMAZON_401K_FORM5500_2024.pdf,AMAZON_401K_FORM5500_2024
-VANGUARD TARGET 2065,COLLECTIVE INVESTMENT TRUST,Collective Trust,,,1142405,,380,25,AMAZON_401K_FORM5500_2024.pdf,AMAZON_401K_FORM5500_2024
-HARRIS OAKMRK INTL,3 COLLECTIVE INVESTMENT TRUST,Collective Trust,,,76869,,380,26,AMAZON_401K_FORM5500_2024.pdf,AMAZON_401K_FORM5500_2024
-VANG RET SVNG,TR II COLLECTIVE INVESTMENT TRUST,Collective Trust,,,422946,,380,27,AMAZON_401K_FORM5500_2024.pdf,AMAZON_401K_FORM5500_2024
-VANGUARD TARGET 2070,COLLECTIVE INVESTMENT TRUST,Collective Trust,,,123119,,380,28,AMAZON_401K_FORM5500_2024.pdf,AMAZON_401K_FORM5500_2024
-VANG SM VAL,IDX INST MUTUAL FUND,Mutual Fund,,,340985,,380,29,AMAZON_401K_FORM5500_2024.pdf,AMAZON_401K_FORM5500_2024
-VANG FTSE SOC,IDX IS MUTUAL FUND,Mutual Fund,,,873714,,380,30,AMAZON_401K_FORM5500_2024.pdf,AMAZON_401K_FORM5500_2024
-VG IS TL,INTL STK MK COLLECTIVE INVESTMENT TRUST,Collective Trust,,,634822,,380,31,AMAZON_401K_FORM5500_2024.pdf,AMAZON_401K_FORM5500_2024
-VG IS TOT,BD MKT IDX COLLECTIVE INVESTMENT TRUST,Collective Trust,,,313836,,380,32,AMAZON_401K_FORM5500_2024.pdf,AMAZON_401K_FORM5500_2024
-VANG INST 500,IDX TR COLLECTIVE INVESTMENT TRUST,Collective Trust,,,4619443,,380,33,AMAZON_401K_FORM5500_2024.pdf,AMAZON_401K_FORM5500_2024
-VANG CR FED,MM ADM MUTUAL FUND,Mutual Fund,,,59815,,380,34,AMAZON_401K_FORM5500_2024.pdf,AMAZON_401K_FORM5500_2024
-VANG EXPLORER ADM,MUTUAL FUND,Mutual Fund,,,527308,,380,35,AMAZON_401K_FORM5500_2024.pdf,AMAZON_401K_FORM5500_2024
-AF EUROPAC GROWTH,R6 MUTUAL FUND,Mutual Fund,,,180005,,380,36,AMAZON_401K_FORM5500_2024.pdf,AMAZON_401K_FORM5500_2024
-AMAZON.COM STOCK COMPANY,STOCK FUND,Common Stock,,,2701378,,380,37,AMAZON_401K_FORM5500_2024.pdf,AMAZON_401K_FORM5500_2024
-SSGA LG CAP,VALUE COLLECTIVE TRUST FUND,Collective Trust,,,451719,,380,38,AMAZON_401K_FORM5500_2024.pdf,AMAZON_401K_FORM5500_2024
-SSGA LG CAP,GROWTH COLLECTIVE TRUST FUND,Collective Trust,,,1822800,,380,39,AMAZON_401K_FORM5500_2024.pdf,AMAZON_401K_FORM5500_2024
-SSGA SM/MID CAP,COLLECTIVE TRUST FUND,Collective Trust,,,262857,,380,40,AMAZON_401K_FORM5500_2024.pdf,AMAZON_401K_FORM5500_2024
-Nuveen Large Cap Responsible Equity,Fund R6,,,,273217178,,85,11,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-PIMCO Income,Fund Institutional Class,,,,2918233,,85,12,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-"The Vanguard Group, Inc.",500 Index Fund Institutional Select,Mutual Fund,,,8503979330,,85,13,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-"The Vanguard Group, Inc.",Cash Reserves Federal MM Fund Admiral,,,,8042685,,85,14,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-"The Vanguard Group, Inc.",Emerging Markets Index Fund Institutional Plus,Mutual Fund,,,464235808,,85,15,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-"The Vanguard Group, Inc.",Real Estate Index Fund Institutional,Mutual Fund,,,370472575,,85,16,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-"The Vanguard Group, Inc.",Total International Bond Index Fund Institutional,Mutual Fund,,,179272982,,85,17,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-"The Vanguard Group, Inc.",Wellesley Income Fund Admiral,,,,519010734,,85,18,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-"The Vanguard Group, Inc.",Target Retirement Trust 2020,Collective Trust,,,114140981,,85,20,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-"The Vanguard Group, Inc.",Target Retirement Trust 2025,Collective Trust,,,378777049,,85,21,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-"The Vanguard Group, Inc.",Target Retirement Trust 2030,Collective Trust,,,977414959,,85,22,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-"The Vanguard Group, Inc.",Target Retirement Trust 2035,Collective Trust,,,1929227711,,85,23,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-"The Vanguard Group, Inc.",Target Retirement Trust 2040,Collective Trust,,,3324929052,,85,24,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-"The Vanguard Group, Inc.",Target Retirement Trust 2045,Collective Trust,,,5564612228,,85,25,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-"The Vanguard Group, Inc.",Target Retirement Trust 2050,Collective Trust,,,7148528242,,85,26,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-"The Vanguard Group, Inc.",Target Retirement Trust 2055,Collective Trust,,,6534271702,,85,27,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-"The Vanguard Group, Inc.",Target Retirement Trust 2060,Collective Trust,,,3681769161,,85,28,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-"The Vanguard Group, Inc.",Target Retirement Trust 2065,Collective Trust,,,716454591,,85,29,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-"The Vanguard Group, Inc.",Target Retirement Trust 2070,Collective Trust,,,26991926,,85,30,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-"The Vanguard Group, Inc.",Target Retirement Income and Growth Trust,Collective Trust,,,5220137,,85,31,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-"The Vanguard Group, Inc.",Target Retirement Income Trust,Collective Trust,,,98049336,,85,32,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-"The Vanguard Group, Inc.",Developed Markets Index Trust,Collective Trust,,,1338290465,,85,33,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-"The Vanguard Group, Inc.",Institutional Extended Market Index Trust,Collective Trust,,,1659528719,,85,34,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-"The Vanguard Group, Inc.",Institutional Total Bond Market Index Trust,Collective Trust,,,981968934,,85,35,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-"The Vanguard Group, Inc.",Retirement Savings Trust II,Collective Trust,,,400434346,,85,36,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-Fidelity Investments Diversified Commingled Pool,"Fund, Class C",,,,210007040,,85,37,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-EARNEST Partners Smid Cap Core,"Fund, Founders Class",,,,264305773,,85,38,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-Metropolitan West,Funds MetWest Total Return Bond Fund (CIT),,,,87955982,,85,39,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-"The Vanguard Group, Inc.",Parnassus US Large Cap,,,,785845403,,85,41,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-Vanguard Brokerage Option,SelfDirected Brokerage Accounts,,,,1891033914,,85,43,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-to August 2035,,,,,120942045,,85,47,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-Nuveen Large Cap Responsible Equity,Fund R6,,,,273217178,,86,11,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-PIMCO Income,Fund Institutional Class,,,,2918233,,86,12,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-"The Vanguard Group, Inc.",500 Index Fund Institutional Select,Mutual Fund,,,8503979330,,86,13,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-"The Vanguard Group, Inc.",Cash Reserves Federal MM Fund Admiral,,,,8042685,,86,14,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-"The Vanguard Group, Inc.",Emerging Markets Index Fund Institutional Plus,Mutual Fund,,,464235808,,86,15,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-"The Vanguard Group, Inc.",Real Estate Index Fund Institutional,Mutual Fund,,,370472575,,86,16,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-"The Vanguard Group, Inc.",Total International Bond Index Fund Institutional,Mutual Fund,,,179272982,,86,17,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-"The Vanguard Group, Inc.",Wellesley Income Fund Admiral,,,,519010734,,86,18,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-"The Vanguard Group, Inc.",Target Retirement Trust 2020,Collective Trust,,,114140981,,86,20,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-"The Vanguard Group, Inc.",Target Retirement Trust 2025,Collective Trust,,,378777049,,86,21,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-"The Vanguard Group, Inc.",Target Retirement Trust 2030,Collective Trust,,,977414959,,86,22,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-"The Vanguard Group, Inc.",Target Retirement Trust 2035,Collective Trust,,,1929227711,,86,23,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-"The Vanguard Group, Inc.",Target Retirement Trust 2040,Collective Trust,,,3324929052,,86,24,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-"The Vanguard Group, Inc.",Target Retirement Trust 2045,Collective Trust,,,5564612228,,86,25,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-"The Vanguard Group, Inc.",Target Retirement Trust 2050,Collective Trust,,,7148528242,,86,26,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-"The Vanguard Group, Inc.",Target Retirement Trust 2055,Collective Trust,,,6534271702,,86,27,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-"The Vanguard Group, Inc.",Target Retirement Trust 2060,Collective Trust,,,3681769161,,86,28,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-"The Vanguard Group, Inc.",Target Retirement Trust 2065,Collective Trust,,,716454591,,86,29,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-"The Vanguard Group, Inc.",Target Retirement Trust 2070,Collective Trust,,,26991926,,86,30,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-"The Vanguard Group, Inc.",Target Retirement Income and Growth Trust,Collective Trust,,,5220137,,86,31,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-"The Vanguard Group, Inc.",Target Retirement Income Trust,Collective Trust,,,98049336,,86,32,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-"The Vanguard Group, Inc.",Developed Markets Index Trust,Collective Trust,,,1338290465,,86,33,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-"The Vanguard Group, Inc.",Institutional Extended Market Index Trust,Collective Trust,,,1659528719,,86,34,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-"The Vanguard Group, Inc.",Institutional Total Bond Market Index Trust,Collective Trust,,,981968934,,86,35,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-"The Vanguard Group, Inc.",Retirement Savings Trust II,Collective Trust,,,400434346,,86,36,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-Fidelity Investments Diversified Commingled Pool,"Fund, Class C",,,,210007040,,86,37,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-EARNEST Partners Smid Cap Core,"Fund, Founders Class",,,,264305773,,86,38,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-Metropolitan West,Funds MetWest Total Return Bond Fund (CIT),,,,87955982,,86,39,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-"The Vanguard Group, Inc.",Parnassus US Large Cap,,,,785845403,,86,41,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-Vanguard Brokerage Option,SelfDirected Brokerage Accounts,,,,1891033914,,86,43,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
-to August 2035,,,,,120942045,,86,47,GOOGLE_401K_Form5500_2024.pdf,GOOGLE_401K_Form5500_2024
+sponsor_ein,plan_number,plan_year,sponsor,plan_name,sponsor_plan_key,issuer_name,investment_description,asset_type,morningstar_ticker,par_value,cost,current_value,units_or_shares,page_number,row_id,confidence
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,BrokerageLink,BrokerageLink Account,Other,,,,919465000.0,,380,4,1.0
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,PIMCO,Total Return II,Mutual Fund,PODIX,,,261383000.0,,380,5,1.0
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,Vanguard,Target Retirement Income Fund,Target Date Fund,VTSAX,,,133475000.0,,380,6,1.0
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,Vanguard,Target Retirement 2020 Fund,Target Date Fund,VTSAX,,,117070000.0,,380,7,1.0
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,Vanguard,Target Retirement 2025 Fund,Target Date Fund,VTSAX,,,408188000.0,,380,8,1.0
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,Vanguard,Target Retirement 2030 Fund,Target Date Fund,VTSAX,,,903324000.0,,380,9,1.0
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,Vanguard,Target Retirement 2035 Fund,Target Date Fund,VTSAX,,,1522365000.0,,380,10,1.0
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,Vanguard,Target Retirement 2040 Fund,Target Date Fund,VTSAX,,,2075308000.0,,380,11,1.0
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,Vanguard,Target Retirement 2045 Fund,Target Date Fund,VTSAX,,,2955142000.0,,380,12,1.0
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,Vanguard,Target Retirement 2050 Fund,Target Date Fund,VTSAX,,,3784002000.0,,380,13,1.0
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,Vanguard,Target Retirement 2055 Fund,Target Date Fund,VTSAX,,,3890499000.0,,380,14,1.0
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,Vanguard,Target Retirement 2060 Fund,Target Date Fund,VTSAX,,,2643382000.0,,380,15,1.0
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,Vanguard,Target Retirement 2065 Fund,Target Date Fund,VTSAX,,,1142405000.0,,380,16,1.0
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,Harris Associates,Oakmark International Fund Class 3,Mutual Fund,,,,76869000.0,,380,17,1.0
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,Vanguard,Retirement Savings Trust II,Mutual Fund,VTSAX,,,422946000.0,,380,18,1.0
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,Vanguard,Target Retirement 2070 Fund,Target Date Fund,VTSAX,,,123119000.0,,380,19,1.0
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,Vanguard,Small Value Index Fund Institutional,Mutual Fund,VTSAX,,,340985000.0,,380,20,1.0
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,Vanguard,FTSE Social Index Fund Institutional Shares,Mutual Fund,VTSAX,,,873714000.0,,380,21,1.0
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,Vanguard,Total International Stock Market Index Fund Institutional Shares,Common Stock,,,,634822000.0,,380,22,1.0
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,Vanguard,Total Bond Market Index Fund Institutional Shares,Corporate Bond,,,,313836000.0,,380,23,1.0
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,Vanguard,Institutional 500 Index Trust,Mutual Fund,VFIAX,,,4619443000.0,,380,24,1.0
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,Vanguard,Federal Money Market Fund Admiral Shares,Money Market Fund,,,,59815000.0,,380,25,1.0
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,Vanguard,Explorer Fund Admiral Shares,Mutual Fund,VTSAX,,,527308000.0,,380,26,1.0
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,American Funds,EuroPacific Growth Fund Class R-6,Mutual Fund,,,,180005000.0,,380,27,1.0
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,AMAZONCOM,AMAZON.COM,Other,,,,2701378000.0,,380,28,1.0
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,State Street Global Advisors,Large Cap Value Collective Trust Fund,Common/Collective Trust Fund,,,,451719000.0,,380,29,1.0
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,State Street Global Advisors,Large Cap Growth Collective Trust Fund,Common/Collective Trust Fund,,,,1822800000.0,,380,30,1.0
+91-1986545,1,2024,"’s name (employer, if for a single-employer plan) 2b Employer Identification",1B Threedigit Plan,,State Street Global Advisors,Small/Mid Cap Collective Trust Fund,Common/Collective Trust Fund,,,,262857000.0,,380,31,1.0

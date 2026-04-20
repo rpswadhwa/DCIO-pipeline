@@ -1,0 +1,438 @@
+/opt/homebrew/lib/python3.14/site-packages/camelot/parsers/base.py:238: UserWarning: No tables found in table area (62.024, 605.148, 563.1999999999999, 744.6372307692308)
+  cols, rows, v_s, h_s = self._generate_columns_and_rows(bbox, user_cols)
+/opt/homebrew/lib/python3.14/site-packages/camelot/parsers/base.py:238: UserWarning: No tables found in table area (0, 0, 612.0, 792.0)
+  cols, rows, v_s, h_s = self._generate_columns_and_rows(bbox, user_cols)
+/opt/homebrew/lib/python3.14/site-packages/camelot/parsers/base.py:238: UserWarning: No tables found in table area (44.0, 635.49, 384.43904, 788.3144961262932)
+  cols, rows, v_s, h_s = self._generate_columns_and_rows(bbox, user_cols)
+/opt/homebrew/lib/python3.14/site-packages/camelot/parsers/base.py:238: UserWarning: No tables found in table area (44.0, 635.49, 384.43904, 788.3144961262932)
+  cols, rows, v_s, h_s = self._generate_columns_and_rows(bbox, user_cols)
+/opt/homebrew/lib/python3.14/site-packages/camelot/parsers/base.py:238: UserWarning: No tables found in table area (0, 0, 612.0, 792.0)
+  cols, rows, v_s, h_s = self._generate_columns_and_rows(bbox, user_cols)
+============================================================
+FORM 5500 PIPELINE - FULL EXTRACTION AND CLEANUP
+============================================================
+
+[STEP 1] Extracting data from all Form 5500 documents...
+
+  Processing: AMAZON_401K_FORM5500_2024.pdf
+    Found 10 supplemental pages: [4, 349, 353, 354, 355, 357, 358, 366, 380, 381]
+    Table extraction on page 4 yielded poor results (0/10 meaningful rows)
+    Table extraction on page 349 yielded poor results (0/70 meaningful rows)
+    Table extraction on page 353 yielded poor results (0/52 meaningful rows)
+    Table extraction on page 354 yielded poor results (0/22 meaningful rows)
+    Table extraction on page 355 yielded poor results (0/37 meaningful rows)
+    Table extraction on page 357 yielded poor results (0/10 meaningful rows)
+    Table extraction on page 358 yielded poor results (0/25 meaningful rows)
+    Table extraction on page 366 yielded poor results (0/21 meaningful rows)
+    Table extraction on page 380 yielded poor results (0/41 meaningful rows)
+    Table extraction on page 381 yielded poor results (0/12 meaningful rows)
+    No tables found on page 4, trying text-based extraction...
+      ⚠ No investments found in text format either
+    No tables found on page 349, trying text-based extraction...
+      ⚠ No investments found in text format either
+    No tables found on page 353, trying text-based extraction...
+      ⚠ No investments found in text format either
+    No tables found on page 354, trying text-based extraction...
+      ⚠ No investments found in text format either
+    No tables found on page 355, trying text-based extraction...
+      ⚠ No investments found in text format either
+    No tables found on page 357, trying text-based extraction...
+      ⚠ No investments found in text format either
+    No tables found on page 358, trying text-based extraction...
+      ⚠ No investments found in text format either
+    No tables found on page 366, trying text-based extraction...
+      ⚠ No investments found in text format either
+    No tables found on page 380, trying text-based extraction...
+      ✓ Extracted 28 investments from text
+    No tables found on page 381, trying text-based extraction...
+      ⚠ No investments found in text format either
+    Extracted 28 investment records
+
+  Processing: APPLE_401K_Form5500_2024.pdf
+    Found 15 supplemental pages: [4, 259, 263, 264, 265, 267, 268, 276, 286, 287, 288, 289, 290, 291, 292]
+    Table extraction on page 4 yielded poor results (0/10 meaningful rows)
+    Table extraction on page 259 yielded poor results (0/69 meaningful rows)
+    Table extraction on page 263 yielded poor results (0/52 meaningful rows)
+    Table extraction on page 264 yielded poor results (0/22 meaningful rows)
+    Table extraction on page 265 yielded poor results (0/37 meaningful rows)
+    Table extraction on page 267 yielded poor results (0/10 meaningful rows)
+    Table extraction on page 268 yielded poor results (0/25 meaningful rows)
+    Table extraction on page 276 yielded poor results (0/11 meaningful rows)
+    No tables found on page 4, trying text-based extraction...
+      ⚠ No investments found in text format either
+    No tables found on page 259, trying text-based extraction...
+      ⚠ No investments found in text format either
+    No tables found on page 263, trying text-based extraction...
+      ⚠ No investments found in text format either
+    No tables found on page 264, trying text-based extraction...
+      ⚠ No investments found in text format either
+    No tables found on page 265, trying text-based extraction...
+      ⚠ No investments found in text format either
+    No tables found on page 267, trying text-based extraction...
+      ⚠ No investments found in text format either
+    No tables found on page 268, trying text-based extraction...
+      ⚠ No investments found in text format either
+    No tables found on page 276, trying text-based extraction...
+      ⚠ No investments found in text format either
+    Extracted 454 investment records
+
+  Processing: GOOGLE_401K_Form5500_2024.pdf
+    Found 10 supplemental pages: [4, 56, 60, 61, 62, 64, 65, 84, 85, 86]
+    Table extraction on page 4 yielded poor results (0/10 meaningful rows)
+    Table extraction on page 56 yielded poor results (0/69 meaningful rows)
+    Table extraction on page 60 yielded poor results (0/52 meaningful rows)
+    Table extraction on page 61 yielded poor results (0/25 meaningful rows)
+    Table extraction on page 62 yielded poor results (0/37 meaningful rows)
+    Table extraction on page 64 yielded poor results (0/10 meaningful rows)
+    Table extraction on page 65 yielded poor results (0/25 meaningful rows)
+    No tables found on page 4, trying text-based extraction...
+      ⚠ No investments found in text format either
+    No tables found on page 56, trying text-based extraction...
+      ⚠ No investments found in text format either
+    No tables found on page 60, trying text-based extraction...
+      ⚠ No investments found in text format either
+    No tables found on page 61, trying text-based extraction...
+      ⚠ No investments found in text format either
+    No tables found on page 62, trying text-based extraction...
+      ⚠ No investments found in text format either
+    No tables found on page 64, trying text-based extraction...
+      ⚠ No investments found in text format either
+    No tables found on page 65, trying text-based extraction...
+      ⚠ No investments found in text format either
+    Extracted 74 investment records
+
+  Total records extracted: 556
+
+[STEP 2] Saving raw extracted data...
+  ✓ Raw CSV saved: data/outputs/investments_raw.csv
+
+[STEP 3] Cleaning investment data...
+Starting with: 556 records
+  ✓ Preserving fund with 'TOT' abbreviation: VG IS TOT BD MKT IDX
+  Removing Total row:  | 
+  Removing Total row:  | 
+  Removing Total row:  | 
+  Removing Total row:  | 
+  Removing Total row:  | 
+  Removing Total row:  | 
+  Removing Total row:  | 
+  Removing Total row: Total synthetic investment contracts (Co | 
+  Removing Total row: Total BHMS | 
+  Removing Total row: Total William Blair Small-Mid Cap Growth | 
+  Removing Total row: Total WB | 
+  Removing Total row: Total Investments | 
+  Removing Total row:  | 
+  Removing Total row: Total William Blair Small-Mid Cap Growth | 
+  Removing Total row: Total WB | 
+  Removing Total row: Total Investments | 
+  Removing Total row:  | 
+  Removing Total row:  | 
+  Removing Total row:  | 
+  Removing Total row:  | 
+  Removing Total row:  | 
+  Removing Total row:  | 
+  Removing Total row: Total synthetic investment contracts (Co | 
+  Removing Total row: Total BHMS | 
+  Removing Total row: Total William Blair Small-Mid Cap Growth | 
+  Removing Total row: Total WB | 
+  Removing Total row: Total Investments | 
+  Removing Total row:  | 
+  Removing Total row: Total William Blair Small-Mid Cap Growth | 
+  Removing Total row: Total WB | 
+  Removing Total row: Total Investments | 
+  Removing Total row:  | 
+  Removing Total row: Total | 
+  Removing Total row: Total | 
+  Removed 34 total/summary rows
+  Removed 28 metadata rows
+  Removing duplicate: PLANET FITNESS INC CL A | 
+  Removing duplicate: POOL CORP | 
+  Removing duplicate: PRIMO BRANDS CORP A | 
+  Removing duplicate: PURE STORAGE INC CL A | 
+  Removing duplicate: Q2 HLDGS INC | 
+  Removing duplicate: RANGE RESOURCES CORP | 
+  Removing duplicate: REGAL REXNORD CORP | 
+  Removing duplicate: REVOLVE GROUP INC | 
+  Removing duplicate: STRIDE INC | 
+  Removing duplicate: TPG INC | 
+  Removing duplicate: TALEN ENERGY CORP | 
+  Removing duplicate: TENABLE HLDGS INC | 
+  Removing duplicate: TWIST BIOSCIENCE CORP | 
+  Removing duplicate: VARONIS SYS INC | 
+  Removing duplicate: WESTERN ALLIANCE BANCORP | 
+  Removing duplicate: WHITECAP RESOURCES INC | 
+  Removing duplicate: NVENT ELECTRIC PLC | 
+  Removing duplicate: FIRSTSVCS CORP | 
+  Removing duplicate: CREDO TECH GROUP HLDGS LT | 
+  Removing duplicate: FTAI AVIATION LTD | 
+  Removing duplicate: SHARKNINJA INC | 
+  Removing duplicate: ABIOMED INC CVR | 
+  Removing duplicate: CANADIAN DOLLAR | 
+  Removing duplicate: BLACKROCK GLOBAL LIFEPATH INDEX 2030 ACC | 
+  Removing duplicate: BLACKROCK GLOBAL LIFEPATH INDEX 2035 ACC | 
+  Removing duplicate: BLACKROCK GLOBAL LIFEPATH INDEX 2040 ACC | 
+  Removing duplicate: BLACKROCK GLOBAL LIFEPATH INDEX 2045 ACC | 
+  Removing duplicate: BLACKROCK GLOBAL LIFEPATH INDEX 2050 ACC | 
+  Removing duplicate: BLACKROCK GLOBAL LIFEPATH INDEX 2055 ACC | 
+  Removing duplicate: BLACKROCK GLOBAL LIFEPATH INDEX 2060 ACC | 
+  Removing duplicate: BLACKROCK GLOBAL LIFEPATH INDEX 2065 ACC | 
+  Removing duplicate: BLACKROCK GLOBAL LIFEPATH INDEX 2070 ACC | 
+  Removing duplicate: BLACKROCK GLOBAL LIFEPATH INDEX RETIREME | 
+  Removing duplicate: VANGUARD TOTAL BOND MARKET INDEX TRUST | 
+  Removing duplicate: EATON VANCE HIGH YIELD CIT V | 
+  Removing duplicate: LOOMIS SAYLES CORE PLUS FIXED INCOME CIT | 
+  Removing duplicate: VANGUARD INSTITUTIONAL 500 INDEX TRUST | 
+  Removing duplicate: FIDELITY CONTRA COMM POOL CL 3 * | 
+  Removing duplicate: AB US SMALL AND MID CAP VALUE CIT (W SER | 
+  Removing duplicate: VANGUARD EXTENDED MARKET INDEX TRUST | 
+  Removing duplicate: BAILLIE GIFFORD INTERNATIONAL ALPHA CIT  | 
+  Removing duplicate: VANGUARD TOTAL INTL STOCK INDEX TRUST | 
+  Removing duplicate: BNY MELLON EB GLOBAL REAL ESTATE SEC II | 
+  Removing duplicate: BROKERGE ACCOUNT Various Accounts | 
+  Removing duplicate: Participant Loans * Interest rates rangi | 
+  Removing duplicate: GALLIARD SHORT CORE FUND F (Fair value) | 
+  Removing duplicate: GALLIARD INTERMEDIATE CORE FUND L (Fair  | 
+  Removing duplicate: WRAPPER | Other
+  Removing duplicate: WF/BLACKROCK SHORT TERM INVESTMENT FUND  | 
+  Removing duplicate: BLACKROCK LIQ FDS FED FUND INST | Money Market
+  Removing duplicate: AECOM | 
+  Removing duplicate: AIR PRODUCTS & CHEMICALS | 
+  Removing duplicate: ALPHABET INC CL A | 
+  Removing duplicate: AMERICAN EXPRESS CO | 
+  Removing duplicate: AMERICAN INTL GROUP | 
+  Removing duplicate: ELEVANCE HEALTH INC | 
+  Removing duplicate: ARAMARK | 
+  Removing duplicate: AVANTOR INC | 
+  Removing duplicate: BANK OF AMERICA CORPORATI | 
+  Removing duplicate: CARNIVAL CORP | 
+  Removing duplicate: COGNIZANT TECH SOLUTIONS | 
+  Removing duplicate: COMCAST CORP CL A | 
+  Removing duplicate: ENBRIDGE INC | 
+  Removing duplicate: ELECTRONIC ARTS INC | 
+  Removing duplicate: ENTERGY CORP | 
+  Removing duplicate: BANK OF NOVA SCOTIA | 
+  Removing duplicate: EXXON MOBIL CORP | 
+  Removing duplicate: FIDELITY NATL INFORM SVCS | 
+  Removing duplicate: FORTIVE CORP | 
+  Removing duplicate: HALLIBURTON CO | 
+  Removing duplicate: HESS CORP | 
+  Removing duplicate: HUNT J B TRANSPORT SVCS I | 
+  Removing duplicate: JACOBS SOLUTIONS INC | 
+  Removing duplicate: KEURIG DR PEPPER INC | 
+  Removing duplicate: LAS VEGAS SANDS CORP | 
+  Removing duplicate: LITHIA MOTORS INC CL A | 
+  Removing duplicate: M&T BANK CORP | 
+  Removing duplicate: MERCK & CO INC NEW | 
+  Removing duplicate: MICROCHIP TECH | 
+  Removing duplicate: ORACLE CORP | 
+  Removing duplicate: PERMIAN RESOURCES CORP CL | 
+  Removing duplicate: PHILIP MORRIS INTL INC | 
+  Removing duplicate: PHILLIPS 66 | 
+  Removing duplicate: PINNACLE WEST CAPITAL COR | 
+  Removing duplicate: PROLOGIS INC REIT | 
+  Removing duplicate: PUBLIC STORAGE | 
+  Removing duplicate: QUALCOMM INC | 
+  Removing duplicate: SANOFI SPON ADR | 
+  Removing duplicate: US BANCORP DEL | 
+  Removing duplicate: UNITEDHEALTH GROUP INC | 
+  Removing duplicate: VICI PPTYS INC | 
+  Removing duplicate: WELLS FARGO & CO | 
+  Removing duplicate: WYNN RESORTS LTD | 
+  Removing duplicate: XCEL ENERGY INC | 
+  Removing duplicate: CRH PLC | 
+  Removing duplicate: WILLIS TOWERS WATSON PLC | 
+  Removing duplicate: AXALTA COATING SYS LTD | 
+  Removing duplicate: APTIV PLC | 
+  Removing duplicate: MEDTRONIC PLC | 
+  Removing duplicate: JOHNSON CONTROLS INTL PLC | 
+  Removing duplicate: BLACKROCK LIQ FDS FED FUND INST | Money Market
+  Removing duplicate: ACV AUCTIONS INC CL A | 
+  Removing duplicate: ACADIA HEALTHCARE CO INC | 
+  Removing duplicate: ADVANCED DRAINAGE SYS INC | 
+  Removing duplicate: AMICUS THERAPEUTICS INC | 
+  Removing duplicate: AVANTOR INC | 
+  Removing duplicate: AZEK CO INC | 
+  Removing duplicate: BALDWIN INSURANCE GROUP I | 
+  Removing duplicate: BWX TECH INC | 
+  Removing duplicate: BIO TECHNE CORP | 
+  Removing duplicate: BLUEPRINT MEDICINES CORP | 
+  Removing duplicate: BRIGHT HORIZONS FAMILY SO | 
+  Removing duplicate: BRINKS CO | 
+  Removing duplicate: BURLINGTON STORES INC | 
+  Removing duplicate: CF INDU HLDGS INC | 
+  Removing duplicate: CARLYLE GROUP INC (THE) | 
+  Removing duplicate: CASELLA WASTE SYS INC CL | 
+  Removing duplicate: CHART INDU INC | 
+  Removing duplicate: CHEMED CORP | 
+  Removing duplicate: CHURCHILL DOWNS INC | 
+  Removing duplicate: CLEARWATER ANALYTICS HLDG | 
+  Removing duplicate: COGNEX CORP | 
+  Removing duplicate: CONFLUENT INC | 
+  Removing duplicate: CAMECO CORP | 
+  Removing duplicate: CURTISS WRIGHT CORPORATIO | 
+  Removing duplicate: EVEREST GROUP LTD | 
+  Removing duplicate: DOXIMITY INC | 
+  Removing duplicate: DYNATRACE INC | 
+  Removing duplicate: ELF BEAUTY INC | 
+  Removing duplicate: EAGLE MATERIALS INC | 
+  Removing duplicate: ENCOMPASS HEALTH CORP | 
+  Removing duplicate: EPAM SYS INC | 
+  Removing duplicate: EVOLENT HEALTH INC A | 
+  Removing duplicate: EXACT SCIENCES CORP | 
+  Removing duplicate: EXLSVCS HLDGS INC | 
+  Removing duplicate: FLYWIRE CORP | 
+  Removing duplicate: FOX FACTORY HLDGS CORP | 
+  Removing duplicate: FRESHPET INC | 
+  Removing duplicate: GLAUKOS CORP | 
+  Removing duplicate: GLOBUS MEDICAL INC | 
+  Removing duplicate: GUIDEWIRE SOFTWARE INC | 
+  Removing duplicate: INSMED INC | 
+  Removing duplicate: INSPIRE MEDICAL SYS INC | 
+  Removing duplicate: INSULET CORP | 
+  Removing duplicate: KOSMOS ENERGY LTD | 
+  Removing duplicate: LANCASTER COLONY CORP | 
+  Removing duplicate: LATTICE SEMICONDUCTOR COR | 
+  Removing duplicate: LOUISIANA PACIFIC CORP | 
+  Removing duplicate: MADRIGAL PHARMACEUTICALS | 
+  Removing duplicate: MANHATTAN ASSIC INC | 
+  Removing duplicate: MERCURY SYS INC | 
+  Removing duplicate: MERIT MEDICAL SYS INC | 
+  Removing duplicate: MUELLER INDU INC | 
+  Removing duplicate: NEOGEN CORP | 
+  Removing duplicate: NEW FORTRESS ENERGY INC | 
+  Removing duplicate: NICE LTD SPON ADR | 
+  Removing duplicate: NOVANTA INC | 
+  Removing duplicate: PARSONS CORP | 
+  Removing duplicate: PENUMBRA INC | 
+  Removing duplicate: PLANET FITNESS INC CL A | 
+  Removing duplicate: POOL CORP | 
+  Removing duplicate: PRIMO BRANDS CORP A | 
+  Removing duplicate: PURE STORAGE INC CL A | 
+  Removing duplicate: Q2 HLDGS INC | 
+  Removing duplicate: RANGE RESOURCES CORP | 
+  Removing duplicate: REGAL REXNORD CORP | 
+  Removing duplicate: REVOLVE GROUP INC | 
+  Removing duplicate: STRIDE INC | 
+  Removing duplicate: TPG INC | 
+  Removing duplicate: TALEN ENERGY CORP | 
+  Removing duplicate: TENABLE HLDGS INC | 
+  Removing duplicate: TWIST BIOSCIENCE CORP | 
+  Removing duplicate: VARONIS SYS INC | 
+  Removing duplicate: WESTERN ALLIANCE BANCORP | 
+  Removing duplicate: WHITECAP RESOURCES INC | 
+  Removing duplicate: NVENT ELECTRIC PLC | 
+  Removing duplicate: FIRSTSVCS CORP | 
+  Removing duplicate: CREDO TECH GROUP HLDGS LT | 
+  Removing duplicate: FTAI AVIATION LTD | 
+  Removing duplicate: SHARKNINJA INC | 
+  Removing duplicate: ABIOMED INC CVR | 
+  Removing duplicate: CANADIAN DOLLAR | 
+  Removing duplicate: BLACKROCK GLOBAL LIFEPATH INDEX 2030 ACC | 
+  Removing duplicate: BLACKROCK GLOBAL LIFEPATH INDEX 2035 ACC | 
+  Removing duplicate: BLACKROCK GLOBAL LIFEPATH INDEX 2040 ACC | 
+  Removing duplicate: BLACKROCK GLOBAL LIFEPATH INDEX 2045 ACC | 
+  Removing duplicate: BLACKROCK GLOBAL LIFEPATH INDEX 2050 ACC | 
+  Removing duplicate: BLACKROCK GLOBAL LIFEPATH INDEX 2055 ACC | 
+  Removing duplicate: BLACKROCK GLOBAL LIFEPATH INDEX 2060 ACC | 
+  Removing duplicate: BLACKROCK GLOBAL LIFEPATH INDEX 2065 ACC | 
+  Removing duplicate: BLACKROCK GLOBAL LIFEPATH INDEX 2070 ACC | 
+  Removing duplicate: BLACKROCK GLOBAL LIFEPATH INDEX RETIREME | 
+  Removing duplicate: VANGUARD TOTAL BOND MARKET INDEX TRUST | 
+  Removing duplicate: EATON VANCE HIGH YIELD CIT V | 
+  Removing duplicate: LOOMIS SAYLES CORE PLUS FIXED INCOME CIT | 
+  Removing duplicate: VANGUARD INSTITUTIONAL 500 INDEX TRUST | 
+  Removing duplicate: FIDELITY CONTRA COMM POOL CL 3 * | 
+  Removing duplicate: AB US SMALL AND MID CAP VALUE CIT (W SER | 
+  Removing duplicate: VANGUARD EXTENDED MARKET INDEX TRUST | 
+  Removing duplicate: BAILLIE GIFFORD INTERNATIONAL ALPHA CIT  | 
+  Removing duplicate: VANGUARD TOTAL INTL STOCK INDEX TRUST | 
+  Removing duplicate: BNY MELLON EB GLOBAL REAL ESTATE SEC II | 
+  Removing duplicate: BROKERGE ACCOUNT Various Accounts | 
+  Removing duplicate: Participant Loans * Interest rates rangi | 
+  Removing duplicate: PLANET FITNESS INC CL A | 
+  Removing duplicate: POOL CORP | 
+  Removing duplicate: PRIMO BRANDS CORP A | 
+  Removing duplicate: PURE STORAGE INC CL A | 
+  Removing duplicate: Q2 HLDGS INC | 
+  Removing duplicate: RANGE RESOURCES CORP | 
+  Removing duplicate: REGAL REXNORD CORP | 
+  Removing duplicate: REVOLVE GROUP INC | 
+  Removing duplicate: STRIDE INC | 
+  Removing duplicate: TPG INC | 
+  Removing duplicate: TALEN ENERGY CORP | 
+  Removing duplicate: TENABLE HLDGS INC | 
+  Removing duplicate: TWIST BIOSCIENCE CORP | 
+  Removing duplicate: VARONIS SYS INC | 
+  Removing duplicate: WESTERN ALLIANCE BANCORP | 
+  Removing duplicate: WHITECAP RESOURCES INC | 
+  Removing duplicate: NVENT ELECTRIC PLC | 
+  Removing duplicate: FIRSTSVCS CORP | 
+  Removing duplicate: CREDO TECH GROUP HLDGS LT | 
+  Removing duplicate: FTAI AVIATION LTD | 
+  Removing duplicate: SHARKNINJA INC | 
+  Removing duplicate: ABIOMED INC CVR | 
+  Removing duplicate: CANADIAN DOLLAR | 
+  Removing duplicate: BLACKROCK GLOBAL LIFEPATH INDEX 2030 ACC | 
+  Removing duplicate: BLACKROCK GLOBAL LIFEPATH INDEX 2035 ACC | 
+  Removing duplicate: BLACKROCK GLOBAL LIFEPATH INDEX 2040 ACC | 
+  Removing duplicate: BLACKROCK GLOBAL LIFEPATH INDEX 2045 ACC | 
+  Removing duplicate: BLACKROCK GLOBAL LIFEPATH INDEX 2050 ACC | 
+  Removing duplicate: BLACKROCK GLOBAL LIFEPATH INDEX 2055 ACC | 
+  Removing duplicate: BLACKROCK GLOBAL LIFEPATH INDEX 2060 ACC | 
+  Removing duplicate: BLACKROCK GLOBAL LIFEPATH INDEX 2065 ACC | 
+  Removing duplicate: BLACKROCK GLOBAL LIFEPATH INDEX 2070 ACC | 
+  Removing duplicate: BLACKROCK GLOBAL LIFEPATH INDEX RETIREME | 
+  Removing duplicate: VANGUARD TOTAL BOND MARKET INDEX TRUST | 
+  Removing duplicate: EATON VANCE HIGH YIELD CIT V | 
+  Removing duplicate: LOOMIS SAYLES CORE PLUS FIXED INCOME CIT | 
+  Removing duplicate: VANGUARD INSTITUTIONAL 500 INDEX TRUST | 
+  Removing duplicate: FIDELITY CONTRA COMM POOL CL 3 * | 
+  Removing duplicate: AB US SMALL AND MID CAP VALUE CIT (W SER | 
+  Removing duplicate: VANGUARD EXTENDED MARKET INDEX TRUST | 
+  Removing duplicate: BAILLIE GIFFORD INTERNATIONAL ALPHA CIT  | 
+  Removing duplicate: VANGUARD TOTAL INTL STOCK INDEX TRUST | 
+  Removing duplicate: BNY MELLON EB GLOBAL REAL ESTATE SEC II | 
+  Removing duplicate: BROKERGE ACCOUNT Various Accounts | 
+  Removing duplicate: Participant Loans * Interest rates rangi | 
+  Removing duplicate: Nuveen | Large Cap Responsible Equity Fund R6
+  Removing duplicate: PIMCO | Income Fund Institutional Class
+  Removing duplicate: * The Vanguard Group, Inc. | 500  Institutional Select
+  Removing duplicate: * The Vanguard Group, Inc. | Cash Reserves Federal MM Fund Admiral
+  Removing duplicate: * The Vanguard Group, Inc. | Emerging Markets  Institutional Plus
+  Removing duplicate: * The Vanguard Group, Inc. | Real Estate  Institutional
+  Removing duplicate: * The Vanguard Group, Inc. | Total International Bond  Institutional
+  Removing duplicate: * The Vanguard Group, Inc. | Wellesley Income Fund Admiral
+  Removing duplicate: * The Vanguard Group, Inc. | Target Retirement Trust 2020
+  Removing duplicate: * The Vanguard Group, Inc. | Target Retirement Trust 2025
+  Removing duplicate: * The Vanguard Group, Inc. | Target Retirement Trust 2030
+  Removing duplicate: * The Vanguard Group, Inc. | Target Retirement Trust 2035
+  Removing duplicate: * The Vanguard Group, Inc. | Target Retirement Trust 2040
+  Removing duplicate: * The Vanguard Group, Inc. | Target Retirement Trust 2045
+  Removing duplicate: * The Vanguard Group, Inc. | Target Retirement Trust 2050
+  Removing duplicate: * The Vanguard Group, Inc. | Target Retirement Trust 2055
+  Removing duplicate: * The Vanguard Group, Inc. | Target Retirement Trust 2060
+  Removing duplicate: * The Vanguard Group, Inc. | Target Retirement Trust 2065
+  Removing duplicate: * The Vanguard Group, Inc. | Target Retirement Trust 2070
+  Removing duplicate: * The Vanguard Group, Inc. | Target Retirement Income and Growth Trus
+  Removing duplicate: * The Vanguard Group, Inc. | Target Retirement Income Trust
+  Removing duplicate: * The Vanguard Group, Inc. | Developed Markets Index Trust
+  Removing duplicate: * The Vanguard Group, Inc. | Institutional Extended Market Index Trus
+  Removing duplicate: * The Vanguard Group, Inc. | Institutional Total Bond Market Index Tr
+  Removing duplicate: * The Vanguard Group, Inc. | Retirement Savings Trust II
+  Removing duplicate: EARNEST Partners | Smid Cap Core Fund, Founders Class
+  Removing duplicate: Metropolitan West Funds | MetWest Total Return Bond Fund (CIT)
+  Removing duplicate: * The Vanguard Group, Inc. | Parnassus US Large Cap
+  Removing duplicate: * Vanguard Brokerage Option | Self Directed Brokerage Accounts
+  Removed 278 duplicate records
+Final: 216 clean records
+  ✓ Removed total rows saved: data/outputs/removed_total_rows.csv
+
+[STEP 4] Saving cleaned data...
+  ✓ Clean CSV saved: data/outputs/investments_clean.csv
+
+[STEP 5] Updating database with cleaned data...
+Traceback (most recent call last):
+  File "/Users/Arnikayadav/Desktop/Python/DCIO/DCIO/DATA/DCIO-pipeline/complete_pipeline.py", line 125, in <module>
+    cur.execute("DELETE FROM investments")
+    ~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^
+sqlite3.OperationalError: no such table: investments

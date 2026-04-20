@@ -38,11 +38,20 @@ def _llm_normalize_headers(client: OpenAI, model: str, headers: List[str], schem
         "schema_fields": schema_fields,
         "instruction": "Map each header to the best matching schema field or null. Return JSON with keys as header index and value as schema field or null."
     }
-    response = client.responses.create(
+    response = client.chat.completions.create(
         model=model,
-        input=json.dumps(prompt),
+        messages=[
+            {
+                "role": "system",
+                "content": "You are a data mapping assistant. Return valid JSON only, no extra text."
+            },
+            {
+                "role": "user",
+                "content": json.dumps(prompt)
+            }
+        ],
     )
-    text = response.output_text
+    text = response.choices[0].message.content
     try:
         data = json.loads(text)
         return {int(k): v for k, v in data.items() if v}

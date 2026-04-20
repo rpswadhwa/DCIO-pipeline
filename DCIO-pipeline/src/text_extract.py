@@ -169,7 +169,8 @@ def extract_ein_from_pdf(pdf_path: str, schedule_h_pages: List[int]) -> Optional
     ein_schedule_h = None
     ein_part_ii = None
     plan_number = None
-    plan_name = None
+    plan_name_schedule_h = None
+    plan_name_part_ii = None
     sponsor = None
     
     with pdfplumber.open(pdf_path) as pdf:
@@ -218,13 +219,18 @@ def extract_ein_from_pdf(pdf_path: str, schedule_h_pages: List[int]) -> Optional
                             break
                 
                 # Extract sponsor and plan name from Schedule H header
-                if not sponsor or not plan_name:
+                if not sponsor or not plan_name_schedule_h:
                     for i, line in enumerate(lines[:15]):
                         line_stripped = line.strip()
-                        # Look for plan name (first line with plan name pattern)
-                        if not plan_name and ('401' in line or 'PLAN' in line.upper() or 'SAVINGS' in line.upper()):
-                            if len(line_stripped) > 10 and 'SCHEDULE' not in line_stripped:
-                                plan_name = line_stripped
+                        # Look for plan name (Schedule H header / helpful text)
+                        if not plan_name_schedule_h:
+                            if re.search(r'name of plan', line, re.IGNORECASE):
+                                plan_name_schedule_h = line_stripped
+                            elif re.search(r'plan name', line, re.IGNORECASE) and not re.search(r'\b1[ab]\b', line, re.IGNORECASE):
+                                plan_name_schedule_h = line_stripped
+                            elif '401' in line or 'savings' in line.lower():
+                                if len(line_stripped) > 10 and 'SCHEDULE' not in line_stripped:
+                                    plan_name_schedule_h = line_stripped
                         
                         # Look for sponsor (typically says "Plan Sponsor:")
                         if not sponsor and 'PLAN SPONSOR' in line.upper():
@@ -258,6 +264,33 @@ def extract_ein_from_pdf(pdf_path: str, schedule_h_pages: List[int]) -> Optional
                     if ein_part_ii:
                         break
             
+            # Extract plan name and sponsor from Part II (preferred for plan_name because it's field 1a)
+            for line in lines:
+                if not plan_name_part_ii:
+                    m = re.search(r'1a[\.\s]*name of plan[:\s]*(.+)', line, re.IGNORECASE)
+                    if m:
+                        plan_name_part_ii = m.group(1).strip()
+                        continue
+
+                    m2 = re.search(r'name of plan[:\s]*(.+)', line, re.IGNORECASE)
+                    if m2:
+                        plan_name_part_ii = m2.group(1).strip()
+                        continue
+
+                if not sponsor:
+                    m = re.search(r'1b[\.\s]*name of plan sponsor[:\s]*(.+)', line, re.IGNORECASE)
+                    if m:
+                        sponsor = m.group(1).strip()
+                        continue
+
+                    m2 = re.search(r'plan sponsor[:\s]*(.+)', line, re.IGNORECASE)
+                    if m2:
+                        sponsor_candidate = m2.group(1).strip()
+                        # Avoid capturing lines that are data headings
+                        if len(sponsor_candidate) > 3:
+                            sponsor = sponsor_candidate
+                            continue
+
             # Extract plan number from Part II if not found in Schedule H
             if not plan_number:
                 for line in lines:
@@ -280,11 +313,22 @@ def extract_ein_from_pdf(pdf_path: str, schedule_h_pages: List[int]) -> Optional
     if ein_schedule_h and ein_part_ii and ein_schedule_h != ein_part_ii:
         print(f"    [!] EIN mismatch - Schedule H: {ein_schedule_h}, Part II: {ein_part_ii} (using Schedule H)")
     
+    # Prefer Part II plan name (1a), fallback to Schedule H plan name
+    final_plan_name = plan_name_part_ii or plan_name_schedule_h
+
+    # Avoid capturing label lines accidentally (e.g. field captions like "1b Three-digit plan")
+    if final_plan_name and re.search(r'\b(?:1a|1b|2b|three-digit plan|employer identification|name of plan sponsor|plan sponsor)\b', final_plan_name, re.IGNORECASE):
+        final_plan_name = plan_name_part_ii or None
+
+    # Final normalize spacing
+    if final_plan_name:
+        final_plan_name = re.sub(r'\s+', ' ', final_plan_name).strip()
+
     if final_ein:
         return {
             'ein': final_ein,
             'plan_number': plan_number or '001',
-            'plan_name': plan_name,
+            'plan_name': final_plan_name,
             'sponsor': sponsor
         }
     return None
