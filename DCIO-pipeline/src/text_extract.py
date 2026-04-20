@@ -13,6 +13,90 @@ import pandas as pd
 from .data_cleaner import handle_split_rows, parse_investment_row
 from .utils import load_yaml, normalize_whitespace
 
+# (pattern to match, canonical asset type name) — ordered most-specific first
+_SECTION_ASSET_TYPES = [
+    # "Investments in X" style headings (e.g. "Investments in mutual funds:")
+    (r'Investments?\s+in\s+mutual\s+funds?', 'Mutual Fund'),
+    (r'Investments?\s+in\s+money\s+markets?', 'Money Market Fund'),
+    (r'Investments?\s+in\s+common\s+collective\s+trusts?', 'Common/Collective Trust Fund'),
+    (r'Investments?\s+in\s+pooled\s+separate\s+accounts?', 'Commingled Fund'),
+    (r'Investments?\s+in\s+investment\s+contracts?', 'Stable Value Fund'),
+    (r'Investments?\s+in\s+index\s+funds?', 'Index Fund'),
+    # Plain asset type names / section labels
+    (r'Pooled\s+Separate\s+Accounts?', 'Pooled Separate Account'),
+    (r'Insurance\s+Company\s+General\s+Account\s+Contracts?', 'Insurance General Account'),
+    (r'General\s+Account\s+Contracts?', 'Insurance General Account'),
+    (r'Group\s+Annuity\s+Contracts?', 'Group Annuity Contract'),
+    (r'CREF\s+Accounts?', 'Group Annuity Contract'),
+    (r'Fully[\-\s]Benefit[\-\s]Responsive\s+Contracts?', 'Stable Value Fund'),
+    (r'Non[\-\s]Benefit[\-\s]Responsive\s+Contracts?', 'Stable Value Fund'),
+    (r'Common\s*/\s*Collective\s+Trust\s+Funds?', 'Common/Collective Trust Fund'),
+    (r'Collective\s*/\s*Common\s+Trust\s+Funds?', 'Common/Collective Trust Fund'),
+    (r'Common\s+Collective\s+Trust\s+Funds?', 'Common/Collective Trust Fund'),
+    (r'Collective\s+Investment\s+Trusts?', 'Common/Collective Trust Fund'),
+    (r'Collective\s+Trust\s+Funds?', 'Common/Collective Trust Fund'),
+    (r'Common\s+Collective\s+Trusts?', 'Common/Collective Trust Fund'),
+    (r'Separately\s+Managed\s+Accounts?', 'Separately Managed Account'),
+    (r'Self[\-\s]Directed\s+Brokerage\s+Accounts?', 'Self-Directed Brokerage Account'),
+    (r'Commingled\s+Funds?', 'Commingled Fund'),
+    (r'Stable\s+Value\s+Funds?', 'Stable Value Fund'),
+    (r'Money\s+Market\s+Funds?', 'Money Market Fund'),
+    (r'Institutional\s+Funds?', 'Mutual Fund'),
+    (r'Common\s+Stock\s+Funds?', 'Mutual Fund'),
+    (r'Common\s+Stock\s+Fund', 'Mutual Fund'),
+    (r'Registered\s+Investment\s+Compan(?:y|ies)', 'Mutual Fund'),
+    (r'Index\s+Funds?', 'Index Fund'),
+    (r'Mutual\s+Funds?', 'Mutual Fund'),
+    (r'Common\s+Stocks?', 'Common Stock'),
+    (r'Publicly[\-\s]traded\s+Stocks?', 'Publicly-traded Stock'),
+    (r'Preferred\s+Stocks?', 'Preferred Stock'),
+    (r'Employer\s+Stocks?', 'Employer Stock'),
+    (r'Employer\s+Securities', 'Employer Stock'),
+    (r'Partnership\s+Interests?', 'Partnership Interest'),
+    (r'ETFs?', 'ETF'),
+    (r'Participant\s+Loans?', 'Participant Loan'),
+    (r'Currenc(?:y|ies)', 'Currency'),
+]
+
+
+def _detect_section_heading(row_data: Dict, fields: List[str]) -> Optional[str]:
+    """
+    Returns canonical asset type string if this row is a section heading
+    (an asset-type label row with no investment value), otherwise None.
+    """
+    current_value = str(row_data.get('current_value', '')).strip()
+    if current_value and current_value not in ('', 'nan', '-', '**', '0'):
+        return None
+
+    # Count fields that have meaningful content (excluding page/row metadata)
+    meta_fields = {'page_number', 'row_id'}
+    non_empty = sum(
+        1 for f in fields
+        if f not in meta_fields
+        and str(row_data.get(f, '')).strip()
+        and str(row_data.get(f, '')).strip() not in ('nan', '-', '**')
+    )
+    # A heading row has at most 2 non-empty data fields
+    if non_empty > 2:
+        return None
+
+    # Check each text field for an exact asset-type match
+    # Strip trailing colon/plural suffix so "Mutual Funds:" matches "Mutual Fund"
+    for field in ('issuer_name', 'investment_description', 'asset_type'):
+        text = str(row_data.get(field, '')).strip()
+        if not text or text == 'nan':
+            continue
+        text_clean = text.rstrip(':').strip()
+        for pattern, canonical in _SECTION_ASSET_TYPES:
+            if re.fullmatch(pattern, text_clean, re.IGNORECASE):
+                return canonical
+
+    return None
+
+
+def _is_blank_asset_type(value: str) -> bool:
+    return not value or str(value).strip().lower() in ('', 'nan', '-', '**')
+
 
 def _best_header_match(header: str, synonyms: Dict[str, List[str]]) -> Tuple[str, int]:
     header = header.lower()
@@ -194,7 +278,7 @@ def extract_ein_from_pdf(pdf_path: str, schedule_h_pages: List[int]) -> Optional
     
     # Validate: if both exist and differ, log warning but use Schedule H
     if ein_schedule_h and ein_part_ii and ein_schedule_h != ein_part_ii:
-        print(f"    ⚠ EIN mismatch - Schedule H: {ein_schedule_h}, Part II: {ein_part_ii} (using Schedule H)")
+        print(f"    [!] EIN mismatch - Schedule H: {ein_schedule_h}, Part II: {ein_part_ii} (using Schedule H)")
     
     if final_ein:
         return {
@@ -236,6 +320,118 @@ def _llm_normalize_headers(client: OpenAI, model: str, headers: List[str], schem
         return {}
 
 
+def _extract_gm_column_format(text: str, page_num: int) -> List[Dict]:
+    """
+    Parse GM composite plan format where column (A) is a fund code,
+    (B) is issuer name, (C) is description, and values appear on the next line.
+
+    Section headings in ALL CAPS (e.g. REGISTERED INVESTMENT COMPANY) mark
+    the asset type. Only sections mapped to target types are extracted.
+    """
+    lines = [l.strip() for l in text.split('\n')]
+    combined_upper = '\n'.join(lines).upper()
+
+    # Must be a Schedule 4I page with the GM column-A fund-code header
+    if 'SCHEDULE OF ASSETS' not in combined_upper:
+        return []
+    is_gm = any('(A)' in l and 'IDENTITY OF ISSUER' in l.upper() for l in lines)
+    if not is_gm:
+        return []
+
+    # Section heading -> asset type (only these sections are extracted)
+    TARGET_SECTION_MAP = {
+        'REGISTERED INVESTMENT COMPANY': 'Registered Investment Company',
+        'REGISTERED INVESTMENT COMPANIES': 'Registered Investment Company',
+        'MUTUAL FUNDS': 'Mutual Fund',
+        'MUTUAL FUND': 'Mutual Fund',
+        'COMMINGLED FUNDS': 'Commingled Fund',
+        'COMMINGLED FUND': 'Commingled Fund',
+    }
+
+    # Patterns
+    values_re    = re.compile(r'^([\d,]+\.\d+)\s+([\d,]+\.\d+)\s+([\d,]+\.\d+)\s*$')
+    # Fund code sub-rows: 4-char code (2 letters + 2 alphanums) followed by 8-10 char CUSIP
+    # e.g. "HHAQ G1360R105 3,800.948 ..." or "HH3U 31617E471 63,916,030.125 ..."
+    fund_code_re = re.compile(r'^[A-Z]{2}[A-Z0-9]{2}\s+[A-Z0-9]{8,10}\s')
+    dash_re      = re.compile(r'^-{3,}')
+    skip_upper   = {'TOTAL', 'SUBTOTAL', 'PAGE:', 'PLAN YEAR', 'COMPOSITE',
+                    'SCHEDULE H', 'BEGINNING NET', 'RUN DATE', 'GRAND TOTAL'}
+    strip_desc   = re.compile(r'\b(MUTUAL FUND(S)?|NPV|INST|CLASS [A-Z])\b', re.IGNORECASE)
+
+    investments = []
+    current_asset_type = None
+    in_target = False
+    row_num = 0
+
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+
+        # Detect ALL-CAPS section heading — only when the NEXT non-empty line is dashes.
+        # This avoids treating all-caps fund names (e.g. "BRIDGEWATER ALL WEATHER MUTUAL FUND")
+        # as headings, which would wrongly reset in_target.
+        if line and line == line.upper() and len(line) >= 6 and not re.search(r'\d', line):
+            next_non_empty = next(
+                (lines[k].strip() for k in range(i + 1, min(i + 3, len(lines))) if lines[k].strip()),
+                ''
+            )
+            if dash_re.match(next_non_empty):
+                matched = None
+                for key, val in TARGET_SECTION_MAP.items():
+                    if key in line.upper():
+                        matched = val
+                        break
+                if matched:
+                    current_asset_type = matched
+                    in_target = True
+                else:
+                    in_target = False
+                    current_asset_type = None
+                i += 1
+                continue
+
+        if not in_target:
+            i += 1
+            continue
+
+        # Skip dashes, fund-code sub-rows, blank lines, known skips
+        if (not line or len(line) < 4 or dash_re.match(line)
+                or fund_code_re.match(line)
+                or values_re.match(line)
+                or any(s in line.upper() for s in skip_upper)):
+            i += 1
+            continue
+
+        # This looks like an issuer line — look ahead for values
+        issuer_line = line
+        current_value = cost = None
+        for j in range(i + 1, min(i + 4, len(lines))):
+            m = values_re.match(lines[j].strip())
+            if m:
+                current_value = m.group(3).replace(',', '')
+                cost          = m.group(2).replace(',', '')
+                break
+
+        if current_value:
+            clean_issuer = strip_desc.sub('', issuer_line).strip()
+            row_num += 1
+            investments.append({
+                'issuer_name': clean_issuer,
+                'investment_description': '',
+                'asset_type': current_asset_type,
+                'par_value': '',
+                'cost': cost,
+                'current_value': current_value,
+                'units_or_shares': '',
+                'page_number': page_num,
+                'row_id': row_num,
+            })
+
+        i += 1
+
+    return investments
+
+
 def extract_text_based_investments(pdf_path: str, page_num: int) -> List[Dict]:
     """
     Extract investment data from text-based format (non-table).
@@ -262,82 +458,130 @@ def extract_text_based_investments(pdf_path: str, page_num: int) -> List[Dict]:
         # Find where investment data starts (after headers)
         data_start_idx = 0
         for i, line in enumerate(lines):
-            if 'CURRENT VALUE' in line.upper() or 'MATURITY VALUE' in line.upper():
+            if ('CURRENT VALUE' in line.upper() or 'MATURITY VALUE' in line.upper()
+                    or 'DESCRIPTION OF INVESTMENT' in line.upper()
+                    or 'IDENTITY OF ISSUE' in line.upper()):
                 data_start_idx = i + 1
                 break
-        
-        # Parse each line as a potential investment
+
+        multiply_by_1000 = '(In Thousands)' in '\n'.join(lines[:10])
+
+        # Two value patterns:
+        # 1. "** $VALUE" or "** VALUE"  (classic Form 5500 format)
+        # 2. "Fund Name $ 225,122,092" or "Fund Name 225,122,092" (simple two-column format)
+        # 3. "Fund Name $ 698" — explicit $ with small value (no minimum digit count)
+        star_value_pattern   = re.compile(r'\*\*\s*\$?\s*([\d,]+)')
+        dollar_value_pattern = re.compile(r'\$\s*([\d,]+)\s*$')          # explicit $
+        simple_value_pattern = re.compile(r'([\d,]{4,})\s*$')             # no $, 4+ chars
+
+        # Section heading detection for simple two-column format
+        # Keys are matched both exactly and as substrings of the line
+        SECTION_HEADING_MAP = {
+            'mutual fund': 'Mutual Fund',
+            'registered investment compan': 'Mutual Fund',
+            'variable annuity': 'Mutual Fund',
+            'commingled fund': 'Commingled Fund',
+            'pooled separate account': 'Commingled Fund',
+            'self-directed brokerage': 'Self-Directed Brokerage Account',
+            'self directed brokerage': 'Self-Directed Brokerage Account',
+            'guaranteed investment contract': 'Guaranteed Investment Contract',
+            'common/collective trust': 'Common/Collective Trust Fund',
+            'collective/common trust': 'Common/Collective Trust Fund',
+            'common collective trust': 'Common/Collective Trust Fund',
+            'insurance company general account': 'Insurance General Account',
+            'general account contract': 'Insurance General Account',
+            'stable value': 'Stable Value Fund',
+        }
+        current_section_type = ''
+
+        row_num = 0
         for i in range(data_start_idx, len(lines)):
             line = lines[i].strip()
-            
-            # Skip empty lines, headers, and footer markers
-            if not line or len(line) < 10:
+
+            if not line or len(line) < 5:
                 continue
-            if any(skip in line.upper() for skip in ['SCHEDULE', 'PAGE', 'EIN #', 'PLAN #', '(In Thousands)', 'December']):
+            if any(skip in line.upper() for skip in ['PAGE', 'EIN #', 'PLAN #', 'DECEMBER', 'CONTINUED']):
                 continue
-            
-            # Look for investment lines that have a value at the end
-            # Format: ISSUER    TYPE    ** $VALUE or ** VALUE
-            # Value pattern: comma-separated numbers, possibly with $ or **
-            value_pattern = r'\*\*\s*\$?\s*([\d,]+)'
-            value_match = re.search(value_pattern, line)
-            
-            if not value_match:
+
+            # Check section heading — exact match first, then substring
+            line_lower_full = line.lower().strip()
+            matched_section = None
+            for key, val in SECTION_HEADING_MAP.items():
+                if key in line_lower_full:
+                    matched_section = val
+                    break
+            if matched_section:
+                current_section_type = matched_section
                 continue
-            
-            current_value = value_match.group(1).replace(',', '')
-            
-            # Check if values are reported "(In Thousands)" and need multiplication
-            # Look for this indicator in the first few lines of the page
-            multiply_by_1000 = '(In Thousands)' in '\n'.join(lines[:10])
+
+            # Try ** value pattern first
+            value_match = star_value_pattern.search(line)
+            if value_match:
+                current_value = value_match.group(1).replace(',', '')
+                issuer_description = line[:value_match.start()].strip()
+            else:
+                # Try explicit "$ VALUE" pattern (any digit count)
+                value_match = dollar_value_pattern.search(line)
+                if value_match:
+                    current_value = value_match.group(1).replace(',', '')
+                    issuer_description = line[:value_match.start()].strip().rstrip('$').strip()
+                else:
+                    # Try plain trailing number (4+ chars to avoid false positives)
+                    value_match = simple_value_pattern.search(line)
+                    if not value_match:
+                        continue
+                    current_value = value_match.group(1).replace(',', '')
+                    issuer_description = line[:value_match.start()].strip()
+
             if multiply_by_1000:
                 try:
                     current_value = str(int(current_value) * 1000)
                 except ValueError:
-                    pass  # Keep original if conversion fails
-            
-            # Everything before the ** separator is issuer/description/type
-            issuer_description = line[:value_match.start()].strip()
-            
-            # Try to identify asset type keywords
-            asset_type = ""
+                    pass
+
+            # Skip total/summary lines
+            issuer_lower = issuer_description.lower()
+            if any(t in issuer_lower for t in ['total', 'subtotal', 'grand total']):
+                continue
+
+            # Determine asset type from section heading or embedded keyword
+            asset_type = current_section_type
             asset_type_patterns = {
                 'COLLECTIVE INVESTMENT TRUST': 'Common/Collective Trust Fund',
                 'COMMON/COLLECTIVE TRUST': 'Common/Collective Trust Fund',
                 'SEPARATELY MANAGED ACCOUNT': 'Separately Managed Account',
                 'SELF DIRECTED BROKERAGE': 'Self-Directed Brokerage Account',
+                'REGISTERED INVESTMENT COMPANY': 'Mutual Fund',
                 'MUTUAL FUND': 'Mutual Fund',
-                'COMMON STOCK': 'Common Stock',
             }
-            
-            for pattern, asset_name in asset_type_patterns.items():
-                if pattern in issuer_description.upper():
-                    asset_type = asset_name
-                    # Remove asset type from issuer name
-                    issuer_description = re.sub(pattern, '', issuer_description, flags=re.IGNORECASE).strip()
-                    break
-            
-            # The remaining text is the issuer name (and possibly description)
-            # Often issuer is before any asset type keywords
-            issuer_name = issuer_description.strip()
-            
-            # Remove asterisk markers for party-in-interest
-            issuer_name = issuer_name.lstrip('*').strip()
-            
-            investment = {
+            if not asset_type:
+                for pattern, asset_name in asset_type_patterns.items():
+                    if pattern in issuer_description.upper():
+                        asset_type = asset_name
+                        issuer_description = re.sub(pattern, '', issuer_description, flags=re.IGNORECASE).strip()
+                        break
+
+            issuer_name = issuer_description.lstrip('*').strip()
+            if not issuer_name:
+                continue
+
+            row_num += 1
+            investments.append({
                 'issuer_name': issuer_name,
                 'investment_description': '',
                 'asset_type': asset_type,
                 'par_value': '',
-                'cost': '**',  # Indicated by ** in format
+                'cost': '',
                 'current_value': current_value,
                 'units_or_shares': '',
                 'page_number': page_num,
-                'row_id': i - data_start_idx + 1,
-            }
-            
-            investments.append(investment)
-    
+                'row_id': row_num,
+            })
+
+        # Fallback: GM composite plan format (fund-code column A, values on next line)
+        if not investments:
+            investments = _extract_gm_column_format(text, page_num)
+
     return investments
 
 
@@ -375,6 +619,10 @@ def extract_tables_and_map(
     
     # Separate storage for text-extracted pages (no DataFrame processing needed)
     text_extracted_pages: Dict[int, List[Dict]] = {}
+
+    # Persists across pages: once a section heading is seen, all following rows
+    # inherit its type until a new heading overrides it
+    current_section_type = ""
 
     for table in tables:
         df = table.df
@@ -450,6 +698,22 @@ def extract_tables_and_map(
                         row_data[field] = normalize_whitespace(str(row_data[field]) + " " + text)
                     else:
                         row_data[field] = text
+
+            # Strip party-in-interest marker (*) from issuer name — column (a) in Form 5500
+            if row_data.get('issuer_name'):
+                row_data['issuer_name'] = row_data['issuer_name'].lstrip('* ').strip()
+
+            # If this row is just an asset-type section heading, record the type and skip it
+            section_type = _detect_section_heading(row_data, fields)
+            if section_type is not None:
+                current_section_type = section_type
+                print(f"    Section heading detected: '{section_type}' (row {row_idx})")
+                continue
+
+            # Propagate the current section type to rows with blank asset_type
+            if _is_blank_asset_type(row_data.get('asset_type', '')) and current_section_type:
+                row_data['asset_type'] = current_section_type
+
             mapped_pages.setdefault(page_num, []).append(row_data)
 
     # FALLBACK: Check if table extraction produced mostly empty data
@@ -485,11 +749,11 @@ def extract_tables_and_map(
             print(f"    No tables found on page {page_num}, trying text-based extraction...")
             text_investments = extract_text_based_investments(pdf_path, page_num)
             if text_investments:
-                print(f"      ✓ Extracted {len(text_investments)} investments from text")
+                print(f"      [OK] Extracted {len(text_investments)} investments from text")
                 # Store separately - these are already properly formatted
                 text_extracted_pages[page_num] = text_investments
             else:
-                print(f"      ⚠ No investments found in text format either")
+                print(f"      [!] No investments found in text format either")
 
     # Build results: Process table data and text data separately
     result = []
