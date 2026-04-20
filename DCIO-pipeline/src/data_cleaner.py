@@ -342,7 +342,12 @@ def remove_metadata_rows(rows, preserve_loans=True, verbose=True):
             if is_loan:
                 filtered_rows.append(row)
             continue
-        
+
+        # Drop rows whose issuer_name IS a section heading label — these are
+        # header/subtotal rows whose current_value is a section total, not a fund value.
+        if issuer.lower().rstrip(':') in _SECTION_HEADING_LABELS:
+            continue
+
         # Keep rows with issuer or description AND a current value
         if (issuer or description) and current_value and current_value not in ["", "**", "-"]:
             if issuer and issuer not in ["", "Mutual Funds", "Collective Trusts"]:
@@ -423,9 +428,10 @@ _EXCLUDED_ASSET_TYPES = {
     # Pooled Separate Accounts (insurance company vehicle, distinct from commingled funds)
     'pooled separate account',
     'pooled separate accounts',
-    # Group Annuity / CREF
+    # Group Annuity / CREF / Insurance General Account
     'group annuity contract',
     'group annuity contracts',
+    'insurance general account',
     'cref account',
     'cref accounts',
     # Fully/Non-benefit responsive (stable value wrappers)
@@ -447,6 +453,7 @@ _TARGET_ASSET_TYPES = {
     'mutual fund',
     'commingled fund',
     'self-directed brokerage account',
+    'money market fund',
 }
 
 
@@ -473,6 +480,9 @@ _ISSUER_OVERRIDE_MAP = {
     'participant loans': 'Participant Loan',
     'participant loan':  'Participant Loan',
     'brokerage account': 'Self-Directed Brokerage Account',
+    # Catches garbled annuity contract names (e.g. "TIAA Tra di ti ona l Annui ty Contra ct")
+    'annuity contract': 'Insurance General Account',
+    'annuity contra':   'Insurance General Account',
 }
 
 
@@ -541,27 +551,57 @@ _NON_MUTUAL_FUND_DESC_SIGNALS = {
 }
 
 
+_NUMERIC_RE = re.compile(r'^\d[\d,]*(\.\d+)?$')
+
+
 def infer_asset_types_from_custodian(rows, verbose=True):
     """
-    For records with no asset_type, infer 'Mutual Fund' when the issuer
-    is a known fund custodian (e.g. continuation pages that lack a section heading).
+    For records with no asset_type, infer 'Mutual Fund' when:
+      - Pass 1: issuer or description contains a known custodian name
+      - Pass 2 (fallback): record has a real issuer, real description (not a label/
+        share count), and a numeric current_value — covers unknown fund managers
+        whose fund name was extracted from a merged description+value field
     Skips inference when investment_description already signals a different type.
     """
     count = 0
     for row in rows:
         if str(row.get('asset_type', '')).strip():
             continue
-        # If description already indicates a non-mutual-fund type, don't override
-        desc = str(row.get('investment_description', '')).strip().lower()
-        if any(signal in desc for signal in _NON_MUTUAL_FUND_DESC_SIGNALS):
-            continue
+        desc = str(row.get('investment_description', '')).strip()
+        desc_lower = desc.lower()
         issuer = str(row.get('issuer_name', '')).strip().lower()
-        combined = issuer + ' ' + desc
+        combined = issuer + ' ' + desc_lower
+        if any(signal in combined for signal in _NON_MUTUAL_FUND_DESC_SIGNALS):
+            continue
+
+        # Pass 1: known custodian substring match
         if any(custodian in combined for custodian in _MUTUAL_FUND_CUSTODIANS):
             row['asset_type'] = 'Mutual Fund'
             count += 1
+            continue
+
+        # Pass 2: generic fallback — real issuer + numeric value
+        # Description may be empty (e.g. "CREF Core Bond Market Fund R3" with no desc)
+        # or may contain a real extracted fund name; either way if issuer is a real
+        # investment name (not an asset-type label) and the value is numeric, treat as fund.
+        cv = str(row.get('current_value', '')).strip()
+        issuer_raw = str(row.get('issuer_name', '')).strip()
+        issuer_is_real = (
+            issuer_raw
+            and issuer_raw.lower() not in _ASSET_TYPE_LABELS
+            and issuer_raw.lower() not in _EXCLUDED_ASSET_TYPES
+        )
+        desc_ok = (
+            not desc                             # empty description is fine
+            or (desc_lower not in _ASSET_TYPE_LABELS and not _SHARES_ONLY_RE.match(desc))
+        )
+        cv_is_numeric = bool(_NUMERIC_RE.match(cv.replace(',', ''))) if cv else False
+        if issuer_is_real and desc_ok and cv_is_numeric:
+            row['asset_type'] = 'Mutual Fund'
+            count += 1
+
     if verbose and count:
-        print(f"  Inferred 'Mutual Fund' for {count} records by custodian name")
+        print(f"  Inferred 'Mutual Fund' for {count} records by custodian name / fallback")
     return rows
 
 
@@ -751,11 +791,36 @@ def filter_target_asset_types(rows, verbose=True):
     return kept
 
 
+# Section heading labels — any issuer_name that exactly matches one of these
+# is a header/subtotal row and must be dropped, not treated as a real investment.
+_SECTION_HEADING_LABELS = {
+    'mutual fund', 'mutual funds',
+    'commingled fund', 'commingled funds',
+    'common/collective trust fund', 'common/collective trust funds',
+    'collective/common trust fund', 'collective/common trust funds',
+    'common collective trust fund', 'common collective trust funds',
+    'collective trust fund', 'collective trust funds',
+    'collective investment trust', 'collective investment trusts',
+    'pooled separate account', 'pooled separate accounts',
+    'self-directed brokerage account', 'self-directed brokerage accounts',
+    'stable value fund', 'stable value funds',
+    'money market fund', 'money market funds',
+    'separately managed account', 'separately managed accounts',
+    'group annuity contract', 'group annuity contracts',
+    'insurance general account', 'insurance company general account contracts',
+    'participant loan', 'participant loans', 'participant loan fund',
+    'registered investment company', 'registered investment companies',
+    'index fund', 'index funds',
+    'common stock', 'common stocks',
+    'employer stock', 'employer stocks', 'employer securities',
+    'self-directed accounts',
+}
+
 # Description values that are asset type labels, not fund names
 _ASSET_TYPE_LABELS = {
     'mutual fund', 'commingled fund', 'self-directed brokerage account',
     'pooled separate account', 'stable value fund', 'money market fund',
-    'common/collective trust fund', 'separately managed account',
+    'money market', 'common/collective trust fund', 'separately managed account',
     'group annuity contract', 'participant loan', 'index fund',
 }
 
@@ -767,17 +832,39 @@ _MANAGER_SUFFIXES = (
     ' financial', ' capital management',
 )
 
+# Matches descriptions that are purely a share count, e.g. "2,242,410 shares"
+_SHARES_ONLY_RE = re.compile(r'^[\d,]+\.?\d*\s+shares?\s*$', re.IGNORECASE)
+
+
+def _is_bare_manager_name(issuer_lower):
+    """Return True only when issuer is a bare company/manager name with no fund-specific words."""
+    # Exact match against known custodians
+    if issuer_lower in _MUTUAL_FUND_CUSTODIANS:
+        return True
+    # custodian + optional manager suffix (e.g. "fidelity management")
+    for custodian in _MUTUAL_FUND_CUSTODIANS:
+        if issuer_lower.startswith(custodian):
+            remainder = issuer_lower[len(custodian):].strip()
+            if not remainder or any(remainder == s.strip() for s in _MANAGER_SUFFIXES):
+                return True
+    # No custodian prefix but ends with a manager suffix AND the non-suffix part is short
+    for suffix in _MANAGER_SUFFIXES:
+        if issuer_lower.endswith(suffix):
+            prefix = issuer_lower[: -len(suffix)].strip()
+            # ≤2 words → still a bare manager name (e.g. "lincoln national management")
+            if len(prefix.split()) <= 2:
+                return True
+    return False
+
 
 def derive_fund_name(rows, verbose=True):
     """
     Derive a clean fund_name field from issuer_name and investment_description.
 
     Logic:
-    1. If description is blank or an asset type label → fund_name = issuer_name
-    2. If issuer is a known custodian or matches a manager-name pattern
-       (ends with Group, Management, etc.) → fund_name = investment_description
-    3. If both have real content and issuer is "Brokerage Account"
-       → fund_name = issuer + " - " + description
+    1. If description is blank, an asset type label, or just a share count → fund_name = issuer_name
+    2. If issuer is a *bare* manager/custodian name (not a full fund name) → fund_name = description
+    3. If issuer is "Brokerage Account" → fund_name = issuer + " - " + description
     4. Default → fund_name = issuer_name
     """
     for row in rows:
@@ -790,11 +877,17 @@ def derive_fund_name(rows, verbose=True):
             not desc
             or desc_lower == 'nan'
             or desc_lower in _ASSET_TYPE_LABELS
+            or bool(_SHARES_ONLY_RE.match(desc))
         )
 
-        issuer_is_manager = (
-            any(custodian in issuer_lower for custodian in _MUTUAL_FUND_CUSTODIANS)
-            or any(issuer_lower.endswith(suffix) for suffix in _MANAGER_SUFFIXES)
+        issuer_is_manager = _is_bare_manager_name(issuer_lower)
+
+        # A short issuer (≤2 words) with a real description means the description
+        # is the specific fund name and the issuer is just the parent company.
+        # e.g. issuer="Northern Trust", desc="NT S&P 500 Index Fund"
+        issuer_is_short_company = (
+            not desc_is_label
+            and len(issuer.split()) <= 2
         )
 
         if not issuer:
@@ -803,7 +896,7 @@ def derive_fund_name(rows, verbose=True):
             fund_name = issuer
         elif issuer_lower == 'brokerage account':
             fund_name = f"Brokerage Account - {desc}" if desc else issuer
-        elif issuer_is_manager:
+        elif issuer_is_manager or issuer_is_short_company:
             fund_name = desc if desc else issuer
         else:
             fund_name = issuer

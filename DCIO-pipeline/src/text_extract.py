@@ -24,11 +24,14 @@ _SECTION_ASSET_TYPES = [
     (r'Investments?\s+in\s+index\s+funds?', 'Index Fund'),
     # Plain asset type names / section labels
     (r'Pooled\s+Separate\s+Accounts?', 'Pooled Separate Account'),
+    (r'Insurance\s+Company\s+General\s+Account\s+Contracts?', 'Insurance General Account'),
+    (r'General\s+Account\s+Contracts?', 'Insurance General Account'),
     (r'Group\s+Annuity\s+Contracts?', 'Group Annuity Contract'),
     (r'CREF\s+Accounts?', 'Group Annuity Contract'),
     (r'Fully[\-\s]Benefit[\-\s]Responsive\s+Contracts?', 'Stable Value Fund'),
     (r'Non[\-\s]Benefit[\-\s]Responsive\s+Contracts?', 'Stable Value Fund'),
     (r'Common\s*/\s*Collective\s+Trust\s+Funds?', 'Common/Collective Trust Fund'),
+    (r'Collective\s*/\s*Common\s+Trust\s+Funds?', 'Common/Collective Trust Fund'),
     (r'Common\s+Collective\s+Trust\s+Funds?', 'Common/Collective Trust Fund'),
     (r'Collective\s+Investment\s+Trusts?', 'Common/Collective Trust Fund'),
     (r'Collective\s+Trust\s+Funds?', 'Common/Collective Trust Fund'),
@@ -483,7 +486,10 @@ def extract_text_based_investments(pdf_path: str, page_num: int) -> List[Dict]:
             'self directed brokerage': 'Self-Directed Brokerage Account',
             'guaranteed investment contract': 'Guaranteed Investment Contract',
             'common/collective trust': 'Common/Collective Trust Fund',
+            'collective/common trust': 'Common/Collective Trust Fund',
             'common collective trust': 'Common/Collective Trust Fund',
+            'insurance company general account': 'Insurance General Account',
+            'general account contract': 'Insurance General Account',
             'stable value': 'Stable Value Fund',
         }
         current_section_type = ''
