@@ -39,7 +39,7 @@ The DCIO Pipeline extracts investment holdings information from Form 5500 Schedu
 ```
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │                           INPUT: Form 5500 PDFs                              │
-│                          (data/inputs/*.pdf)                                 │
+│                       (data/inputs/raw/*.pdf by default)                     │
 └────────────────────────┬────────────────────────────────────────────────────┘
                          │
                          ▼
@@ -750,22 +750,24 @@ schema:
 ```bash
 
 # Data Paths
-INPUT_DIR=data/inputs              # or s3://your-bucket/form5500/inputs
-OUTPUT_DIR=data/outputs            # or s3://your-bucket/form5500/outputs
-PROCESSED_DIR=data/inputs/processed  # or s3://your-bucket/form5500/inputs/processed
+INPUT_DIR_RAW=data/inputs/raw
+INPUT_DIR_PRO=data/inputs/processed
+OUTPUT_DIR=data/outputs
 
-# Example for this project in AWS Glue
-INPUT_DIR=s3://retirementinsights-bronze/filings_5500_pdf/year=2024/raw/
-PROCESSED_DIR=s3://retirementinsights-bronze/filings_5500_pdf/year=2024/processed/
+# EC2 / S3 orchestration pattern
+# Keep the pipeline pointed at local EC2 directories, then sync with S3 outside the app:
+# S3 raw input:      s3://retirementinsights-bronze/filings_5500_pdf/year=2024/raw/
+# S3 processed input:s3://retirementinsights-bronze/filings_5500_pdf/year=2024/processed/
+# S3 output:         s3://retirementinsights-silver/tables/
 
 # Processing Options
 DPI=350                    # Image resolution for OCR
 USE_OCR=0                  # 0=text extraction, 1=OCR mode
-USE_LLM=1                  # Enable GPT-4 column mapping
+USE_LLM=1                  # Enable GPT-based column mapping
 
 # OpenAI Configuration
 OPENAI_API_KEY=sk-...
-OPENAI_MODEL=gpt-4o-mini
+OPENAI_MODEL=gpt-5.2
 
 # Configuration Files
 KEYWORDS_YML=config/keywords.yml
@@ -814,23 +816,33 @@ validation:
 Run the full extraction and cleaning pipeline:
 
 ```bash
-python complete_pipeline.py
+python -m src.run_pipeline
 ```
 
 **What it does**:
-1. Extracts data from all PDFs in `data/inputs/`
+1. Reads PDFs from `INPUT_DIR_RAW` (default: `data/inputs/raw/`)
 2. Saves raw CSV: `data/outputs/investments_raw.csv`
 3. Applies comprehensive cleaning
 4. Saves clean CSV: `data/outputs/investments_clean.csv`
 5. Saves removed rows: `data/outputs/removed_total_rows.csv`
 6. Updates SQLite database: `data/outputs/pipeline.db`
 7. Enhances missing asset types
-8. Prints summary statistics
+8. Moves processed PDFs to `INPUT_DIR_PRO` (default: `data/inputs/processed/`)
+9. Prints summary statistics
+
+**Important**:
+- `INPUT_DIR_RAW`, `INPUT_DIR_PRO`, and `OUTPUT_DIR` must be local filesystem paths.
+- If you run on EC2 with S3-backed inputs/outputs, sync files from S3 down to the local EC2 folders before running the pipeline, then sync results back to S3 after the run.
 
 ### Individual Scripts
 
 #### 1. Run Core Pipeline
 ```bash
+# Set paths explicitly if needed
+export INPUT_DIR_RAW=data/inputs/raw
+export INPUT_DIR_PRO=data/inputs/processed
+export OUTPUT_DIR=data/outputs
+
 # With OCR
 export USE_OCR=1
 python -m src.run_pipeline
@@ -1138,8 +1150,8 @@ To support new form variations:
 - Add logging for debugging
 
 ### Testing New PDFs
-1. Place PDF in `data/inputs/`
-2. Run `python complete_pipeline.py`
+1. Place PDF in `data/inputs/raw/`
+2. Run `python -m src.run_pipeline`
 3. Check `removed_total_rows.csv` for false positives
 4. Verify investment_clean.csv accuracy
 5. Update patterns if needed
