@@ -265,12 +265,12 @@ def main():
             s3_staging=read_env("ATHENA_STAGING_S3", ""),
             tolerance=float(read_env("VALIDATION_TOLERANCE", "0.05")),
             validated_s3=read_env("VALIDATED_S3_PATH",
-                "s3://retirementinsights-silver/tables/plan_fund_mapping_validated/"),
+                "s3://retirementinsights-silver/tables/plan_mf_history_v3/"),
             error_s3=read_env("VALIDATION_ERROR_S3_PATH",
-                "s3://retirementinsights-silver/tables/plan_fund_mapping_validation_errors/"),
+                "s3://retirementinsights-silver/tables/plan_mf_history_validation_errors/"),
             validated_glue_db=read_env("VALIDATED_GLUE_DB", "default"),
-            validated_table=read_env("VALIDATED_TABLE", "plan_fund_mapping_validated"),
-            error_table=read_env("VALIDATION_ERROR_TABLE", "plan_fund_mapping_validation_errors"),
+            validated_table=read_env("VALIDATED_TABLE", "plan_mf_history_v3"),
+            error_table=read_env("VALIDATION_ERROR_TABLE", "plan_mf_history_validation_errors"),
         )
         print(f"  {counts['passed']} passed, {counts['failed']} failed, {counts['skipped']} skipped")
     else:

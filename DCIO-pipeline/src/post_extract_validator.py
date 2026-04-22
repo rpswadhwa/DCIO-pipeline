@@ -3,19 +3,21 @@ post_extract_validator.py
 ~~~~~~~~~~~~~~~~~~~~~~~~~
 Post-extraction validation gate for the DCIO Form 5500 pipeline.
 
-Compares per-PDF mutual fund totals extracted from PDFs against reference
-totals in the Glue table `plan_master_index_universe`.  PDFs within the
-tolerance threshold are written to a validated Parquet table; failures go
-to a separate error table.  Both tables are auto-created on first run via
-awswrangler + Glue catalog, matching the existing plan_fund_mapping pattern.
+Compares per-PDF mutual fund totals against reference totals in the Glue
+table `plan_master_index_universe`.  PDFs within the tolerance threshold
+have their MF rows written to `plan_mf_history_v3` with the columns:
+  ack_id              — pdf_stem (filename without .pdf)
+  raw_entity_name     — issuer_name
+  plan_investment_amt — current_value (float)
+
+Failures are written to a separate error table.
 
 Required env vars:
     ATHENA_STAGING_S3   — S3 path for Athena query result staging
+    VALIDATED_S3_PATH   — S3 path registered for plan_mf_history_v3
 """
 
 import logging
-import os
-import re
 import sqlite3
 from collections import defaultdict
 from datetime import datetime, timezone
@@ -147,37 +149,30 @@ def validate_pdf(extracted: float, expected: float,
 # DataFrame builders
 # ---------------------------------------------------------------------------
 
-def build_validated_df(rows: List[Dict], pct_diff: float,
-                        reference_total: float, run_ts: str) -> pd.DataFrame:
-    """Build a DataFrame of passing rows with validation metadata columns appended."""
-    df = pd.DataFrame(rows)
-    # Cast numeric fields consistently with sqlite_to_parquet.py
-    for col in ("par_value", "cost", "current_value", "units_or_shares", "confidence"):
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="coerce")
-    for col in ("plan_year", "page_number", "row_id"):
-        if col in df.columns:
-            df[col] = pd.to_numeric(df[col], errors="coerce").astype("Int64")
-    df["validation_pct_diff"] = round(pct_diff, 6)
-    df["validation_reference_total"] = reference_total
-    df["validation_run_ts"] = run_ts
-    return df
+def build_mf_rows_df(rows: List[Dict],
+                     mf_types: frozenset = MF_ASSET_TYPES) -> pd.DataFrame:
+    """Build the plan_mf_history_v3 DataFrame from MF rows for a passing PDF.
+
+    Filters to MF asset types only and maps to the three target columns:
+      ack_id              ← pdf_stem
+      raw_entity_name     ← issuer_name
+      plan_investment_amt ← current_value (parsed to float)
+
+    Rows with unparseable current_value are included with NaN.
+    """
+    records = []
+    for row in rows:
+        asset_type = str(row.get("asset_type", "") or "").strip().lower()
+        if asset_type not in mf_types:
+            continue
+        records.append({
+            "ack_id": str(row.get("pdf_stem", "") or "").strip(),
+            "raw_entity_name": str(row.get("issuer_name", "") or "").strip(),
+            "plan_investment_amt": parse_currency_value(row.get("current_value")),
+        })
+    return pd.DataFrame(records, columns=["ack_id", "raw_entity_name", "plan_investment_amt"])
 
 
-def build_error_df(pdf_stem: str, extracted: float, expected: float,
-                   pct_diff: float, record_count: int, run_ts: str,
-                   plan_year=None, sponsor_ein=None) -> pd.DataFrame:
-    """Build a single-row error record DataFrame."""
-    return pd.DataFrame([{
-        "pdf_stem": pdf_stem,
-        "extracted_mf_total": extracted,
-        "reference_mf_total": expected,
-        "pct_diff": round(pct_diff, 6),
-        "record_count": record_count,
-        "validation_run_ts": run_ts,
-        "plan_year": plan_year,
-        "sponsor_ein": sponsor_ein,
-    }])
 
 
 # ---------------------------------------------------------------------------
@@ -268,32 +263,27 @@ def run_post_extract_validation(
         passes, pct_diff = validate_pdf(extracted, expected, tolerance)
 
         if passes:
-            df = build_validated_df(stem_rows, pct_diff, expected, run_ts)
+            df = build_mf_rows_df(stem_rows)
+            if df.empty:
+                logger.warning("PASS %s but no MF rows to write", pdf_stem)
+                counts["passed"] += 1
+                continue
             write_parquet(
                 df, validated_s3, validated_glue_db, validated_table,
-                partition_cols=["plan_year", "sponsor_ein"],
-            )
-            logger.info("PASS %s: extracted=%.0f expected=%.0f diff=%.2f%%",
-                        pdf_stem, extracted, expected, pct_diff * 100)
-            counts["passed"] += 1
-        else:
-            first = stem_rows[0]
-            error_df = build_error_df(
-                pdf_stem=pdf_stem,
-                extracted=extracted,
-                expected=expected,
-                pct_diff=pct_diff,
-                record_count=len(stem_rows),
-                run_ts=run_ts,
-                plan_year=first.get("plan_year"),
-                sponsor_ein=first.get("sponsor_ein"),
-            )
-            write_parquet(
-                error_df, error_s3, validated_glue_db, error_table,
                 partition_cols=None,
             )
-            logger.warning("FAIL %s: extracted=%.0f expected=%.0f diff=%.2f%%",
-                           pdf_stem, extracted, expected, pct_diff * 100)
+            logger.info("PASS %s: extracted=%.0f expected=%.0f diff=%.2f%% (%d MF rows written)",
+                        pdf_stem, extracted, expected, pct_diff * 100, len(df))
+            counts["passed"] += 1
+        else:
+            error_df = build_mf_rows_df(stem_rows)
+            if not error_df.empty:
+                write_parquet(
+                    error_df, error_s3, validated_glue_db, error_table,
+                    partition_cols=None,
+                )
+            logger.warning("FAIL %s: extracted=%.0f expected=%.0f diff=%.2f%% (%d MF rows)",
+                           pdf_stem, extracted, expected, pct_diff * 100, len(error_df))
             counts["failed"] += 1
 
     logger.info("Validation complete — passed=%d failed=%d skipped=%d",
