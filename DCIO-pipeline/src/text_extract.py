@@ -13,6 +13,12 @@ import pandas as pd
 from .data_cleaner import handle_split_rows, parse_investment_row
 from .utils import load_yaml, normalize_whitespace
 
+# Strips leading or trailing total/subtotal words before section-heading pattern matching
+_TOTAL_AFFIX_RE = re.compile(
+    r'^(?:total|subtotal|grand\s+total)\s+|\s+(?:total|subtotal|grand\s+total)$',
+    re.IGNORECASE,
+)
+
 # (pattern to match, canonical asset type name) — ordered most-specific first
 _SECTION_ASSET_TYPES = [
     # "Investments in X" style headings (e.g. "Investments in mutual funds:")
@@ -61,35 +67,29 @@ _SECTION_ASSET_TYPES = [
 
 def _detect_section_heading(row_data: Dict, fields: List[str]) -> Optional[str]:
     """
-    Returns canonical asset type string if this row is a section heading
-    (an asset-type label row with no investment value), otherwise None.
+    Returns canonical asset type string if this row is a section heading,
+    otherwise None.
+
+    Matches regardless of whether the row also carries a current_value (handles
+    total rows labelled with a section name, e.g. "Total Mutual Funds" or
+    "Registered Investment Companies Total").  Leading/trailing total-type words
+    are stripped before matching so all four forms are caught:
+      - "Mutual Funds"
+      - "Total Mutual Funds"
+      - "Mutual Funds Total"
+      - "Registered Investment Companies Total"
     """
-    current_value = str(row_data.get('current_value', '')).strip()
-    if current_value and current_value not in ('', 'nan', '-', '**', '0'):
-        return None
-
-    # Count fields that have meaningful content (excluding page/row metadata)
-    meta_fields = {'page_number', 'row_id'}
-    non_empty = sum(
-        1 for f in fields
-        if f not in meta_fields
-        and str(row_data.get(f, '')).strip()
-        and str(row_data.get(f, '')).strip() not in ('nan', '-', '**')
-    )
-    # A heading row has at most 2 non-empty data fields
-    if non_empty > 2:
-        return None
-
-    # Check each text field for an exact asset-type match
-    # Strip trailing colon/plural suffix so "Mutual Funds:" matches "Mutual Fund"
     for field in ('issuer_name', 'investment_description', 'asset_type'):
         text = str(row_data.get(field, '')).strip()
         if not text or text == 'nan':
             continue
+        # Strip trailing colon, then try both the raw text and the de-totalled form
         text_clean = text.rstrip(':').strip()
-        for pattern, canonical in _SECTION_ASSET_TYPES:
-            if re.fullmatch(pattern, text_clean, re.IGNORECASE):
-                return canonical
+        text_stripped = _TOTAL_AFFIX_RE.sub('', text_clean).strip()
+        for candidate in {text_clean, text_stripped}:
+            for pattern, canonical in _SECTION_ASSET_TYPES:
+                if re.fullmatch(pattern, candidate, re.IGNORECASE):
+                    return canonical
 
     return None
 
