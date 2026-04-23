@@ -24,6 +24,7 @@ from llm_enhance_investments import (
     export_enhanced_csv,
     llm_enhance_investments,
 )
+from .mf_mapping_enrichment import enrich_mf_classes
 
 _VALIDATION_ENABLED = os.getenv("VALIDATION_ENABLED", "0") == "1"
 if _VALIDATION_ENABLED:
@@ -273,6 +274,32 @@ def main():
             error_table=read_env("VALIDATION_ERROR_TABLE", "plan_mf_history_validation_errors"),
         )
         print(f"  {counts['passed']} passed, {counts['failed']} failed, {counts['skipped']} skipped")
+
+        # Step 11: Copy asset_class/sub_asset_class into MF table and backfill mapping
+        if read_env("ENRICH_MF_ENABLED", "1") != "0":
+            print("\n[STEP 11] MF asset class copy + mapping backfill")
+            try:
+                mf_db = read_env("VALIDATED_GLUE_DB", "default")
+                mf_table = read_env("VALIDATED_TABLE", "plan_mf_history_v3")
+                mapping_db = os.getenv("FUND_MAPPING_GLUE_DB", mf_db)
+                mapping_table = read_env("FUND_MAPPING_TABLE", "fund_intelligence_mapping_mf")
+                overwrite = read_env("ENRICH_MF_OVERWRITE", "0") == "1"
+
+                to_update, to_backfill = enrich_mf_classes(
+                    mf_db=mf_db,
+                    mf_table=mf_table,
+                    mapping_db=mapping_db,
+                    mapping_table=mapping_table,
+                    workgroup=read_env("ATHENA_WORKGROUP", "primary"),
+                    s3_staging=read_env("ATHENA_STAGING_S3", ""),
+                    overwrite_existing=overwrite,
+                )
+                print(f"  ✓ Estimated rows eligible for update: {to_update}")
+                print(f"  ✓ Unmapped names backfilled to mapping: {to_backfill}")
+            except Exception as exc:
+                print(f"  ⚠ MF enrichment step failed: {exc}")
+        else:
+            print("\n[STEP 11] MF enrichment skipped (ENRICH_MF_ENABLED=0)")
     else:
         print("\n[STEP 10] Validation skipped (VALIDATION_ENABLED not set)")
 
