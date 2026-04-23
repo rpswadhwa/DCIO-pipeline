@@ -25,6 +25,10 @@ from llm_enhance_investments import (
     llm_enhance_investments,
 )
 
+_VALIDATION_ENABLED = os.getenv("VALIDATION_ENABLED", "0") == "1"
+if _VALIDATION_ENABLED:
+    from .post_extract_validator import run_post_extract_validation
+
 
 def upload_to_s3(file_path: str, s3_path: str):
     if not os.path.exists(file_path):
@@ -250,6 +254,27 @@ def main():
         upload_to_s3(db_path, s3_bucket)
     else:
         print("\n[STEP 9] S3 upload skipped (S3_BUCKET_PATH not set)")
+
+    if _VALIDATION_ENABLED:
+        print("\n[STEP 10] Post-extraction validation")
+        counts = run_post_extract_validation(
+            db_path=db_path,
+            glue_db=read_env("VALIDATION_REF_DB", "default"),
+            ref_table=read_env("VALIDATION_REF_TABLE", "plan_master_index_universe"),
+            workgroup=read_env("ATHENA_WORKGROUP", "primary"),
+            s3_staging=read_env("ATHENA_STAGING_S3", ""),
+            tolerance=float(read_env("VALIDATION_TOLERANCE", "0.05")),
+            validated_s3=read_env("VALIDATED_S3_PATH",
+                "s3://retirementinsights-silver/tables/plan_mf_history_v3/"),
+            error_s3=read_env("VALIDATION_ERROR_S3_PATH",
+                "s3://retirementinsights-silver/tables/plan_mf_history_validation_errors/"),
+            validated_glue_db=read_env("VALIDATED_GLUE_DB", "default"),
+            validated_table=read_env("VALIDATED_TABLE", "plan_mf_history_v3"),
+            error_table=read_env("VALIDATION_ERROR_TABLE", "plan_mf_history_validation_errors"),
+        )
+        print(f"  {counts['passed']} passed, {counts['failed']} failed, {counts['skipped']} skipped")
+    else:
+        print("\n[STEP 10] Validation skipped (VALIDATION_ENABLED not set)")
 
     print("\n" + "=" * 60)
     print("PIPELINE COMPLETE")
