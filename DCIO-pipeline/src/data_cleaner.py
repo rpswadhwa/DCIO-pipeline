@@ -1,6 +1,28 @@
 import pandas as pd
 import re
 
+_SHARES_OF_RE = re.compile(
+    r'^\s*[\d,]+(?:\.\d+)?\s+shares?\s+of\s+(.+)$',
+    re.IGNORECASE,
+)
+
+def extract_fund_names_from_descriptions(rows):
+    """
+    For rows where investment_description matches '{number} shares of {Fund Name}',
+    replace investment_description with the extracted fund name.
+    """
+    result = []
+    for row in rows:
+        row = dict(row)
+        description = str(row.get('investment_description', '') or '').strip()
+        if description:
+            m = _SHARES_OF_RE.match(description)
+            if m:
+                row['investment_description'] = m.group(1).strip()
+        result.append(row)
+    return result
+
+
 def parse_investment_row(row):
     """
     Parse investment row to properly separate issuer, asset type, and description
@@ -381,6 +403,9 @@ def clean_investment_data(rows, preserve_loans=True, remove_dupes=True, verbose=
     if verbose:
         print(f"Starting with: {len(rows)} records")
     
+    # Step 0: Extract fund names from "X shares of Fund Name" descriptions
+    rows = extract_fund_names_from_descriptions(rows)
+
     # Step 1: Remove total/summary rows
     filtered_rows, removed_totals = remove_total_rows(rows, verbose=verbose)
     

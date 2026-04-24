@@ -446,7 +446,8 @@ def export_enhanced_csv(db_path, output_path, verbose=True):
             i.units_or_shares,
             i.page_number,
             i.row_id,
-            i.confidence
+            i.confidence,
+            p.source_pdf
         FROM investments i
         JOIN plans p ON 
             i.sponsor_ein = p.sponsor_ein
@@ -460,7 +461,7 @@ def export_enhanced_csv(db_path, output_path, verbose=True):
         'sponsor_plan_key',
         'issuer_name', 'investment_description', 'asset_type', 'morningstar_ticker',
         'par_value', 'cost', 'current_value', 'units_or_shares',
-        'page_number', 'row_id', 'confidence'
+        'page_number', 'row_id', 'confidence', 'pdf_stem'
     ]
     
     with open(output_path, 'w', encoding='utf-8', newline='') as f:
@@ -480,6 +481,10 @@ def export_enhanced_csv(db_path, output_path, verbose=True):
             # Ensure plan_name and issuer_name are cleaned (no special chars)
             row_data['plan_name'] = clean_plan_name(row_data.get('plan_name', ''))
             row_data['issuer_name'] = clean_issuer_name(row_data.get('issuer_name', ''))
+            # Derive pdf_stem from source_pdf filename
+            source_pdf = row_data.pop('source_pdf', '') or ''
+            import os as _os
+            row_data['pdf_stem'] = _os.path.splitext(_os.path.basename(source_pdf))[0] if source_pdf else ''
 
             # Ensure asset_type is always present and standardized
             asset_type = (row_data.get('asset_type') or '').strip()

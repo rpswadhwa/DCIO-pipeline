@@ -8,6 +8,15 @@ from pathlib import Path
 import csv
 
 
+_SHARES_OF_RE = re.compile(r"^[\d,]+(?:\.\d+)?\s+shares?\s+of\s+", re.IGNORECASE)
+
+def _best_desc(extracted, issuer, fallback_desc):
+    """Return fallback_desc if extracted is just the manager name or empty."""
+    e = (extracted or "").strip()
+    if not e or e.lower() == (issuer or "").strip().lower():
+        return fallback_desc or e
+    return e
+
 def parse_issuer_and_investment(issuer_name, investment_desc, asset_type):
     """
     Parse the combined issuer_name field to extract:
@@ -20,7 +29,8 @@ def parse_issuer_and_investment(issuer_name, investment_desc, asset_type):
         return (None, None)
     
     issuer_name = issuer_name.strip()
-    original_desc = investment_desc.strip() if investment_desc else ""
+    raw_desc = investment_desc.strip() if investment_desc else ""
+    original_desc = _SHARES_OF_RE.sub("", raw_desc).strip()
     
     # Pattern 1: Already properly formatted with asterisk
     # "* The Vanguard Group, Inc." → Issuer: "Vanguard"
@@ -73,7 +83,7 @@ def parse_issuer_and_investment(issuer_name, investment_desc, asset_type):
             description = description.replace('IDX', 'Index').replace('INST', 'Institutional')
             description = description.replace('IS', '').strip()
         
-        return (issuer, description)
+        return (issuer, _best_desc(description, issuer, original_desc))
     
     # Pattern 3: PIMCO funds
     if issuer_name.upper().startswith('PIMCO'):
@@ -81,7 +91,7 @@ def parse_issuer_and_investment(issuer_name, investment_desc, asset_type):
         description = re.sub(r'^PIMCO\s+', '', issuer_name, flags=re.IGNORECASE).strip()
         if 'TOTAL RTN' in description.upper():
             description = re.sub(r'TOTAL\s+RTN', 'Total Return Fund', description, flags=re.IGNORECASE)
-        return (issuer, description)
+        return (issuer, _best_desc(description, issuer, original_desc))
     
     # Pattern 4: BlackRock funds
     if issuer_name.upper().startswith('BLACKROCK') or 'LIFEPATH' in issuer_name.upper():
@@ -91,62 +101,62 @@ def parse_issuer_and_investment(issuer_name, investment_desc, asset_type):
         if 'LIFEPATH' in description.upper():
             description = re.sub(r'ACCOUNT\s+[A-Z]$', '', description, flags=re.IGNORECASE).strip()
             description = description.replace('GLOBAL ', '').strip()
-        return (issuer, description)
+        return (issuer, _best_desc(description, issuer, original_desc))
     
     # Pattern 5: American Funds
     if issuer_name.upper().startswith('AF ') or 'EUROPAC' in issuer_name.upper():
         issuer = 'American Funds'
         description = re.sub(r'^AF\s+', '', issuer_name, flags=re.IGNORECASE).strip()
-        return (issuer, description)
+        return (issuer, _best_desc(description, issuer, original_desc))
     
     # Pattern 6: Fidelity funds
     if 'FIDELITY' in issuer_name.upper() or issuer_name.upper().startswith('FID '):
         issuer = 'Fidelity'
         description = re.sub(r'^FID(ELITY)?\s+', '', issuer_name, flags=re.IGNORECASE).strip()
-        return (issuer, description)
+        return (issuer, _best_desc(description, issuer, original_desc))
     
     # Pattern 7: Nuveen funds
     if issuer_name.upper().startswith('NUVEEN'):
         issuer = 'Nuveen'
         description = re.sub(r'^NUVEEN\s+', '', issuer_name, flags=re.IGNORECASE).strip()
-        return (issuer, description)
+        return (issuer, _best_desc(description, issuer, original_desc))
     
     # Pattern 8: T. Rowe Price funds
     if 'T ROWE' in issuer_name.upper() or 'T. ROWE' in issuer_name.upper():
         issuer = 'T. Rowe Price'
         description = re.sub(r'T\.?\s*ROWE\s+PRICE\s+', '', issuer_name, flags=re.IGNORECASE).strip()
-        return (issuer, description)
+        return (issuer, _best_desc(description, issuer, original_desc))
     
     # Pattern 9: State Street funds
     if 'STATE STREET' in issuer_name.upper() or issuer_name.upper().startswith('SSG'):
         issuer = 'State Street'
         description = re.sub(r'STATE\s+STREET\s+', '', issuer_name, flags=re.IGNORECASE).strip()
         description = re.sub(r'^SSG\s+', '', description, flags=re.IGNORECASE).strip()
-        return (issuer, description)
+        return (issuer, _best_desc(description, issuer, original_desc))
     
     # Pattern 10: BNY Mellon funds
     if 'BNY' in issuer_name.upper() or 'MELLON' in issuer_name.upper():
         issuer = 'BNY Mellon'
         description = re.sub(r'^BNY\s+MELLON\s+', '', issuer_name, flags=re.IGNORECASE).strip()
-        return (issuer, description)
+        return (issuer, _best_desc(description, issuer, original_desc))
     
     # Pattern 11: Baillie Gifford
     if 'BAILLIE' in issuer_name.upper() or 'GIFFORD' in issuer_name.upper():
         issuer = 'Baillie Gifford'
         description = re.sub(r'BAILLIE\s+GIFFORD\s+', '', issuer_name, flags=re.IGNORECASE).strip()
-        return (issuer, description)
+        return (issuer, _best_desc(description, issuer, original_desc))
     
     # Pattern 12: AB (AllianceBernstein)
     if issuer_name.upper().startswith('AB '):
         issuer = 'AllianceBernstein'
         description = re.sub(r'^AB\s+', '', issuer_name).strip()
-        return (issuer, description)
+        return (issuer, _best_desc(description, issuer, original_desc))
     
     # Pattern 13: JP Morgan
     if 'JP' in issuer_name.upper() and 'MORGAN' in issuer_name.upper():
         issuer = 'J.P. Morgan'
         description = re.sub(r'JP\s+MORGAN\s+', '', issuer_name, flags=re.IGNORECASE).strip()
-        return (issuer, description)
+        return (issuer, _best_desc(description, issuer, original_desc))
     
     # Pattern 14: Brokerage/Self-Directed accounts
     if 'BROKERAGE' in issuer_name.upper() or 'BROKERGE' in issuer_name.upper():

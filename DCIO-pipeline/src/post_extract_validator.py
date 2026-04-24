@@ -25,9 +25,101 @@ from typing import Dict, List, Optional, Tuple
 
 import pandas as pd
 
+import re as _re
+
+_SHARES_OF_PREFIX_RE = _re.compile(
+    r"^[\d,]+(?:\.\d+)?\s+shares?\s+of\s+", _re.IGNORECASE
+)
+
+_FUND_KEYWORDS = frozenset({
+    "fund", "etf", "trust", "portfolio", "index", "series",
+    "blend", "growth", "income", "balanced", "bond", "equity",
+    "market", "international", "global", "allocation", "target",
+    "stable", "value", "core", "select", "total", "money",
+    "retirement", "horizon", "lifecycle", "moderate", "aggressive",
+    "conservative", "dividend", "appreciation", "opportunity",
+})
+
+_MANAGER_KEYWORDS = frozenset({
+    "management", "company", "advisors", "adviser", "partners",
+    "associates", "group", "llc", "inc", "corp", "corporation",
+    "capital", "investments", "asset", "financial", "securities",
+    "services", "solutions", "holdings",
+})
+
+_KNOWN_MANAGERS = frozenset({
+    "vanguard", "fidelity", "blackrock", "pimco",
+    "t rowe price", "t. rowe price", "jpmorgan", "jp morgan",
+    "goldman sachs", "state street", "ssga", "charles schwab",
+    "schwab", "american funds", "dimensional", "dfa",
+    "northern trust", "metlife", "prudential", "principal",
+    "empower", "transamerica", "lincoln", "john hancock", "mfs",
+    "putnam", "invesco", "franklin templeton", "columbia",
+    "american century", "nuveen", "tiaa", "cref", "calvert",
+    "dodge and cox", "dodge & cox", "wellington", "parametric",
+    "pacific investment management company", "ishares",
+    "metropolitan west", "metwest", "neuberger berman", "baird",
+    "william blair", "western asset", "loomis sayles",
+    "vanguard group", "the vanguard group",
+    "fidelity investments", "blackrock inc",
+})
+
+_SHARE_CLASS_RE = _re.compile(
+    r"(class\s+[a-z]|institutional|investor|admiral|signal|"
+    r"premium|select|premier|r\d+|i\s*shares?)",
+    _re.IGNORECASE,
+)
+
+def _normalize_for_manager_check(text):
+    """Strip common wrapper words before checking against known managers."""
+    t = text.lower().strip()
+    t = _re.sub(r"^the\s+", "", t)
+    t = _re.sub(r"\s+(inc\.?|llc\.?|corp\.?|group|company|co\.?)$", "", t).strip()
+    return t
+
+def _score_as_fund_name(text):
+    if not text or not text.strip():
+        return -999
+    t = text.strip().lower()
+    words = set(_re.findall(r"\w+", t))
+    score = 0
+    score += len(words & _FUND_KEYWORDS) * 3
+    score -= len(words & _MANAGER_KEYWORDS) * 4
+    # Check exact match and normalized match against known managers
+    if t in _KNOWN_MANAGERS or _normalize_for_manager_check(t) in _KNOWN_MANAGERS:
+        score -= 20
+    if _SHARE_CLASS_RE.search(text):
+        score += 10
+    word_count = len(text.split())
+    if 3 <= word_count <= 12:
+        score += 2
+    return score
+
+def _clean_description(desc):
+    """Strip leading share-count prefix from description."""
+    return _SHARES_OF_PREFIX_RE.sub("", desc).strip()
+
+def pick_fund_name(issuer_name, investment_description):
+    """Return whichever of issuer_name / investment_description looks more like a fund name.
+    Strips share-count prefix (e.g. '3,478,894.31 shares of ') from description first.
+    """
+    issuer = str(issuer_name or "").strip()
+    desc = _clean_description(str(investment_description or "").strip())
+    if not issuer and not desc:
+        return ""
+    if not issuer:
+        return desc
+    if not desc:
+        return issuer
+    return desc if _score_as_fund_name(desc) > _score_as_fund_name(issuer) else issuer
+
+
+
+
+
 logger = logging.getLogger(__name__)
 
-MF_ASSET_TYPES = frozenset({"mutual fund", "index fund", "money market fund", "etf"})
+MF_ASSET_TYPES = frozenset({"mutual fund", "index fund", "money market fund", "etf", "target date fund", "stable value fund", "commingled fund"})
 
 
 # ---------------------------------------------------------------------------
@@ -167,7 +259,7 @@ def build_mf_rows_df(rows: List[Dict],
             continue
         records.append({
             "ack_id": str(row.get("pdf_stem", "") or "").strip(),
-            "raw_entity_name": str(row.get("issuer_name", "") or "").strip(),
+            "raw_entity_name": pick_fund_name(row.get("issuer_name"), row.get("investment_description")),
             "plan_investment_amt": parse_currency_value(row.get("current_value")),
             "asset_class": "PENDING_AI",
             "asset_sub_class": "PENDING_AI",
@@ -224,6 +316,20 @@ def write_iceberg_via_athena(df: pd.DataFrame, glue_db: str, table: str) -> None
         if col not in df.columns:
             df = df.copy()
             df[col] = "PENDING_AI"
+
+    # Delete existing rows for these ack_ids before inserting (idempotency)
+    ack_ids = df["ack_id"].dropna().unique().tolist()
+    if ack_ids:
+        ids_sql = ", ".join("'" + str(a).replace("'", "''") + "'" for a in ack_ids)
+        delete_sql = f"DELETE FROM {glue_db}.{table} WHERE ack_id IN ({ids_sql})"
+        delete_qid = wr.athena.start_query_execution(
+            sql=delete_sql,
+            database=glue_db,
+            workgroup=workgroup,
+            s3_output=s3_staging,
+        )
+        wr.athena.wait_query(query_execution_id=delete_qid)
+        logger.info("Deleted existing rows for %d ack_ids from %s.%s", len(ack_ids), glue_db, table)
 
     batch_size = 200
     total = len(df)
@@ -359,7 +465,7 @@ def run_post_extract_validation(
 
 def load_final_rows(db_path: str):
     import csv as _csv, os
-    csv_path = os.path.join(os.path.dirname(db_path), "investments_raw.csv")
+    csv_path = os.path.join(os.path.dirname(db_path), "investments_clean.csv")
     if not os.path.exists(csv_path):
         logger.warning("CSV not found, falling back to SQLite")
         con = sqlite3.connect(db_path)

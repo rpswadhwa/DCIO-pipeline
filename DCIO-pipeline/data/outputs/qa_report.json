@@ -1,300 +1,10 @@
 {
   "summary": {
-    "total_rows": 943,
+    "total_rows": 913,
     "low_confidence_rows": 0,
-    "validation_failures": 423
+    "validation_failures": 383
   },
   "issues": [
-    {
-      "page": 43,
-      "row_id": 1,
-      "issue": "Missing required fields",
-      "missing": [
-        "current_value"
-      ]
-    },
-    {
-      "page": 43,
-      "row_id": 2,
-      "issue": "Missing required fields",
-      "missing": [
-        "current_value"
-      ]
-    },
-    {
-      "page": 43,
-      "row_id": 3,
-      "issue": "Missing required fields",
-      "missing": [
-        "current_value"
-      ]
-    },
-    {
-      "page": 43,
-      "row_id": 4,
-      "issue": "Missing required fields",
-      "missing": [
-        "current_value"
-      ]
-    },
-    {
-      "page": 43,
-      "row_id": 5,
-      "issue": "Missing required fields",
-      "missing": [
-        "current_value"
-      ]
-    },
-    {
-      "page": 43,
-      "row_id": 6,
-      "issue": "Missing required fields",
-      "missing": [
-        "current_value"
-      ]
-    },
-    {
-      "page": 43,
-      "row_id": 7,
-      "issue": "Missing required fields",
-      "missing": [
-        "current_value"
-      ]
-    },
-    {
-      "page": 43,
-      "row_id": 8,
-      "issue": "Missing required fields",
-      "missing": [
-        "current_value"
-      ]
-    },
-    {
-      "page": 43,
-      "row_id": 9,
-      "issue": "Missing required fields",
-      "missing": [
-        "current_value"
-      ]
-    },
-    {
-      "page": 43,
-      "row_id": 10,
-      "issue": "Missing required fields",
-      "missing": [
-        "current_value"
-      ]
-    },
-    {
-      "page": 43,
-      "row_id": 11,
-      "issue": "Missing required fields",
-      "missing": [
-        "current_value"
-      ]
-    },
-    {
-      "page": 43,
-      "row_id": 12,
-      "issue": "Missing required fields",
-      "missing": [
-        "current_value"
-      ]
-    },
-    {
-      "page": 43,
-      "row_id": 13,
-      "issue": "Missing required fields",
-      "missing": [
-        "current_value"
-      ]
-    },
-    {
-      "page": 43,
-      "row_id": 2,
-      "issue": "Missing required fields",
-      "missing": [
-        "issuer_name"
-      ]
-    },
-    {
-      "page": 43,
-      "row_id": 2,
-      "issue": "Invalid numeric format: current_value",
-      "value": "instructions\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026\u2026......"
-    },
-    {
-      "page": 43,
-      "row_id": 3,
-      "issue": "Missing required fields",
-      "missing": [
-        "issuer_name"
-      ]
-    },
-    {
-      "page": 43,
-      "row_id": 4,
-      "issue": "Invalid numeric format: current_value",
-      "value": "Enter the EIN(s) of payor(s) who paid benefits on behalf of the plan to participants or beneficiaries during the year (if more than two, enter EINs of the"
-    },
-    {
-      "page": 43,
-      "row_id": 5,
-      "issue": "Missing required fields",
-      "missing": [
-        "issuer_name"
-      ]
-    },
-    {
-      "page": 43,
-      "row_id": 5,
-      "issue": "Invalid numeric format: current_value",
-      "value": "two payors who paid the greatest dollar amounts of benefits):"
-    },
-    {
-      "page": 43,
-      "row_id": 6,
-      "issue": "Missing required fields",
-      "missing": [
-        "issuer_name"
-      ]
-    },
-    {
-      "page": 43,
-      "row_id": 6,
-      "issue": "Invalid numeric format: current_value",
-      "value": "04-6568107 EIN(s): _______________________________ ________________________________"
-    },
-    {
-      "page": 43,
-      "row_id": 7,
-      "issue": "Missing required fields",
-      "missing": [
-        "issuer_name"
-      ]
-    },
-    {
-      "page": 43,
-      "row_id": 7,
-      "issue": "Invalid numeric format: current_value",
-      "value": "Profit-sharing plans, ESOPs, and stock bonus plans, skip line 3."
-    },
-    {
-      "page": 43,
-      "row_id": 8,
-      "issue": "Invalid numeric format: current_value",
-      "value": "Number of participants (living or deceased) whose benefits were distributed in a single sum, during the plan"
-    },
-    {
-      "page": 43,
-      "row_id": 9,
-      "issue": "Missing required fields",
-      "missing": [
-        "issuer_name"
-      ]
-    },
-    {
-      "page": 43,
-      "row_id": 9,
-      "issue": "Invalid numeric format: current_value",
-      "value": "12690 3"
-    },
-    {
-      "page": 43,
-      "row_id": 10,
-      "issue": "Missing required fields",
-      "missing": [
-        "issuer_name"
-      ]
-    },
-    {
-      "page": 43,
-      "row_id": 10,
-      "issue": "Invalid numeric format: current_value",
-      "value": "12345678 year .................................................................................................................................................................."
-    },
-    {
-      "page": 43,
-      "row_id": 11,
-      "issue": "Missing required fields",
-      "missing": [
-        "issuer_name"
-      ]
-    },
-    {
-      "page": 43,
-      "row_id": 11,
-      "issue": "Invalid numeric format: current_value",
-      "value": "Part II Funding Information (If the plan is not subject to the minimum funding requirements of section 412 of the Internal Revenue Code or"
-    },
-    {
-      "page": 43,
-      "row_id": 12,
-      "issue": "Missing required fields",
-      "missing": [
-        "issuer_name"
-      ]
-    },
-    {
-      "page": 43,
-      "row_id": 12,
-      "issue": "Invalid numeric format: current_value",
-      "value": "ERISA section 302, skip this Part.)"
-    },
-    {
-      "page": 43,
-      "row_id": 13,
-      "issue": "Invalid numeric format: current_value",
-      "value": "X Yes X No X N/A"
-    },
-    {
-      "page": 43,
-      "row_id": 14,
-      "issue": "Missing required fields",
-      "missing": [
-        "issuer_name"
-      ]
-    },
-    {
-      "page": 43,
-      "row_id": 14,
-      "issue": "Invalid numeric format: current_value",
-      "value": "If the plan is a defined benefit plan, go to line 8."
-    },
-    {
-      "page": 43,
-      "row_id": 15,
-      "issue": "Invalid numeric format: current_value",
-      "value": "If a waiver of the minimum funding standard for a prior year is being amortized in this"
-    },
-    {
-      "page": 43,
-      "row_id": 16,
-      "issue": "Missing required fields",
-      "missing": [
-        "issuer_name"
-      ]
-    },
-    {
-      "page": 43,
-      "row_id": 16,
-      "issue": "Invalid numeric format: current_value",
-      "value": "plan year, see instructions and enter the date of the ruling letter granting the waiver. Date: Month _________ Day _________ Year _________"
-    },
-    {
-      "page": 43,
-      "row_id": 17,
-      "issue": "Missing required fields",
-      "missing": [
-        "issuer_name"
-      ]
-    },
-    {
-      "page": 43,
-      "row_id": 17,
-      "issue": "Invalid numeric format: current_value",
-      "value": "If you completed line 5, complete lines 3, 9, and 10 of Schedule MB and do not complete the remainder of this schedule."
-    },
     {
       "page": 70,
       "row_id": 1,
@@ -938,188 +648,188 @@
     {
       "page": 253,
       "row_id": 4,
-      "issue": "Invalid numeric format: par_value",
-      "value": "4% 14 Sep 2048"
+      "issue": "Invalid numeric format: current_value",
+      "value": "4% 14 Sep 2048 852,996"
     },
     {
       "page": 253,
       "row_id": 5,
-      "issue": "Invalid numeric format: par_value",
-      "value": "4.9% 30 Nov 2046"
+      "issue": "Invalid numeric format: current_value",
+      "value": "4.9% 30 Nov 2046 779,305"
     },
     {
       "page": 253,
       "row_id": 6,
-      "issue": "Invalid numeric format: par_value",
-      "value": "2.6% 21 Nov 2024"
+      "issue": "Invalid numeric format: current_value",
+      "value": "2.6% 21 Nov 2024 2,256,851"
     },
     {
       "page": 253,
       "row_id": 7,
-      "issue": "Invalid numeric format: par_value",
-      "value": "3.8% 15 Mar 2025"
+      "issue": "Invalid numeric format: current_value",
+      "value": "3.8% 15 Mar 2025 1,154,957"
     },
     {
       "page": 253,
       "row_id": 8,
-      "issue": "Invalid numeric format: par_value",
-      "value": "4.7% 14 May 2045"
+      "issue": "Invalid numeric format: current_value",
+      "value": "4.7% 14 May 2045 1,985,007"
     },
     {
       "page": 253,
       "row_id": 9,
-      "issue": "Invalid numeric format: par_value",
-      "value": "2.15% 15 Dec 2030"
+      "issue": "Invalid numeric format: current_value",
+      "value": "2.15% 15 Dec 2030 1,808,115"
     },
     {
       "page": 253,
       "row_id": 10,
-      "issue": "Invalid numeric format: par_value",
-      "value": "3.45% 15 Jan 2050"
+      "issue": "Invalid numeric format: current_value",
+      "value": "3.45% 15 Jan 2050 1,006,995"
     },
     {
       "page": 253,
       "row_id": 11,
-      "issue": "Invalid numeric format: par_value",
-      "value": "1.65% 29 Oct 2024"
+      "issue": "Invalid numeric format: current_value",
+      "value": "1.65% 29 Oct 2024 2,690,112"
     },
     {
       "page": 253,
       "row_id": 12,
-      "issue": "Invalid numeric format: par_value",
-      "value": "2.875% 14 Aug 2024"
+      "issue": "Invalid numeric format: current_value",
+      "value": "2.875% 14 Aug 2024 689,138"
     },
     {
       "page": 253,
       "row_id": 13,
-      "issue": "Invalid numeric format: par_value",
-      "value": "3.4% 29 Oct 2033"
+      "issue": "Invalid numeric format: current_value",
+      "value": "3.4% 29 Oct 2033 982,480"
     },
     {
       "page": 253,
       "row_id": 14,
-      "issue": "Invalid numeric format: par_value",
-      "value": "2.875% 15 Jan 2026"
+      "issue": "Invalid numeric format: current_value",
+      "value": "2.875% 15 Jan 2026 1,758,605"
     },
     {
       "page": 253,
       "row_id": 15,
-      "issue": "Invalid numeric format: par_value",
-      "value": "1.5% 15 Oct 2025"
+      "issue": "Invalid numeric format: current_value",
+      "value": "1.5% 15 Oct 2025 1,956,190"
     },
     {
       "page": 253,
       "row_id": 16,
-      "issue": "Invalid numeric format: par_value",
-      "value": "5% 01 Apr 2023"
+      "issue": "Invalid numeric format: current_value",
+      "value": "5% 01 Apr 2023 1,852,782"
     },
     {
       "page": 253,
       "row_id": 17,
-      "issue": "Invalid numeric format: par_value",
-      "value": "3% 18 May 2051"
+      "issue": "Invalid numeric format: current_value",
+      "value": "3% 18 May 2051 755,552"
     },
     {
       "page": 253,
       "row_id": 18,
-      "issue": "Invalid numeric format: par_value",
-      "value": "2.7% 09 Feb 2041"
+      "issue": "Invalid numeric format: current_value",
+      "value": "2.7% 09 Feb 2041 273,822"
     },
     {
       "page": 253,
       "row_id": 19,
-      "issue": "Invalid numeric format: par_value",
-      "value": "4% 06 Dec 2037"
+      "issue": "Invalid numeric format: current_value",
+      "value": "4% 06 Dec 2037 601,604"
     },
     {
       "page": 253,
       "row_id": 20,
-      "issue": "Invalid numeric format: par_value",
-      "value": "3.28% 15 Dec 2026"
+      "issue": "Invalid numeric format: current_value",
+      "value": "3.28% 15 Dec 2026 2,131,917"
     },
     {
       "page": 253,
       "row_id": 21,
-      "issue": "Invalid numeric format: par_value",
-      "value": "2.05% 15 Aug 2050"
+      "issue": "Invalid numeric format: current_value",
+      "value": "2.05% 15 Aug 2050 441,755"
     },
     {
       "page": 253,
       "row_id": 22,
-      "issue": "Invalid numeric format: par_value",
-      "value": "2.25% 15 Aug 2060"
+      "issue": "Invalid numeric format: current_value",
+      "value": "2.25% 15 Aug 2060 374,268"
     },
     {
       "page": 253,
       "row_id": 23,
-      "issue": "Invalid numeric format: par_value",
-      "value": "3.4% 04 Feb 2041"
+      "issue": "Invalid numeric format: current_value",
+      "value": "3.4% 04 Feb 2041 668,766"
     },
     {
       "page": 253,
       "row_id": 24,
-      "issue": "Invalid numeric format: par_value",
-      "value": "5.375% 31 Jan 2044"
+      "issue": "Invalid numeric format: current_value",
+      "value": "5.375% 31 Jan 2044 1,194,638"
     },
     {
       "page": 253,
       "row_id": 25,
-      "issue": "Invalid numeric format: par_value",
-      "value": "0.8% 03 Jun 2025"
+      "issue": "Invalid numeric format: current_value",
+      "value": "0.8% 03 Jun 2025 1,823,901"
     },
     {
       "page": 253,
       "row_id": 26,
-      "issue": "Invalid numeric format: par_value",
-      "value": "1.5% 03 Jun 2030"
+      "issue": "Invalid numeric format: current_value",
+      "value": "1.5% 03 Jun 2030 1,787,933"
     },
     {
       "page": 253,
       "row_id": 27,
-      "issue": "Invalid numeric format: par_value",
-      "value": "3.1% 12 May 2051"
+      "issue": "Invalid numeric format: current_value",
+      "value": "3.1% 12 May 2051 1,014,241"
     },
     {
       "page": 253,
       "row_id": 28,
-      "issue": "Invalid numeric format: par_value",
-      "value": "4.8% 05 Dec 2034"
+      "issue": "Invalid numeric format: current_value",
+      "value": "4.8% 05 Dec 2034 945,071"
     },
     {
       "page": 253,
       "row_id": 29,
-      "issue": "Invalid numeric format: par_value",
-      "value": "3.5% 15 Jan 2031"
+      "issue": "Invalid numeric format: current_value",
+      "value": "3.5% 15 Jan 2031 1,084,072"
     },
     {
       "page": 253,
       "row_id": 30,
-      "issue": "Invalid numeric format: par_value",
-      "value": "6.125% 30 Mar 2040"
+      "issue": "Invalid numeric format: current_value",
+      "value": "6.125% 30 Mar 2040 1,066,308"
     },
     {
       "page": 253,
       "row_id": 31,
-      "issue": "Invalid numeric format: par_value",
-      "value": "3.875% 30 Jan 2031"
+      "issue": "Invalid numeric format: current_value",
+      "value": "3.875% 30 Jan 2031 1,240,347"
     },
     {
       "page": 253,
       "row_id": 32,
-      "issue": "Invalid numeric format: par_value",
-      "value": "3.4% 22 Feb 2024"
+      "issue": "Invalid numeric format: current_value",
+      "value": "3.4% 22 Feb 2024 2,600,840"
     },
     {
       "page": 253,
       "row_id": 33,
-      "issue": "Invalid numeric format: par_value",
-      "value": "3.75% 10 Jul 2025"
+      "issue": "Invalid numeric format: current_value",
+      "value": "3.75% 10 Jul 2025 1,588,979"
     },
     {
       "page": 253,
       "row_id": 34,
-      "issue": "Invalid numeric format: par_value",
-      "value": "4.7% 10 Jul 2035"
+      "issue": "Invalid numeric format: current_value",
+      "value": "4.7% 10 Jul 2035 864,687"
     },
     {
       "page": 253,
@@ -1132,92 +842,92 @@
     {
       "page": 253,
       "row_id": 36,
-      "issue": "Invalid numeric format: par_value",
-      "value": "7.834% 15 Feb 2041"
+      "issue": "Invalid numeric format: current_value",
+      "value": "7.834% 15 Feb 2041 851,511"
     },
     {
       "page": 253,
       "row_id": 37,
-      "issue": "Invalid numeric format: par_value",
-      "value": "3.1% 15 Jun 2050"
+      "issue": "Invalid numeric format: current_value",
+      "value": "3.1% 15 Jun 2050 481,386"
     },
     {
       "page": 253,
       "row_id": 38,
-      "issue": "Invalid numeric format: par_value",
-      "value": "3.5% 31 Jan 2023"
+      "issue": "Invalid numeric format: current_value",
+      "value": "3.5% 31 Jan 2023 1,360,592"
     },
     {
       "page": 253,
       "row_id": 39,
-      "issue": "Invalid numeric format: par_value",
-      "value": "4.15% 01 Jun 2049"
+      "issue": "Invalid numeric format: current_value",
+      "value": "4.15% 01 Jun 2049 838,009"
     },
     {
       "page": 253,
       "row_id": 40,
-      "issue": "Invalid numeric format: par_value",
-      "value": "3% 15 Jan 2052"
+      "issue": "Invalid numeric format: current_value",
+      "value": "3% 15 Jan 2052 1,106,136"
     },
     {
       "page": 253,
       "row_id": 41,
-      "issue": "Invalid numeric format: par_value",
-      "value": "3.15% 21 Feb 2040"
+      "issue": "Invalid numeric format: current_value",
+      "value": "3.15% 21 Feb 2040 205,103"
     },
     {
       "page": 253,
       "row_id": 42,
-      "issue": "Invalid numeric format: par_value",
-      "value": "3.2% 02 Nov 2027"
+      "issue": "Invalid numeric format: current_value",
+      "value": "3.2% 02 Nov 2027 533,433"
     },
     {
       "page": 253,
       "row_id": 43,
-      "issue": "Invalid numeric format: par_value",
-      "value": "4.4% 01 May 2045"
+      "issue": "Invalid numeric format: current_value",
+      "value": "4.4% 01 May 2045 871,084"
     },
     {
       "page": 253,
       "row_id": 44,
-      "issue": "Invalid numeric format: par_value",
-      "value": "4.9% 01 Feb 2046"
+      "issue": "Invalid numeric format: current_value",
+      "value": "4.9% 01 Feb 2046 3,905,559"
     },
     {
       "page": 253,
       "row_id": 45,
-      "issue": "Invalid numeric format: par_value",
-      "value": "3.65% 01 Dec 2027"
+      "issue": "Invalid numeric format: current_value",
+      "value": "3.65% 01 Dec 2027 2,177,663"
     },
     {
       "page": 253,
       "row_id": 46,
-      "issue": "Invalid numeric format: par_value",
-      "value": "2.375% 08 Feb 2041"
+      "issue": "Invalid numeric format: current_value",
+      "value": "2.375% 08 Feb 2041 863,694"
     },
     {
       "page": 253,
       "row_id": 47,
-      "issue": "Invalid numeric format: par_value",
-      "value": "2.55% 20 Aug 2060"
+      "issue": "Invalid numeric format: current_value",
+      "value": "2.55% 20 Aug 2060 431,988"
     },
     {
       "page": 253,
       "row_id": 48,
-      "issue": "Invalid numeric format: par_value",
-      "value": "2.65% 08 Feb 2051"
+      "issue": "Invalid numeric format: current_value",
+      "value": "2.65% 08 Feb 2051 432,611"
     },
     {
       "page": 253,
       "row_id": 49,
-      "issue": "Invalid numeric format: par_value",
-      "value": "3.2% 11 May 2027"
+      "issue": "Invalid numeric format: current_value",
+      "value": "3.2% 11 May 2027 1,558,361"
     },
     {
       "page": 253,
       "row_id": 50,
-      "issue": "Invalid numeric format: par_value",
-      "value": "3.75% 13 Nov 2047"
+      "issue": "Invalid numeric format: current_value",
+      "value": "3.75% 13 Nov 2047 862,625"
     },
     {
       "page": 277,
@@ -2961,7 +2671,7 @@
     },
     {
       "page": 41,
-      "row_id": 36,
+      "row_id": "36 *",
       "issue": "Missing required fields",
       "missing": [
         "current_value"
@@ -2969,7 +2679,7 @@
     },
     {
       "page": 41,
-      "row_id": 37,
+      "row_id": "37 1",
       "issue": "Missing required fields",
       "missing": [
         "current_value"
