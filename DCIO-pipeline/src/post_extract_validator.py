@@ -119,7 +119,7 @@ def pick_fund_name(issuer_name, investment_description):
 
 logger = logging.getLogger(__name__)
 
-MF_ASSET_TYPES = frozenset({"mutual fund", "index fund", "money market fund", "etf", "target date fund", "stable value fund", "commingled fund"})
+MF_ASSET_TYPES = frozenset({"mutual fund", "index fund", "money market fund", "etf", "target date fund"})
 
 
 # ---------------------------------------------------------------------------
@@ -318,18 +318,22 @@ def write_iceberg_via_athena(df: pd.DataFrame, glue_db: str, table: str) -> None
             df[col] = "PENDING_AI"
 
     # Delete existing rows for these ack_ids before inserting (idempotency)
+    # Only works for Iceberg/transactional tables; skips silently for plain Hive tables
     ack_ids = df["ack_id"].dropna().unique().tolist()
     if ack_ids:
         ids_sql = ", ".join("'" + str(a).replace("'", "''") + "'" for a in ack_ids)
         delete_sql = f"DELETE FROM {glue_db}.{table} WHERE ack_id IN ({ids_sql})"
-        delete_qid = wr.athena.start_query_execution(
-            sql=delete_sql,
-            database=glue_db,
-            workgroup=workgroup,
-            s3_output=s3_staging,
-        )
-        wr.athena.wait_query(query_execution_id=delete_qid)
-        logger.info("Deleted existing rows for %d ack_ids from %s.%s", len(ack_ids), glue_db, table)
+        try:
+            delete_qid = wr.athena.start_query_execution(
+                sql=delete_sql,
+                database=glue_db,
+                workgroup=workgroup,
+                s3_output=s3_staging,
+            )
+            wr.athena.wait_query(query_execution_id=delete_qid)
+            logger.info("Deleted existing rows for %d ack_ids from %s.%s", len(ack_ids), glue_db, table)
+        except Exception as e:
+            logger.warning("DELETE skipped for %s.%s (not a transactional table?): %s", glue_db, table, e)
 
     batch_size = 200
     total = len(df)
@@ -442,6 +446,13 @@ def run_post_extract_validation(
 
         if passes:
             df = build_mf_rows_df(stem_rows)
+            if not df.empty and expected > 0:
+                too_large = df['plan_investment_amt'] > expected
+                if too_large.any():
+                    logger.warning("Dropping %d rows where single value > expected total %.0f: %s",
+                                   too_large.sum(), expected,
+                                   df.loc[too_large, 'raw_entity_name'].tolist())
+                    df = df[~too_large]
             if df.empty:
                 logger.warning("PASS %s but no MF rows to write", pdf_stem)
                 counts["passed"] += 1
@@ -452,6 +463,12 @@ def run_post_extract_validation(
             counts["passed"] += 1
         else:
             error_df = build_mf_rows_df(stem_rows)
+            if not error_df.empty and expected > 0:
+                too_large = error_df['plan_investment_amt'] > expected
+                if too_large.any():
+                    logger.warning("Dropping %d error rows where single value > expected total %.0f",
+                                   too_large.sum(), expected)
+                    error_df = error_df[~too_large]
             if not error_df.empty:
                 write_iceberg_via_athena(error_df, validated_glue_db, error_table)
             logger.warning("FAIL %s: extracted=%.0f expected=%.0f diff=%.2f%% (%d MF rows)",

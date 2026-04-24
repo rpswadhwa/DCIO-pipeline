@@ -273,7 +273,7 @@ Respond ONLY with the JSON array, no additional text."""
                 }
             ],
             temperature=0.1,
-            max_tokens=4000
+            max_completion_tokens=4000
         )
         
         response_text = response.choices[0].message.content.strip()

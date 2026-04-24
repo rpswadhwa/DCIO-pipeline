@@ -387,6 +387,152 @@ def remove_duplicates(rows, verbose=True):
     return deduped_rows
 
 
+
+_KNOWN_MANAGERS_LOWER = frozenset({
+    'the vanguard group', 'vanguard', 'fidelity', 'fidelity investments',
+    't. rowe price', 'blackrock', 'american funds', 'jp morgan', 'jpmorgan',
+    'pimco', 'dimensional', 'invesco', 'schwab', 'principal', 'prudential',
+    'columbia', 'dodge & cox', 'metropolitan life', 'massmutual', 'john hancock',
+    'state street', 'ssga', 'tiaa', 'cref', 'putnam', 'oppenheimer', 'nuveen',
+    'wells fargo', 'morgan stanley', 'merrill lynch', 'lord abbett', 'loomis sayles',
+    'eaton vance', 'mfs', 'franklin', 'franklin templeton', 'templeton',
+    'american century', 'calvert', 'baird', 'william blair', 'parametric',
+})
+
+
+def _fund_specificity_score(row):
+    """Higher score = more specific fund name (prefer over generic manager name)."""
+    desc = str(row.get('investment_description', '') or '').strip()
+    issuer = str(row.get('issuer_name', '') or '').strip()
+    best = desc if desc else issuer
+    if not best:
+        return 0
+    best_lower = best.lower()
+    if best_lower in _KNOWN_MANAGERS_LOWER:
+        return 0
+    if re.search(r'20[2-9]\d', best):
+        return 200 + len(best)
+    if re.search(r'(fund|index|etf|trust|portfolio|class|shares?)', best_lower):
+        return 100 + len(best)
+    return len(best)
+
+
+def remove_cross_page_duplicates(rows, value_threshold=10000, verbose=True):
+    """
+    Secondary dedup: same (pdf, value) appearing on multiple pages with different field layouts.
+    Keeps the row with the most specific fund name; drops generic manager-name rows.
+    """
+    from collections import defaultdict
+
+    def norm_val(v):
+        if v is None:
+            return None
+        s = str(v).replace('$', '').replace(',', '').strip()
+        if s in ('', '-', 'nan', 'None', '0', '0.0'):
+            return None
+        if s.startswith('(') and s.endswith(')'):
+            s = '-' + s[1:-1].strip()
+        try:
+            return round(float(s), 2)
+        except ValueError:
+            return None
+
+    groups = defaultdict(list)
+    for i, row in enumerate(rows):
+        pdf_key = row.get('pdf_stem', '') or row.get('pdf_name', '')
+        val = norm_val(row.get('current_value'))
+        if val and abs(val) >= value_threshold:
+            groups[(pdf_key, val)].append(i)
+
+    indices_to_remove = set()
+    for (pdf_key, val), idxs in groups.items():
+        if len(idxs) < 2:
+            continue
+        scored = sorted([(_fund_specificity_score(rows[i]), i) for i in idxs], reverse=True)
+        best_score, best_idx = scored[0]
+        if best_score > 0:
+            for score, idx in scored[1:]:
+                if verbose:
+                    r = rows[idx]
+                    print(f"  CROSS-PAGE DEDUP: removing issuer={r.get('issuer_name')!r} "
+                          f"desc={r.get('investment_description')!r} val={val:,.0f}")
+                indices_to_remove.add(idx)
+
+    # Second pass: same (pdf, description) → keep smallest value (larger is a subtotal)
+    desc_groups = defaultdict(list)
+    for i, row in enumerate(rows):
+        if i in indices_to_remove:
+            continue
+        pdf_key = row.get('pdf_stem', '') or row.get('pdf_name', '')
+        desc = str(row.get('investment_description', '') or '').strip().lower()
+        if desc:
+            desc_groups[(pdf_key, desc)].append(i)
+
+    for (pdf_key, desc), idxs in desc_groups.items():
+        if len(idxs) < 2:
+            continue
+        def get_val(i):
+            v = str(rows[i].get('current_value', '') or '').replace('$','').replace(',','').strip()
+            try: return float(v)
+            except: return 0.0
+        scored = sorted(idxs, key=get_val)
+        for idx in scored[1:]:
+            if verbose:
+                r = rows[idx]
+                print(f"  SAME-DESC DEDUP: keeping smaller, dropping val={r.get('current_value')} "
+                      f"desc={r.get('investment_description','')[:50]!r}")
+            indices_to_remove.add(idx)
+
+    result = [row for i, row in enumerate(rows) if i not in indices_to_remove]
+    if verbose and indices_to_remove:
+        print(f"  Cross-page dedup removed {len(indices_to_remove)} rows")
+    return result
+
+
+def remove_outlier_value_rows(rows, verbose=True):
+    """
+    Remove rows whose value is > 9x the sum of all other rows for the same PDF.
+    These are subtotal rows that slipped through keyword-based detection.
+    """
+    from collections import defaultdict
+
+    def parse_val(v):
+        if v is None:
+            return None
+        s = str(v).replace('$', '').replace(',', '').strip()
+        if s.startswith('(') and s.endswith(')'):
+            s = '-' + s[1:-1].strip()
+        try:
+            return abs(float(s))
+        except ValueError:
+            return None
+
+    pdf_val_map = defaultdict(list)
+    for i, row in enumerate(rows):
+        pdf_key = row.get('pdf_stem', '') or row.get('pdf_name', '')
+        val = parse_val(row.get('current_value'))
+        if val and val > 0:
+            pdf_val_map[pdf_key].append((val, i))
+
+    outlier_idx = set()
+    for pdf_key, pairs in pdf_val_map.items():
+        if len(pairs) < 2:
+            continue
+        total = sum(v for v, _ in pairs)
+        for val, idx in pairs:
+            rest = total - val
+            if rest > 0 and val > rest * 9:
+                if verbose:
+                    r = rows[idx]
+                    print(f"  OUTLIER REMOVED (val {val:,.0f} > 9x rest {rest:,.0f}): "
+                          f"{r.get('issuer_name', '')[:40]} | {r.get('investment_description', '')[:40]}")
+                outlier_idx.add(idx)
+
+    result = [row for i, row in enumerate(rows) if i not in outlier_idx]
+    if verbose and outlier_idx:
+        print(f"  Outlier removal removed {len(outlier_idx)} rows")
+    return result
+
 def clean_investment_data(rows, preserve_loans=True, remove_dupes=True, verbose=True):
     """
     Comprehensive cleanup: remove totals, metadata, and duplicates
@@ -412,9 +558,13 @@ def clean_investment_data(rows, preserve_loans=True, remove_dupes=True, verbose=
     # Step 2: Remove metadata rows
     filtered_rows = remove_metadata_rows(filtered_rows, preserve_loans=preserve_loans, verbose=verbose)
     
-    # Step 3: Remove duplicates (optional)
+    # Step 3: Remove outlier value rows (subtotals with no keyword markers)
+    filtered_rows = remove_outlier_value_rows(filtered_rows, verbose=verbose)
+
+    # Step 4: Remove duplicates (optional)
     if remove_dupes:
         filtered_rows = remove_duplicates(filtered_rows, verbose=verbose)
+        filtered_rows = remove_cross_page_duplicates(filtered_rows, verbose=verbose)
     
     if verbose:
         print(f"Final: {len(filtered_rows)} clean records")

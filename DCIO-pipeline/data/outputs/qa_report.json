@@ -648,188 +648,188 @@
     {
       "page": 253,
       "row_id": 4,
-      "issue": "Invalid numeric format: current_value",
-      "value": "4% 14 Sep 2048 852,996"
+      "issue": "Invalid numeric format: par_value",
+      "value": "4% 14 Sep 2048"
     },
     {
       "page": 253,
       "row_id": 5,
-      "issue": "Invalid numeric format: current_value",
-      "value": "4.9% 30 Nov 2046 779,305"
+      "issue": "Invalid numeric format: par_value",
+      "value": "4.9% 30 Nov 2046"
     },
     {
       "page": 253,
       "row_id": 6,
-      "issue": "Invalid numeric format: current_value",
-      "value": "2.6% 21 Nov 2024 2,256,851"
+      "issue": "Invalid numeric format: par_value",
+      "value": "2.6% 21 Nov 2024"
     },
     {
       "page": 253,
       "row_id": 7,
-      "issue": "Invalid numeric format: current_value",
-      "value": "3.8% 15 Mar 2025 1,154,957"
+      "issue": "Invalid numeric format: par_value",
+      "value": "3.8% 15 Mar 2025"
     },
     {
       "page": 253,
       "row_id": 8,
-      "issue": "Invalid numeric format: current_value",
-      "value": "4.7% 14 May 2045 1,985,007"
+      "issue": "Invalid numeric format: par_value",
+      "value": "4.7% 14 May 2045"
     },
     {
       "page": 253,
       "row_id": 9,
-      "issue": "Invalid numeric format: current_value",
-      "value": "2.15% 15 Dec 2030 1,808,115"
+      "issue": "Invalid numeric format: par_value",
+      "value": "2.15% 15 Dec 2030"
     },
     {
       "page": 253,
       "row_id": 10,
-      "issue": "Invalid numeric format: current_value",
-      "value": "3.45% 15 Jan 2050 1,006,995"
+      "issue": "Invalid numeric format: par_value",
+      "value": "3.45% 15 Jan 2050"
     },
     {
       "page": 253,
       "row_id": 11,
-      "issue": "Invalid numeric format: current_value",
-      "value": "1.65% 29 Oct 2024 2,690,112"
+      "issue": "Invalid numeric format: par_value",
+      "value": "1.65% 29 Oct 2024"
     },
     {
       "page": 253,
       "row_id": 12,
-      "issue": "Invalid numeric format: current_value",
-      "value": "2.875% 14 Aug 2024 689,138"
+      "issue": "Invalid numeric format: par_value",
+      "value": "2.875% 14 Aug 2024"
     },
     {
       "page": 253,
       "row_id": 13,
-      "issue": "Invalid numeric format: current_value",
-      "value": "3.4% 29 Oct 2033 982,480"
+      "issue": "Invalid numeric format: par_value",
+      "value": "3.4% 29 Oct 2033"
     },
     {
       "page": 253,
       "row_id": 14,
-      "issue": "Invalid numeric format: current_value",
-      "value": "2.875% 15 Jan 2026 1,758,605"
+      "issue": "Invalid numeric format: par_value",
+      "value": "2.875% 15 Jan 2026"
     },
     {
       "page": 253,
       "row_id": 15,
-      "issue": "Invalid numeric format: current_value",
-      "value": "1.5% 15 Oct 2025 1,956,190"
+      "issue": "Invalid numeric format: par_value",
+      "value": "1.5% 15 Oct 2025"
     },
     {
       "page": 253,
       "row_id": 16,
-      "issue": "Invalid numeric format: current_value",
-      "value": "5% 01 Apr 2023 1,852,782"
+      "issue": "Invalid numeric format: par_value",
+      "value": "5% 01 Apr 2023"
     },
     {
       "page": 253,
       "row_id": 17,
-      "issue": "Invalid numeric format: current_value",
-      "value": "3% 18 May 2051 755,552"
+      "issue": "Invalid numeric format: par_value",
+      "value": "3% 18 May 2051"
     },
     {
       "page": 253,
       "row_id": 18,
-      "issue": "Invalid numeric format: current_value",
-      "value": "2.7% 09 Feb 2041 273,822"
+      "issue": "Invalid numeric format: par_value",
+      "value": "2.7% 09 Feb 2041"
     },
     {
       "page": 253,
       "row_id": 19,
-      "issue": "Invalid numeric format: current_value",
-      "value": "4% 06 Dec 2037 601,604"
+      "issue": "Invalid numeric format: par_value",
+      "value": "4% 06 Dec 2037"
     },
     {
       "page": 253,
       "row_id": 20,
-      "issue": "Invalid numeric format: current_value",
-      "value": "3.28% 15 Dec 2026 2,131,917"
+      "issue": "Invalid numeric format: par_value",
+      "value": "3.28% 15 Dec 2026"
     },
     {
       "page": 253,
       "row_id": 21,
-      "issue": "Invalid numeric format: current_value",
-      "value": "2.05% 15 Aug 2050 441,755"
+      "issue": "Invalid numeric format: par_value",
+      "value": "2.05% 15 Aug 2050"
     },
     {
       "page": 253,
       "row_id": 22,
-      "issue": "Invalid numeric format: current_value",
-      "value": "2.25% 15 Aug 2060 374,268"
+      "issue": "Invalid numeric format: par_value",
+      "value": "2.25% 15 Aug 2060"
     },
     {
       "page": 253,
       "row_id": 23,
-      "issue": "Invalid numeric format: current_value",
-      "value": "3.4% 04 Feb 2041 668,766"
+      "issue": "Invalid numeric format: par_value",
+      "value": "3.4% 04 Feb 2041"
     },
     {
       "page": 253,
       "row_id": 24,
-      "issue": "Invalid numeric format: current_value",
-      "value": "5.375% 31 Jan 2044 1,194,638"
+      "issue": "Invalid numeric format: par_value",
+      "value": "5.375% 31 Jan 2044"
     },
     {
       "page": 253,
       "row_id": 25,
-      "issue": "Invalid numeric format: current_value",
-      "value": "0.8% 03 Jun 2025 1,823,901"
+      "issue": "Invalid numeric format: par_value",
+      "value": "0.8% 03 Jun 2025"
     },
     {
       "page": 253,
       "row_id": 26,
-      "issue": "Invalid numeric format: current_value",
-      "value": "1.5% 03 Jun 2030 1,787,933"
+      "issue": "Invalid numeric format: par_value",
+      "value": "1.5% 03 Jun 2030"
     },
     {
       "page": 253,
       "row_id": 27,
-      "issue": "Invalid numeric format: current_value",
-      "value": "3.1% 12 May 2051 1,014,241"
+      "issue": "Invalid numeric format: par_value",
+      "value": "3.1% 12 May 2051"
     },
     {
       "page": 253,
       "row_id": 28,
-      "issue": "Invalid numeric format: current_value",
-      "value": "4.8% 05 Dec 2034 945,071"
+      "issue": "Invalid numeric format: par_value",
+      "value": "4.8% 05 Dec 2034"
     },
     {
       "page": 253,
       "row_id": 29,
-      "issue": "Invalid numeric format: current_value",
-      "value": "3.5% 15 Jan 2031 1,084,072"
+      "issue": "Invalid numeric format: par_value",
+      "value": "3.5% 15 Jan 2031"
     },
     {
       "page": 253,
       "row_id": 30,
-      "issue": "Invalid numeric format: current_value",
-      "value": "6.125% 30 Mar 2040 1,066,308"
+      "issue": "Invalid numeric format: par_value",
+      "value": "6.125% 30 Mar 2040"
     },
     {
       "page": 253,
       "row_id": 31,
-      "issue": "Invalid numeric format: current_value",
-      "value": "3.875% 30 Jan 2031 1,240,347"
+      "issue": "Invalid numeric format: par_value",
+      "value": "3.875% 30 Jan 2031"
     },
     {
       "page": 253,
       "row_id": 32,
-      "issue": "Invalid numeric format: current_value",
-      "value": "3.4% 22 Feb 2024 2,600,840"
+      "issue": "Invalid numeric format: par_value",
+      "value": "3.4% 22 Feb 2024"
     },
     {
       "page": 253,
       "row_id": 33,
-      "issue": "Invalid numeric format: current_value",
-      "value": "3.75% 10 Jul 2025 1,588,979"
+      "issue": "Invalid numeric format: par_value",
+      "value": "3.75% 10 Jul 2025"
     },
     {
       "page": 253,
       "row_id": 34,
-      "issue": "Invalid numeric format: current_value",
-      "value": "4.7% 10 Jul 2035 864,687"
+      "issue": "Invalid numeric format: par_value",
+      "value": "4.7% 10 Jul 2035"
     },
     {
       "page": 253,
@@ -842,92 +842,92 @@
     {
       "page": 253,
       "row_id": 36,
-      "issue": "Invalid numeric format: current_value",
-      "value": "7.834% 15 Feb 2041 851,511"
+      "issue": "Invalid numeric format: par_value",
+      "value": "7.834% 15 Feb 2041"
     },
     {
       "page": 253,
       "row_id": 37,
-      "issue": "Invalid numeric format: current_value",
-      "value": "3.1% 15 Jun 2050 481,386"
+      "issue": "Invalid numeric format: par_value",
+      "value": "3.1% 15 Jun 2050"
     },
     {
       "page": 253,
       "row_id": 38,
-      "issue": "Invalid numeric format: current_value",
-      "value": "3.5% 31 Jan 2023 1,360,592"
+      "issue": "Invalid numeric format: par_value",
+      "value": "3.5% 31 Jan 2023"
     },
     {
       "page": 253,
       "row_id": 39,
-      "issue": "Invalid numeric format: current_value",
-      "value": "4.15% 01 Jun 2049 838,009"
+      "issue": "Invalid numeric format: par_value",
+      "value": "4.15% 01 Jun 2049"
     },
     {
       "page": 253,
       "row_id": 40,
-      "issue": "Invalid numeric format: current_value",
-      "value": "3% 15 Jan 2052 1,106,136"
+      "issue": "Invalid numeric format: par_value",
+      "value": "3% 15 Jan 2052"
     },
     {
       "page": 253,
       "row_id": 41,
-      "issue": "Invalid numeric format: current_value",
-      "value": "3.15% 21 Feb 2040 205,103"
+      "issue": "Invalid numeric format: par_value",
+      "value": "3.15% 21 Feb 2040"
     },
     {
       "page": 253,
       "row_id": 42,
-      "issue": "Invalid numeric format: current_value",
-      "value": "3.2% 02 Nov 2027 533,433"
+      "issue": "Invalid numeric format: par_value",
+      "value": "3.2% 02 Nov 2027"
     },
     {
       "page": 253,
       "row_id": 43,
-      "issue": "Invalid numeric format: current_value",
-      "value": "4.4% 01 May 2045 871,084"
+      "issue": "Invalid numeric format: par_value",
+      "value": "4.4% 01 May 2045"
     },
     {
       "page": 253,
       "row_id": 44,
-      "issue": "Invalid numeric format: current_value",
-      "value": "4.9% 01 Feb 2046 3,905,559"
+      "issue": "Invalid numeric format: par_value",
+      "value": "4.9% 01 Feb 2046"
     },
     {
       "page": 253,
       "row_id": 45,
-      "issue": "Invalid numeric format: current_value",
-      "value": "3.65% 01 Dec 2027 2,177,663"
+      "issue": "Invalid numeric format: par_value",
+      "value": "3.65% 01 Dec 2027"
     },
     {
       "page": 253,
       "row_id": 46,
-      "issue": "Invalid numeric format: current_value",
-      "value": "2.375% 08 Feb 2041 863,694"
+      "issue": "Invalid numeric format: par_value",
+      "value": "2.375% 08 Feb 2041"
     },
     {
       "page": 253,
       "row_id": 47,
-      "issue": "Invalid numeric format: current_value",
-      "value": "2.55% 20 Aug 2060 431,988"
+      "issue": "Invalid numeric format: par_value",
+      "value": "2.55% 20 Aug 2060"
     },
     {
       "page": 253,
       "row_id": 48,
-      "issue": "Invalid numeric format: current_value",
-      "value": "2.65% 08 Feb 2051 432,611"
+      "issue": "Invalid numeric format: par_value",
+      "value": "2.65% 08 Feb 2051"
     },
     {
       "page": 253,
       "row_id": 49,
-      "issue": "Invalid numeric format: current_value",
-      "value": "3.2% 11 May 2027 1,558,361"
+      "issue": "Invalid numeric format: par_value",
+      "value": "3.2% 11 May 2027"
     },
     {
       "page": 253,
       "row_id": 50,
-      "issue": "Invalid numeric format: current_value",
-      "value": "3.75% 13 Nov 2047 862,625"
+      "issue": "Invalid numeric format: par_value",
+      "value": "3.75% 13 Nov 2047"
     },
     {
       "page": 277,
