@@ -1,7 +1,7 @@
 """
 mf_mapping_enrichment.py
 ~~~~~~~~~~~~~~~~~~~~~~~~~
-Copies asset_class and sub_asset_class from mapping table into the MF table,
+Copies asset_class and asset_sub_class from mapping table into the MF table,
 then backfills any unmapped MF raw_entity_name into the mapping table with
 PENDING_AI placeholders.
 
@@ -44,7 +44,7 @@ def enrich_mf_classes(
     overwrite_existing: bool = False,
 ) -> Tuple[int, int]:
     """
-    Update MF table's asset_class/sub_asset_class from mapping on raw_entity_name,
+    Update MF table's asset_class/asset_sub_class from mapping on raw_entity_name,
     then insert unmapped names into mapping with PENDING_AI.
 
     Returns: (updated_row_count_estimate, backfilled_name_count)
@@ -65,7 +65,7 @@ def enrich_mf_classes(
         FROM {mf_db}.{mf_table} m
         INNER JOIN {mapping_db}.{mapping_table} f
           ON lower(trim(m.raw_entity_name)) = lower(trim(f.raw_entity_name))
-        WHERE coalesce(m.asset_class, '') = '' OR coalesce(m.sub_asset_class, '') = ''
+        WHERE coalesce(m.asset_class, '') = '' OR coalesce(m.asset_sub_class, '') = ''
         """
     df_elig = _read_athena(eligible_sql, mf_db, workgroup, s3_staging)
     to_update = int(df_elig.iloc[0]["cnt"]) if not df_elig.empty else 0
@@ -75,27 +75,27 @@ def enrich_mf_classes(
         merge_sql = f"""
         MERGE INTO {mf_db}.{mf_table} AS m
         USING (
-          SELECT lower(trim(raw_entity_name)) AS k, asset_class, sub_asset_class
+          SELECT lower(trim(raw_entity_name)) AS k, asset_class, asset_sub_class
           FROM {mapping_db}.{mapping_table}
         ) f
         ON lower(trim(m.raw_entity_name)) = f.k
         WHEN MATCHED THEN UPDATE SET
           asset_class = f.asset_class,
-          sub_asset_class = f.sub_asset_class
+          asset_sub_class = f.asset_sub_class
         """
     else:
         merge_sql = f"""
         MERGE INTO {mf_db}.{mf_table} AS m
         USING (
-          SELECT lower(trim(raw_entity_name)) AS k, asset_class, sub_asset_class
+          SELECT lower(trim(raw_entity_name)) AS k, asset_class, asset_sub_class
           FROM {mapping_db}.{mapping_table}
         ) f
         ON lower(trim(m.raw_entity_name)) = f.k
         WHEN MATCHED AND (
-          coalesce(m.asset_class, '') = '' OR coalesce(m.sub_asset_class, '') = ''
+          coalesce(m.asset_class, '') = '' OR coalesce(m.asset_sub_class, '') = ''
         ) THEN UPDATE SET
           asset_class = f.asset_class,
-          sub_asset_class = f.sub_asset_class
+          asset_sub_class = f.asset_sub_class
         """
     _run_athena(merge_sql, mf_db, workgroup, s3_staging)
 
@@ -115,7 +115,7 @@ def enrich_mf_classes(
     # 4) Insert unmapped names into mapping with PENDING_AI
     if to_backfill > 0:
         insert_sql = f"""
-        INSERT INTO {mapping_db}.{mapping_table} (raw_entity_name, asset_class, sub_asset_class)
+        INSERT INTO {mapping_db}.{mapping_table} (raw_entity_name, asset_class, asset_sub_class)
         SELECT DISTINCT m.raw_entity_name, 'PENDING_AI', 'PENDING_AI'
         FROM {mf_db}.{mf_table} m
         LEFT JOIN {mapping_db}.{mapping_table} f

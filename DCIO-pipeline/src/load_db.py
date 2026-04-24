@@ -5,6 +5,13 @@ from typing import Dict, List
 from .utils import to_json
 
 
+MISSING_EIN_PREFIX = "MISSING_EIN::"
+
+
+def _fallback_sponsor_ein(pdf_stem: str) -> str:
+    return f"{MISSING_EIN_PREFIX}{pdf_stem or 'unknown_pdf'}"
+
+
 def init_db(db_path: str, schema_sql_path: str) -> None:
     with sqlite3.connect(db_path) as conn:
         with open(schema_sql_path, "r", encoding="utf-8") as f:
@@ -154,11 +161,13 @@ def load_cleaned_pipeline_results(
             if pdf_path:
                 pdf_name_by_stem[pdf_stem] = os.path.basename(pdf_path)
 
-        for pdf_stem, info in plan_info_map.items():
-            sponsor_ein = info.get("ein")
-            if not sponsor_ein:
-                print(f"  ⚠ Warning: No EIN found for {pdf_stem}, skipping plan creation")
-                continue
+        all_pdf_stems = set(rows_by_stem) | set(plan_info_map) | set(pdf_name_by_stem)
+
+        for pdf_stem in sorted(all_pdf_stems):
+            info = plan_info_map.get(pdf_stem, {})
+            sponsor_ein = info.get("ein") or _fallback_sponsor_ein(pdf_stem)
+            if sponsor_ein.startswith(MISSING_EIN_PREFIX):
+                print(f"  ⚠ Warning: No EIN found for {pdf_stem}, using fallback plan key")
 
             cur.execute(
                 """
@@ -173,9 +182,9 @@ def load_cleaned_pipeline_results(
                 """,
                 (
                     sponsor_ein,
-                    info.get("plan_name"),
+                    info.get("plan_name") or pdf_stem,
                     info.get("plan_number", "001"),
-                    info.get("sponsor"),
+                    info.get("sponsor") or "",
                     plan_year,
                     pdf_name_by_stem.get(pdf_stem),
                 ),
@@ -215,9 +224,7 @@ def load_cleaned_pipeline_results(
                 )
 
         for pdf_stem, rows in rows_by_stem.items():
-            sponsor_ein = (plan_info_map.get(pdf_stem) or {}).get("ein")
-            if not sponsor_ein:
-                continue
+            sponsor_ein = (plan_info_map.get(pdf_stem) or {}).get("ein") or _fallback_sponsor_ein(pdf_stem)
 
             for row in rows:
                 cur.execute(

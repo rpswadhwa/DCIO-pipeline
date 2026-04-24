@@ -169,8 +169,10 @@ def build_mf_rows_df(rows: List[Dict],
             "ack_id": str(row.get("pdf_stem", "") or "").strip(),
             "raw_entity_name": str(row.get("issuer_name", "") or "").strip(),
             "plan_investment_amt": parse_currency_value(row.get("current_value")),
+            "asset_class": "PENDING_AI",
+            "asset_sub_class": "PENDING_AI",
         })
-    return pd.DataFrame(records, columns=["ack_id", "raw_entity_name", "plan_investment_amt"])
+    return pd.DataFrame(records, columns=["ack_id", "raw_entity_name", "plan_investment_amt", "asset_class", "asset_sub_class"])
 
 
 
@@ -200,6 +202,76 @@ def write_parquet(df: pd.DataFrame, s3_path: str, glue_db: str,
     wr.s3.to_parquet(**kwargs)
     logger.info("Wrote %d rows to %s (table: %s.%s)", len(df), s3_path, glue_db, table)
 
+
+
+# ---------------------------------------------------------------------------
+# Iceberg writer via Athena INSERT INTO
+# ---------------------------------------------------------------------------
+def write_iceberg_via_athena(df: pd.DataFrame, glue_db: str, table: str) -> None:
+    """Write rows to an Iceberg table via Athena INSERT INTO statements."""
+    import awswrangler as wr
+    import math
+    import os
+
+    if df.empty:
+        logger.info("No rows to write to %s.%s", glue_db, table)
+        return
+
+    workgroup = os.getenv("ATHENA_WORKGROUP", "primary")
+    s3_staging = os.getenv("ATHENA_STAGING_S3")
+
+    for col in ["asset_class", "asset_sub_class"]:
+        if col not in df.columns:
+            df = df.copy()
+            df[col] = "PENDING_AI"
+
+    batch_size = 200
+    total = len(df)
+    for start in range(0, total, batch_size):
+        batch = df.iloc[start:start + batch_size]
+        values_parts = []
+        for _, row in batch.iterrows():
+            def q(v):
+                if v is None:
+                    return "NULL"
+                try:
+                    if math.isnan(float(v)):
+                        return "NULL"
+                except (TypeError, ValueError):
+                    pass
+                return "'" + str(v).replace("'", "''") + "'"
+
+            amt = row.get("plan_investment_amt")
+            try:
+                amt_sql = "NULL" if (amt is None or math.isnan(float(amt))) else str(float(amt))
+            except (TypeError, ValueError):
+                amt_sql = "NULL"
+
+            values_parts.append(
+                "({}, {}, {}, {}, {})".format(
+                    q(row.get("ack_id")),
+                    q(row.get("raw_entity_name")),
+                    amt_sql,
+                    q(row.get("asset_class", "PENDING_AI")),
+                    q(row.get("asset_sub_class", "PENDING_AI")),
+                )
+            )
+
+        sql = (
+            "INSERT INTO {}.{} "
+            "(ack_id, raw_entity_name, plan_investment_amt, asset_class, asset_sub_class) "
+            "VALUES {}".format(glue_db, table, ", ".join(values_parts))
+        )
+        query_id = wr.athena.start_query_execution(
+            sql=sql,
+            database=glue_db,
+            workgroup=workgroup,
+            s3_output=s3_staging,
+        )
+        wr.athena.wait_query(query_execution_id=query_id)
+        logger.info("Inserted rows %d-%d into Iceberg %s.%s", start, start + len(batch), glue_db, table)
+
+    logger.info("Wrote %d rows to Iceberg table %s.%s", total, glue_db, table)
 
 # ---------------------------------------------------------------------------
 # Orchestrator
@@ -268,20 +340,14 @@ def run_post_extract_validation(
                 logger.warning("PASS %s but no MF rows to write", pdf_stem)
                 counts["passed"] += 1
                 continue
-            write_parquet(
-                df, validated_s3, validated_glue_db, validated_table,
-                partition_cols=None,
-            )
+            write_iceberg_via_athena(df, validated_glue_db, validated_table)
             logger.info("PASS %s: extracted=%.0f expected=%.0f diff=%.2f%% (%d MF rows written)",
                         pdf_stem, extracted, expected, pct_diff * 100, len(df))
             counts["passed"] += 1
         else:
             error_df = build_mf_rows_df(stem_rows)
             if not error_df.empty:
-                write_parquet(
-                    error_df, error_s3, validated_glue_db, error_table,
-                    partition_cols=None,
-                )
+                write_iceberg_via_athena(error_df, validated_glue_db, error_table)
             logger.warning("FAIL %s: extracted=%.0f expected=%.0f diff=%.2f%% (%d MF rows)",
                            pdf_stem, extracted, expected, pct_diff * 100, len(error_df))
             counts["failed"] += 1
@@ -289,3 +355,21 @@ def run_post_extract_validation(
     logger.info("Validation complete — passed=%d failed=%d skipped=%d",
                 counts["passed"], counts["failed"], counts["skipped"])
     return counts
+
+
+def load_final_rows(db_path: str):
+    import csv as _csv, os
+    csv_path = os.path.join(os.path.dirname(db_path), "investments_raw.csv")
+    if not os.path.exists(csv_path):
+        logger.warning("CSV not found, falling back to SQLite")
+        con = sqlite3.connect(db_path)
+        con.row_factory = sqlite3.Row
+        try:
+            rows = [dict(r) for r in con.execute("SELECT * FROM investments").fetchall()]
+        finally:
+            con.close()
+        return rows
+    with open(csv_path, newline="", encoding="utf-8") as f:
+        rows = list(_csv.DictReader(f))
+    logger.info("Loaded %d rows from CSV %s", len(rows), csv_path)
+    return rows

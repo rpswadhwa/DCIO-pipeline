@@ -21,7 +21,8 @@ load_dotenv()
 client = OpenAI(api_key=os.getenv('OPENAI_API_KEY'))
 
 # Default model
-MODEL = os.getenv('OPENAI_MODEL', 'gpt-5.4')
+MODEL = os.getenv('OPENAI_MODEL', 'gpt-5.2')
+MISSING_EIN_PREFIX = 'MISSING_EIN::'
 
 
 def clean_issuer_name(name: str) -> str:
@@ -470,6 +471,11 @@ def export_enhanced_csv(db_path, output_path, verbose=True):
 
         for row in rows:
             row_data = dict(row)
+
+            # Hide synthetic internal plan keys from exported CSVs.
+            sponsor_ein = row_data.get('sponsor_ein') or ''
+            if sponsor_ein.startswith(MISSING_EIN_PREFIX):
+                row_data['sponsor_ein'] = ''
 
             # Ensure plan_name and issuer_name are cleaned (no special chars)
             row_data['plan_name'] = clean_plan_name(row_data.get('plan_name', ''))

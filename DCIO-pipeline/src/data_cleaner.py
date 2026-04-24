@@ -135,7 +135,7 @@ def remove_total_rows(rows, verbose=True):
     # Words that indicate a total/summary row
     total_indicators = {
         "total investments", "total assets", "total plan", "grand total",
-        "subtotal", "sub-total", "sum of", "aggregate",
+        "subtotal", "sub-total", "sum of",
         "total synthetic", "synthetic investment contracts"
     }
     
@@ -160,6 +160,7 @@ def remove_total_rows(rows, verbose=True):
         issuer = str(row.get('issuer_name', '')).strip() if row.get('issuer_name') else ''
         description = str(row.get('investment_description', '')).strip() if row.get('investment_description') else ''
         issuer_lower = issuer.lower()
+        description_lower = description.lower()
         combined = (issuer + " " + description).lower()
         
         is_total = False
@@ -167,6 +168,11 @@ def remove_total_rows(rows, verbose=True):
         # FIRST: Check for exact "total" or total indicator phrases (highest priority)
         if issuer_lower == "total" or any(indicator in combined for indicator in total_indicators):
             is_total = True
+        # Description-only totals such as "Total mutual funds" often have blank issuer_name
+        elif not issuer and description_lower.startswith('total'):
+            # Preserve common legitimate fund names that begin with Total
+            if not any(pattern in description_lower for pattern in fund_name_patterns) and not any(company in description_lower for company in fund_companies):
+                is_total = True
         
         # SECOND: Check if issuer starts with 'Total' or contains 'TOT' abbreviation
         elif issuer_lower.startswith('total') or ' tot ' in issuer_lower:
