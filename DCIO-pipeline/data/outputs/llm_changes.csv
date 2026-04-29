@@ -1,0 +1,618 @@
+record_num,pre_issuer,post_issuer,pre_description,post_description,pre_asset_type,post_asset_type
+1,AMCAP FUND,American Funds,"933,166",AMCAP Fund,,
+2,AMERICAN BALANCED FUND,American Funds,"1,628,268",American Balanced Fund,,
+3,FUNDAMENTAL INV,American Funds,"848,180",Fundamental Investors Fund,,
+15,DFA US SMALL CAP PORTFOLIO,Dimensional Fund Advisors,"824,506",DFA US Small Cap Portfolio,Other,Mutual Fund
+18,DODGE + COX BALANCED FUND,Dodge & Cox,"419,414",Balanced Fund,,
+21,DODGE + COX INCOME FUND,Dodge & Cox,"6,143,362",Income Fund,,
+23,DODGE + COX STOCK FUND,Dodge & Cox,"738,285",Stock Fund,Common Stock,Mutual Fund
+24,EUROPACIFIC GROWTH FUND,American Funds,"819,742",EuroPacific Growth Fund,,
+31,FIDELITY CONTRAFUND,Fidelity,"19,357,716",Fidelity Contrafund,,
+32,,,,1+1 AG,Other,Common Stock
+33,,,,29METALS LTD,Other,Common Stock
+41,,,,77 BANK LTD/THE,Other,Common Stock
+42,,,GBP.005,888 HOLDINGS PLC,Other,Common Stock
+43,,,CNY1.0,SERVICES,,
+51,,,,AB DYNAMICS PLC,Other,Common Stock
+52,,,EUR.01,AB SCIENCE SA,Other,Common Stock
+53,,,REIT,ABACUS PROPERTY GROUP,Other,Real Estate
+62,,,,ABOUT YOU HOLDING SE,Other,Common Stock
+63,,,GBP.1396825,ABRDN PLC,Other,Common Stock
+64,,,ZAR2.0,ABSA GROUP LTD,Other,Common Stock
+71,,,USD.01,1 800 FLOWERS.COM INC CL A,Other,Common Stock
+72,,,,10X GENOMICS INC CLASS A,Other,Common Stock
+73,,,USD.001,1LIFE HEALTHCARE INC,Other,Common Stock
+81,,,USD.001,8X8 INC,Other,Common Stock
+82,,,USD.0001,9 METERS BIOPHARMA INC,Other,Common Stock
+83,,,,908 DEVICES INC,Other,Common Stock
+91,,,USD.001,ACACIA RESEARCH CORP,Other,Common Stock
+93,,,USD.01,ACADIA HEALTHCARE CO INC,Other,Common Stock
+95,,,REIT USD.001,ACADIA REALTY TRUST,Other,Common Stock
+101,,,USD.005,ACI WORLDWIDE INC,Other,Common Stock
+102,,,USD.00001,ACLARIS THERAPEUTICS INC,Other,Common Stock
+103,,,USD.01,ACUITY BRANDS INC,Other,Common Stock
+111,GOVERNMENT STIF 7 BPS,Government,"4,770,628",STIF 7 BPS,,
+112,TSY INFL IX N/B,U.S. Treasury,"70,012,008",Treasury Inflation-Indexed Note/Bond,Other,Government Bond
+113,TSY INFL IX N/B,U.S. Treasury,"56,410,400",Treasury Inflation-Indexed Note/Bond,Other,Government Bond
+121,TSY INFL IX N/B,U.S. Treasury,"84,483,237",Treasury Inflation-Indexed Note/Bond,Other,Government Bond
+122,TSY INFL IX N/B,U.S. Treasury,"73,826,560",Treasury Inflation-Indexed Note/Bond,Other,Government Bond
+123,TSY INFL IX N/B,U.S. Treasury,"71,401,230",Treasury Inflation-Indexed Note/Bond,Other,Government Bond
+131,TSY INFL IX N/B,U.S. Treasury,"70,958,599",Treasury Inflation-Indexed Note/Bond,Other,Government Bond
+132,TSY INFL IX N/B,U.S. Treasury,"46,119,225",Treasury Inflation-Indexed Note/Bond,Other,Government Bond
+133,TSY INFL IX N/B,U.S. Treasury,"77,062,711",Treasury Inflation-Indexed Note/Bond,Other,Government Bond
+141,TSY INFL IX N/B,U.S. Treasury,"30,981,193",Treasury Inflation-Indexed Note/Bond (TIPS),Other,Government Bond
+142,TSY INFL IX N/B,U.S. Treasury,"54,504,222",Treasury Inflation-Indexed Note/Bond (TIPS),Other,Government Bond
+143,TSY INFL IX N/B,U.S. Treasury,"23,299,355",Treasury Inflation-Indexed Note/Bond (TIPS),Other,Government Bond
+151,TSY INFL IX N/B,U.S. Treasury,"45,471,049",Treasury Inflation-Indexed Note/Bond,Other,Government Bond
+152,TSY INFL IX N/B,U.S. Treasury,"29,052,350",Treasury Inflation-Indexed Note/Bond,Other,Government Bond
+153,TSY INFL IX N/B,U.S. Treasury,"20,658,237",Treasury Inflation-Indexed Note/Bond,Other,Government Bond
+161,,,"1,085,000",ABBVIE INC,Other,Common Stock
+162,,,"1,600,000",ABBVIE INC,Other,Common Stock
+163,,,"1,855,000",ACUITY BRANDS LIGHTING,Other,Common Stock
+171,ALEXANDRIA REAL ESTATE E,"Alexandria Real Estate Equities, Inc.","765,000","Alexandria Real Estate Equities, Inc.",Real Estate,Common Stock
+172,ALIBABA GROUP HOLDING,Alibaba Group Holding Limited,"300,000",Alibaba Group Holding Limited,Other,Common Stock
+173,ALIBABA GROUP HOLDING,Alibaba Group Holding Limited,"555,000",Alibaba Group Holding Limited,Other,Common Stock
+181,,,"740,000",AMAZON.COM INC,Other,Common Stock
+182,,,"1,005,000",AMEREN CORP,Other,Common Stock
+183,,,"760,000",AMERICA MOVIL SAB DE CV,Other,Common Stock
+191,,,"200,000",AMGEN INC,Other,Common Stock
+192,,,"495,000",AMGEN INC,Other,Common Stock
+193,,,"730,000",AMGEN INC,Other,Common Stock
+201,,,REIT,ALEXANDER + BALDWIN INC,Other,Common Stock
+202,ALEXANDER S INC,ALEXANDER'S INC,REIT USD1.0,ALEXANDER'S INC,Other,Common Stock
+203,EQUIT,EQUITY RESIDENTIAL,REIT USD.01,EQUITY RESIDENTIAL,Other,Common Stock
+213,,,REIT USD.01,BOSTON PROPERTIES INC,Other,Common Stock
+214,,,REIT USD.01,BRANDYWINE REALTY TRUST,Other,Common Stock
+216,,,REIT USD.00025,BROADSTONE NET LEASE INC,Other,Common Stock
+221,,,REIT USD.01,CITY OFFICE REIT INC,Other,Common Stock
+223,,,REIT USD.01,COREPOINT LODGING INC,Other,Common Stock
+225,,,REIT USD.01,CUBESMART,Other,Common Stock
+231,DJ US REAL ESTATE MAR22,DJ US REAL ESTATE,XCBT 20220318,DJ US Real Estate Mar 2022 (XCBT 20220318),,
+232,,,REIT USD.01,DOUGLAS EMMETT INC,Other,Common Stock
+233,,,REIT USD.01,DUKE REALTY CORP,Other,Common Stock
+241,AMERICAN INTL GROUP,American International Group,,,Other,Corporate Bond
+242,RECEIVA,Receiva,,,Other,Corporate Bond
+243,AMGEN INC,Amgen Inc,,,Other,Corporate Bond
+251,AT+T INC,AT&T Inc.,,,Other,Corporate Bond
+252,AT+T INC,AT&T Inc.,,,Other,Corporate Bond
+253,AT+T INC,AT&T Inc.,,,Other,Corporate Bond
+261,,,,,Other,Corporate Bond
+262,,,,,Other,Corporate Bond
+263,,,,,Other,Corporate Bond
+271,,,"600,000",AMERICA MOVIL SAB DE CV,Other,Common Stock
+272,,,"2,000,000",AMFAM HOLDINGS INC,Other,Common Stock
+273,,,"1,850,000",ANHEUSER BUSCH CO/INBEV,Other,Common Stock
+284,,,"1,171,000",BOARDWALK PIPELINES LP,Other,Partnership Interest
+286,,,"2,500,000",BROADCOM INC,Other,Common Stock
+290,,,"2,705,000",CENOVUS ENERGY INC,Other,Common Stock
+291,CHARTER COMM OPT LLC/CAP,Charter Communications,"2,000,000",Charter Communications,Other,Common Stock
+292,CHENIERE CORP CHRISTI HD,Cheniere Energy,"2,500,000",Cheniere Energy,Other,Common Stock
+293,CITIGROUP INC,Citigroup,"3,000,000",Citigroup,Other,Common Stock
+301,DXC TECHNOLOGY CO,DXC Technology Co,"2,550,000",DXC Technology Co,Other,Common Stock
+302,ENERGY TRANSFER LP,Energy Transfer LP,"1,750,000",Energy Transfer LP,Other,Partnership Interest
+303,FED HM LN PC POOL G08779,Federal Home Loan Mortgage Corporation,"2,302,617",Federal Home Loan Mortgage Corporation PC Pool G08779,Other,Government Bond
+311,AEON REIT INVESTMENT CORP REIT,AEON REIT Investment Corp,"1,270",AEON REIT Investment Corp,Other,Real Estate
+312,,,"431,700",AIMS APAC REIT,Other,Real Estate
+313,,,"98,642",ESTAT,,
+321,,,"4,358",ASCENCIO,Other,Common Stock
+322,,,"2,662,389",TRT,Other,Common Stock
+323,,,"1,398,097",ASCOTT RESIDENCE TRUST,Other,Real Estate
+331,,,"134,348",BIG YELLOW GROUP PLC,Other,Common Stock
+332,,,"394,413",TRUS,,
+333,,,"192,632",INVESTMENTS,,
+341,,,"4,520,000",ABBVIE INC,Other,Common Stock
+342,,,"572,000",ABBVIE INC,Other,Common Stock
+343,,,"1,474,000",ABU DHABI CRUDE OIL,,
+351,,,"4,170,000",AMAZON.COM INC,Other,Common Stock
+352,,,"1,647,000",AMAZON.COM INC,Other,Common Stock
+353,,,"882,000",AMEREN ILLINOIS CO,Other,Common Stock
+361,ANHEUSER BUSCH CO/INBEV,Anheuser-Busch InBev,"3,577,000",Anheuser-Busch InBev,Other,Common Stock
+362,ANHEUSER BUSCH INBEV WOR 4.375% 15 Apr 2038,Anheuser-Busch InBev,"1,608,000",4.375% Bond due 15 Apr 2038,Other,Corporate Bond
+363,ANHEUSER BUSCH INBEV WOR 4.6% 15 Apr 2048,Anheuser-Busch InBev,"2,227,000",4.6% Bond due 15 Apr 2048,Other,Corporate Bond
+371,,,"489,000",ASTRAZENECA PLC,Other,Common Stock
+372,,,"4,820,000",AT+T INC,Other,Common Stock
+373,,,"3,193,000",AT+T INC,Other,Common Stock
+381,BANK OF AMERICA CORP,Bank of America,,,,
+382,BANNER HEALTH,Banner Health,,,,
+383,BAT CAPITAL CORP,BAT Capital,,,,
+391,ABU DHABI GOVT INT L,Abu Dhabi Government International,,,Other,Government Bond
+392,ABU DHABI GOVT INT L,Abu Dhabi Government International,,,Other,Government Bond
+393,ADVENT HEALTH SYSTEM,AdventHealth System,,,Other,Corporate Bond
+401,AETNA INC,Aetna Inc,,,Other,Corporate Bond
+402,AHS HOSPITAL CORP,AHS Hospital Corp,,,Other,Corporate Bond
+403,AIA GROUP LTD,AIA Group Ltd,,,Other,Corporate Bond
+411,ALTRIA GROUP INC,Altria Group Inc,,,Other,Corporate Bond
+412,ALTRIA GROUP INC,Altria Group Inc,,,Other,Corporate Bond
+413,ALTRIA GROUP INC,Altria Group Inc,,,Other,Corporate Bond
+421,,,,,Other,Corporate Bond
+422,,,,,Other,Corporate Bond
+423,,,,,Other,Corporate Bond
+431,317596401,Other,,,,
+432,20091110ROTHERS HOLDINGS,Rothes Holdings,,,Other,Corporate Bond
+433,31750IWK9 OTC ECAL FN 2.0,Other,JAN22 100.734375 CALL,OTC ECAL FN 2.0 JAN22 100.734375 CALL,,
+441,317511FI9 EPUT OTC FN 2.5,317511FI9,MAR22 100.609375 PUT,OTC EPUT FN 2.5 MAR22 100.609375 Put,,
+442,317512VP3 OTC EPUT FN 2.5,317512VP3,MAR22 100.41015625 PUT,OTC EPUT FN 2.5 MAR22 100.41015625 Put,,
+444,317514CE5 PIMCO,PIMCO,CDSOPT PUT USD 0.85 20220119,CDS Option Put USD 0.85 2022-01-19,Mutual Fund,Other
+451,317517MA5,Federal National Mortgage Association,,,,
+452,317517PK0,Federal National Mortgage Association,,,,
+453,317521045 OTC EPUT FN 2.5,Federal National Mortgage Association,MAR22 100.515625 PUT,OTC EPUT FN 2.5 MAR22 100.515625 PUT,,
+461,3175329A9 OTC EPUT FN 2.5,OTC,MAR22 100.4921875 PUT,EPUT FN 2.5 MAR22 100.4921875 Put,,
+462,317532B73 PIMCO,PIMCO,CDSOPT PUT EUR 0.9 20220316,CDS Option Put EUR 0.9 20220316,Mutual Fund,Other
+463,317532M06,OTC,OTC EPUT G2 2.5 101.5,EPUT G2 2.5 101.5,,
+471,,,,,Other,Corporate Bond
+472,,,,,Other,Corporate Bond
+473,,,,,Other,Corporate Bond
+481,,,,,Other,Corporate Bond
+482,,,,,Other,Corporate Bond
+483,,,,,Other,Corporate Bond
+491,ALBERTSONS COS/SAFEWAY,Albertsons Companies,,,Other,Corporate Bond
+492,ALCOA NEDERLAND HOLDING,Alcoa Nederland Holding,,,Other,Corporate Bond
+493,ALLEGHENY TECHNOLOGIES,Allegheny Technologies,,,Other,Corporate Bond
+501,,,,,Other,Corporate Bond
+502,,,,,Other,Corporate Bond
+503,,,,,Other,Corporate Bond
+511,AMERICAN AXLE + MFG INC,"American Axle & Manufacturing, Inc.",,,Other,Corporate Bond
+512,AMERICAN AXLE + MFG INC,"American Axle & Manufacturing, Inc.",,,Other,Corporate Bond
+513,AMERIGAS PART/FIN CORP,"AmeriGas Partners, L.P.",,,Other,Corporate Bond
+521,AEROPUERTO INTL TOCUMEN,Aeropuerto Internacional de Tocumen,,,Other,Corporate Bond
+522,AGILE GROUP HOLDINGS LTD,Agile Group Holdings Ltd,,,Other,Corporate Bond
+523,ALFA DESARROLLO SPA,Alfa Desarrollo SpA,,,Other,Corporate Bond
+531,B8A99GM60 PRUDENTIAL,Prudential,16500.00000,B8A99GM60,,
+532,B8A9S1CM8 PRUDENTIAL,Prudential,14300.000000,B8A9S1CM8,,
+533,B8A9UBCJ0 PRUDENTIAL,Prudential,9.7500000,B8A9UBCJ0,,
+541,B8A9XP7N3 PRUDENTIAL,Prudential,6.9000000,B8A9XP7N3,,
+542,B8AA116A7 PRUDENTIAL,Prudential,22.0000000,B8AA116A7,,
+543,B8AA15279 PRUDENTIAL,Prudential,20.6000000,B8AA15279,,
+551,AIR CANADA 2017 1AA PTT,Air Canada,3.3% 15 Jul 2031,2017 1AA PTT 3.3% 15 Jul 2031,Other,Corporate Bond
+552,AIR LEASE CORP,Air Lease Corp,,,Other,Corporate Bond
+553,AIR LEASE CORP,Air Lease Corp,,,Other,Corporate Bond
+561,AMER AIRLINE 17 1 AA PTT,American Airlines,,,Other,Corporate Bond
+562,AMER AIRLINE 19 1AA PTT,American Airlines,,,Other,Corporate Bond
+563,AMER AIRLN 15 2 AA PTT,American Airlines,,,Other,Corporate Bond
+571,ANHEUSER BUSCH INBEV WOR 3.5% 01 Jun 2030,Anheuser-Busch InBev,,3.5% 01 Jun 2030,Other,Corporate Bond
+572,ANTHEM INC,Anthem Inc,,,Other,Corporate Bond
+573,ANTOFAGASTA PLC,Antofagasta PLC,,,Other,Corporate Bond
+581,AT+T INC,AT&T Inc.,,,Other,Corporate Bond
+582,AT+T INC,AT&T Inc.,,,Other,Corporate Bond
+583,AT+T INC,AT&T Inc.,,,Other,Corporate Bond
+592,Advisors and Gallagher Fiduciary Kyndryl Common Stock,Kyndryl,,Kyndryl,,
+593,"Advisors, LLC shares","Advisors, LLC",,"Advisors, LLC",,
+594,(refer to Exhibit A - investments),,,Refer to Exhibit A - investments,,
+601,Trust Small Cap Value Index,Trust,,Small Cap Value Index,Other,Index Fund
+602,Liquidity Fund Balanced Fund,Liquidity Fund,,Balanced Fund,,
+603,Trust European Stock Index,Trust,,European Stock Index,Common Stock,Index Fund
+611,"90DAY EUR FUTR MAR22 XCME 20220314 (50,250,000)",CME,,90-Day EUR Futures Mar 2022,Other,Currency
+612,"ABBOTT LABORATORIES 4.75% 30 Nov 2036 60,000",Abbott Laboratories,,4.75% Bond due 30 Nov 2036,Other,Corporate Bond
+613,"ABBOTT LABORATORIES 4.9% 30 Nov 2046 240,000",Abbott Laboratories,,4.9% Bond due 30 Nov 2046,Other,Corporate Bond
+621,"ALTRIA GROUP INC 2.45% 04 Feb 2032 530,000",Altria Group Inc,,Altria Group Inc 2.45% Bond due 04 Feb 2032,Other,Corporate Bond
+622,"ALTRIA GROUP INC 3.4% 04 Feb 2041 590,000",Altria Group Inc,,Altria Group Inc 3.4% Bond due 04 Feb 2041,Other,Corporate Bond
+623,"ALTRIA GROUP INC 4.4% 14 Feb 2026 120,000",Altria Group Inc,,Altria Group Inc 4.4% Bond due 14 Feb 2026,Other,Corporate Bond
+631,"ANGLO AMERICAN CAPITAL 4% 11 Sep 2027 230,000",Anglo American Capital,,4% Bond due 11 Sep 2027,Other,Corporate Bond
+632,"ANHEUSER BUSCH INBEV WOR 3.5% 01 Jun 2030 1,000,000",Anheuser-Busch InBev World,,3.5% Bond due 01 Jun 2030,Other,Corporate Bond
+633,"ANHEUSER BUSCH INBEV WOR 4.35% 01 Jun 2040 650,000",Anheuser-Busch InBev World,,4.35% Bond due 01 Jun 2040,Other,Corporate Bond
+641,"AT+T INC 3.55% 15 Sep 2055 720,000",AT&T Inc.,,AT&T Inc. 3.55% 15 Sep 2055,Other,Corporate Bond
+642,"AT+T INC 5.55% 15 Aug 2041 60,000",AT&T Inc.,,AT&T Inc. 5.55% 15 Aug 2041,Other,Corporate Bond
+643,"AVERY POINT CLO LTD 1% 05 Aug 2027 424,448",Avery Point CLO Ltd,,Avery Point CLO Ltd 1% 05 Aug 2027,Other,Corporate Bond
+651,"APEX CREDIT CLO LLC 1% 20 Sep 2029 1,200,000",APEX CREDIT CLO LLC,,APEX CREDIT CLO LLC 1% 20 Sep 2029,Other,Corporate Bond
+652,"ARES CLO LTD 1% 15 Jan 2029 1,500,000",ARES CLO LTD,,ARES CLO LTD 1% 15 Jan 2029,Other,Corporate Bond
+653,"LYNCH 1% 15 Sep 2038 1,300,000",LYNCH,,LYNCH 1% 15 Sep 2038,Other,Corporate Bond
+661,"BNPP AM EURO CLO 1% 22 Jul 2032 1,300,000",BNP Paribas Asset Management,,BNPP AM Euro CLO 1% 22 Jul 2032,Other,Corporate Bond
+662,"BOA FUTURES COC BOA FUTURES CCBOSXUS1 284,000",Bank of America,,BOA Futures COC (CCBOSXUS1),,
+663,"BROADCOM INC 3.137% 15 Nov 2035 1,300,000",Broadcom Inc,,Broadcom Inc 3.137% 15 Nov 2035,Other,Corporate Bond
+671,"CUBESMART LP 2.5% 15 Feb 2032 1,200,000",CubeSmart,,2.5% Bond due 15 Feb 2032,Other,Corporate Bond
+672,CURRENCY CONTRACT USD/AUD -,Currency Contract,,USD/AUD,,
+673,CURRENCY CONTRACT BRL/USD -,Currency Contract,,BRL/USD,,
+681,,,,,Corporate Bond,Self-Directed Brokerage Account
+682,,,,,Corporate Bond,Self-Directed Brokerage Account
+683,,,,,Corporate Bond,Self-Directed Brokerage Account
+691,Brokerage Account Various Common Stocks,Brokerage Account,,Various Common Stocks,Common Stock,Self-Directed Brokerage Account
+692,Brokerage Account Various Preferred Stocks 7,Brokerage Account,,Various Preferred Stocks,Common Stock,Self-Directed Brokerage Account
+693,Brokerage Account Various Unitized Investment Funds,Brokerage Account,,Various Unitized Investment Funds,Mutual Fund,Self-Directed Brokerage Account
+701,"The Vanguard Group 3,035,203.80 shares of Vanguard Growth Index Fund Institutional Shares",Vanguard,,Vanguard Growth Index Fund Institutional Shares,Mutual Fund,Index Fund
+702,"The Vanguard Group 135,133,732.12 shares of Vanguard Federal Money Market Fund",Vanguard,,Vanguard Federal Money Market Fund,,
+703,"The Vanguard Group 928,549.57 shares of Vanguard Small Cap Index Fund Institutional Plus Shares",Vanguard,,Vanguard Small Cap Index Fund Institutional Plus Shares,Mutual Fund,Index Fund
+711,"The Vanguard Group 19,326,743.03 shares of Vanguard Target Retirement 2045 Fund Investor Shares",Vanguard,,Vanguard Target Retirement 2045 Fund Investor Shares,Target Date Fund,Mutual Fund
+712,"The Vanguard Group 8,845,246.01 shares of Vanguard Target Retirement 2050 Fund Investor Shares",Vanguard,,Vanguard Target Retirement 2050 Fund Investor Shares,Target Date Fund,Mutual Fund
+713,"The Vanguard Group 5,457,255.72 shares of Vanguard Target Retirement 2055 Fund Investor Shares",Vanguard,,Vanguard Target Retirement 2055 Fund Investor Shares,Target Date Fund,Mutual Fund
+721,,Fidelity,Fidelity Intl Index Ipr*,International Index Fund Institutional Premium Class,Mutual Fund,Index Fund
+722,,Fidelity,Fidelity Ext Mkt Idx Ipr*,Extended Market Index Fund Institutional Premium Class,Mutual Fund,Index Fund
+723,,Fidelity,Fidelity LT TR Bond IDX*,Long-Term Treasury Bond Index Fund,Corporate Bond,Government Bond
+731,,Fidelity,Fidelity MMKT Govt Port Inst*,Money Market Government Portfolio Institutional,Mutual Fund,Money Market Fund
+732,,T. Rowe Price,TRP New Horizons,New Horizons Fund,Other,Mutual Fund
+733,,Vanguard,Vanguard Wellesley Adm,Wellesley Income Fund Admiral Shares,,
+741,,American Funds,AF Growth of Amer R6,Growth Fund of America Class R6,Other,Mutual Fund
+742,,American Funds,AF Europacific Gth R6,EuroPacific Growth Fund Class R6,Other,Mutual Fund
+743,,Fidelity,Fidelity Mid Cap Stock K*,Mid Cap Stock Fund Class K,Common Stock,Mutual Fund
+751,,Fidelity,Fidelity Dividend Growth K*,Fidelity Dividend Growth Fund Class K,,
+752,,T. Rowe Price,TRP Intl Discovery,International Discovery Fund,Other,Mutual Fund
+753,,Harris Associates,Oakmark Eq & Inc Inv,Oakmark Equity and Income Fund Investor Class,Other,Mutual Fund
+761,,Dodge & Cox,Dodge & Cox Balanced,Balanced Fund,Other,Mutual Fund
+762,Vanguard Cash Reserves Federal MM Fund Admiral Shares,Vanguard,,Cash Reserves Federal Money Market Fund Admiral Shares,Mutual Fund,Money Market Fund
+763,Vanguard Core Bond Fund Admiral Shares,Vanguard,,Core Bond Fund Admiral Shares,Corporate Bond,Mutual Fund
+771,JPMorgan SmartRetirement Passive Blend 2025 Fund; CF-Z,JPMorgan,Collective Investment Fund,JPMorgan SmartRetirement Passive Blend 2025 Fund CF-Z,Mutual Fund,Common/Collective Trust Fund
+772,JPMorgan SmartRetirement Passive Blend 2030 Fund; CF-Z,JPMorgan,Collective Investment Fund,JPMorgan SmartRetirement Passive Blend 2030 Fund CF-Z,Mutual Fund,Common/Collective Trust Fund
+773,JPMorgan SmartRetirement Passive Blend 2035 Fund; CF-Z,JPMorgan,Collective Investment Fund,JPMorgan SmartRetirement Passive Blend 2035 Fund CF-Z,Mutual Fund,Common/Collective Trust Fund
+781,Vanguard Institutional Total Bond Market Index Trust,Vanguard,Collective Investment Fund,Institutional Total Bond Market Index Trust,Corporate Bond,Common/Collective Trust Fund
+782,Vanguard Institutional Total International Stock Market Index,Vanguard,Collective Investment Fund,Institutional Total International Stock Market Index Trust,Common Stock,Common/Collective Trust Fund
+783,KP Interest Income Fund,KP,Collective Investment Fund,Interest Income Fund,,
+791,HH2G GM DC - PYRAMIS LIFECYCLE,Pyramis,,GM DC Lifecycle Fund HH2G,Other,Mutual Fund
+792,HH2H GM DC - PYRAMIS LIFECYCLE,Pyramis,,GM DC Lifecycle Fund HH2H,Other,Mutual Fund
+793,HH2I GM DC - PYRAMIS LIFECYCLE,Pyramis,,GM DC Lifecycle Fund HH2I,Other,Mutual Fund
+801,BRIDGEWATER ALL WEATHER,Bridgewater Associates,,All Weather,,
+802,AMERICAN BEACON AHL TARGETRISK AMER BCN AHL TRGTRSK R5,American Beacon,,AHL TargetRisk Fund Class R5,Other,Mutual Fund
+803,ARIEL FUND ARIEL FUND,Ariel Investments,,Ariel Fund,,
+811,Fidelity Management Trust Company,Fidelity,,,,
+812,Fidelity Management Trust Company,Fidelity,,,,
+813,Fidelity Management Trust Company,Fidelity,,,,
+821,Fidelity Management Trust Company,Fidelity,,,,
+822,Fidelity Management Trust Company,Fidelity,,,,
+823,Fidelity Management Trust Company,Fidelity,,,,
+831,Fidelity Management Trust Company,Fidelity,,,,
+833,Fidelity Management Trust Company,Fidelity,,,,
+834,Lazard Inc,Lazard,,Lazard Inc,Other,Common Stock
+841,Fidelity Management Trust Company,Fidelity,,Fidelity Management Trust Company,Mutual Fund,Other
+842,Brokerage Link,BrokerageLink,,BrokerageLink,Other,Self-Directed Brokerage Account
+843,American Funds The Bond Fund of America Class R-6,American Funds,,The Bond Fund of America Class R-6,Corporate Bond,Mutual Fund
+851,JPMorgan Large Cap Growth Fund — Class R6,JPMorgan,,Large Cap Growth Fund Class R6,,
+852,Neuberger Berman Genesis Fund — Class R6,Neuberger Berman,,Genesis Fund Class R6,,
+853,Vanguard Institutional  — Plus Shares,Vanguard,,Institutional Plus Shares,,
+861,Vanguard Target Retirement 2020 Trust Select,Vanguard,,Target Retirement 2020 Trust Select,Target Date Fund,Common/Collective Trust Fund
+862,Vanguard Target Retirement 2025 Trust Select,Vanguard,,Target Retirement 2025 Trust Select,Target Date Fund,Common/Collective Trust Fund
+863,Vanguard Target Retirement 2030 Trust Select,Vanguard,,Target Retirement 2030 Trust Select,Target Date Fund,Common/Collective Trust Fund
+871,Vanguard Target Retirement 2070 Trust Select,Vanguard,,Target Retirement 2070 Trust Select,Target Date Fund,Common/Collective Trust Fund
+872,2024 Term Fund,Unknown,,2024 Term Fund,,
+873,2025 Term Fund,Unknown,,2025 Term Fund,,
+881,2027 Term Fund,Invesco,,2027 Term Fund,,
+882,2028 Term Fund,Invesco,,2028 Term Fund,,
+883,Loomis Sayles Intermediate Gov/Credit Fund,Loomis Sayles,,Intermediate Government/Credit Fund,,
+891,2024 Term Fund,Other,,2024 Term Fund,,
+892,2025 Term Fund,Other,,2025 Term Fund,,
+893,2026 Term Fund,Other,,2026 Term Fund,,
+901,TIAA Traditional Benefit Responsive Annuity,TIAA,Unallocated Annuity Contracts,TIAA Traditional Benefit Responsive Annuity (Unallocated Annuity Contracts),,
+902,TIAA Real Estate Fund,TIAA,,TIAA Real Estate Fund,,
+903,TIAA-CREF Self Directed Account,TIAA-CREF,s,Self-Directed Account,Other,Self-Directed Brokerage Account
+911,CREF Social Choice Fund R3,TIAA,,CREF Social Choice Fund R3,,
+912,CREF Stock Fund R3,TIAA,,CREF Stock Fund R3,Common Stock,Mutual Fund
+913,CREF Social Choice Fund R4,TIAA,,CREF Social Choice Fund R4,,
+921,Vanguard Institutional Target Retirement 2025 Fund,Vanguard,,Institutional Target Retirement 2025 Fund,Target Date Fund,Mutual Fund
+922,Vanguard Institutional Target Retirement 2030 Fund,Vanguard,,Institutional Target Retirement 2030 Fund,Target Date Fund,Mutual Fund
+923,Vanguard Institutional Target Retirement 2035 Fund,Vanguard,,Institutional Target Retirement 2035 Fund,Target Date Fund,Mutual Fund
+931,Vanguard Institutional Target Retirement Income Fund,Vanguard,,Institutional Target Retirement Income Fund,Target Date Fund,Mutual Fund
+932,Vanguard Intermediate-Term Treasury Fund Investor Shares,Vanguard,,Intermediate-Term Treasury Fund Investor Shares,,
+933,Vanguard Mid-Cap Index Institutional,Vanguard,,Mid-Cap Index Fund Institutional Shares,Mutual Fund,Index Fund
+941,Fidelity Institutional Asset Management,Fidelity,,,,
+942,Fidelity Institutional Asset Management,Fidelity,,,,
+943,Fidelity Institutional Asset Management,Fidelity,,,,
+951,Fidelity Institutional Asset Management,Fidelity,,,,
+952,Fidelity Institutional Asset Management,Fidelity,,,,
+953,Columbia Contrarian,Columbia,,Columbia Contrarian,,
+961,TIAA Tra di ti ona l Annui ty Contra ct,TIAA,Non-Benefi t Res pons i ve,Traditional Annuity Contract - Non-Benefit Responsive,,
+962,TIAA Tra di ti ona l Annui ty Contra ct,TIAA,Benefi t Res pons i ve,Traditional Annuity Contract - Benefit Responsive,,
+963,TIAA Rea l Es ta te,TIAA,Pool ed Sepa ra te Account,Real Estate - Pooled Separate Account,Other,Real Estate
+971,CREF Soci a l Choi ce R3,TIAA,Regi s tered Inves tment Compa ny,CREF Social Choice Account R3,Other,Mutual Fund
+972,CREF Soci a l Choi ce R4,TIAA,Regi s tered Inves tment Compa ny,CREF Social Choice Account R4,Other,Mutual Fund
+973,CREF Stock R3,TIAA,Regi s tered Inves tment Compa ny,CREF Stock Account R3,Common Stock,Mutual Fund
+981,,,Regi s tered Inves tment Compa ny,Registered Investment Company,,
+982,TIAA-CREF Sel f Di rected Accounts,TIAA,Sel f-Di rected Accounts,Self-Directed Accounts,Other,Self-Directed Brokerage Account
+983,,,Interes t ra tes ra nge from 4.25% - 9.50%,Participant Loans,Mutual Fund,Other
+991,CREF Growth,TIAA,,CREF Growth,,
+992,CREF Social Choice,TIAA,,CREF Social Choice,,
+993,CREF Inflation-Linked Bond,TIAA,,CREF Inflation-Linked Bond,Corporate Bond,Other
+1001,Vanguard Total Bond Market  Institutional,Vanguard,Mutual Fund,Total Bond Market Index Fund Institutional Shares,Corporate Bond,Index Fund
+1002,Vanguard PRIMECAP Fund Admiral,Vanguard,Mutual Fund,PRIMECAP Fund Admiral Shares,,
+1003,Vanguard Russell 1000 Growth  Institutional Shares,Vanguard,Mutual Fund,Russell 1000 Growth Index Fund Institutional Shares,Mutual Fund,Index Fund
+1011,American Funds Bond Fund of America Class R-6,American Funds,Mutual Fund,Bond Fund of America Class R-6,Corporate Bond,Mutual Fund
+1012,Cohen & Steers Realty Shares Fund Class L,Cohen & Steers,Mutual Fund,Realty Shares Fund Class L,,
+1013,Vanguard High-Yield Corporate Fund Admiral,Vanguard,Mutual Fund,High-Yield Corporate Fund Admiral Shares,,
+1021,Transamerica - Large Value Opportunities Variable,Transamerica,Mutual Fund,Large Value Opportunities Variable,,
+1022,Transamerica - Large Growth,Transamerica,Mutual Fund,Large Growth,,
+1023,Transamerica - Large Core ESG,Transamerica,Mutual Fund,Large Core ESG,,
+1031,Transamerica - Asset Allocation Intermediate Horizon,Transamerica,Mutual Fund,Asset Allocation Intermediate Horizon,,
+1032,Mutual of New York - Large Value Opportunities,Mutual of New York,Mutual Fund,Large Value Opportunities,,
+1033,Transamerica - Partners Large Core,Transamerica,Mutual Fund,Partners Large Core,,
+1041,Vanguard Target Retirement 2055,Vanguard,Mutual Fund,Target Retirement 2055 Fund,Target Date Fund,Mutual Fund
+1042,Vanguard Target Retirement 2060,Vanguard,Mutual Fund,Target Retirement 2060 Fund,Target Date Fund,Mutual Fund
+1043,Vanguard Target Retirement 2050,Vanguard,Mutual Fund,Target Retirement 2050 Fund,Target Date Fund,Mutual Fund
+1051,Transamerica - Balanced II Variable,Transamerica,Mutual Fund,Balanced II Variable Fund,,
+1052,Transamerica - Partners High Yield Bond,Transamerica,Mutual Fund,Partners High Yield Bond Fund,Corporate Bond,Mutual Fund
+1053,Vanguard Target Retirement 2035,Vanguard,Mutual Fund,Target Retirement 2035 Fund,Target Date Fund,Mutual Fund
+1061,Medley PSF Stock Index Portfolio,Medley,Pooled Separate Account,PSF Stock Index Portfolio,Common Stock,Index Fund
+1062,Medley PSF Jennison Blend,Medley,Pooled Separate Account,PSF Jennison Blend Portfolio,,
+1063,Empower - Medley PSF Stock Index Portfolio,Medley,Pooled Separate Account,PSF Stock Index Portfolio,Common Stock,Index Fund
+1071,Medley PSF PGIM Government Money Market Portfolio,PGIM,Pooled Separate Account,Medley PSF PGIM Government Money Market Portfolio,,
+1072,Medley PSF PGIM Total Retirement Bond Portfolio,PGIM,Pooled Separate Account,Medley PSF PGIM Total Retirement Bond Portfolio,,
+1073,Medley PSF PGIM Government Income Portfolio,PGIM,Pooled Separate Account,Medley PSF PGIM Government Income Portfolio,,
+1081,TIAA-CREF,TIAA,,,,
+1082,TIAA-CREF,TIAA,,,,
+1083,TIAA-CREF,TIAA,,,,
+1093,,,,,Target Date Fund,Mutual Fund
+1094,,,,,Target Date Fund,Mutual Fund
+1095,,,,,Target Date Fund,Mutual Fund
+1101,Target Retirement Date Fund Post Retirement,Unknown,"8,429,610 shares",Target Retirement Date Fund Post Retirement,Target Date Fund,Mutual Fund
+1102,US Equity S&P 500,Unknown,"51,057,793 shares",US Equity S&P 500,Other,Index Fund
+1103,Diversified Real Asset Fund,Unknown,"894,605 shares",Diversified Real Asset Fund,,
+1111,BlackRock Extended Market Fund,BlackRock,"Collective Trust, 2,314,980 units",Extended Market Fund,,
+1112,BlackRock MSCI ACWI Equity Fund,BlackRock,"Collective Trust, 37,621,834 units",MSCI ACWI Equity Fund,,
+1113,State Street TIPS,State Street,"Collective Trust, 11,321,218 units",TIPS,,
+1121,Vanguard Explorer Fund,Vanguard,"3,863,570 shares",Explorer Fund,,
+1122,Vanguard High Yield Corp,Vanguard,"32,167,518 shares",High-Yield Corporate Fund,,
+1123,Fidelity Real Estate Index,Fidelity,"7,394,526 shares",Real Estate Index Fund,Real Estate,Index Fund
+1131,MFS Value Fund,MFS,"10,744,801 shares",MFS Value Fund,,
+1132,Fidelity Advisor Real Estate Income Fund,Fidelity,"6,146,849 shares",Fidelity Advisor Real Estate Income Fund,Real Estate,Mutual Fund
+1133,PIMCO Total Return ESG,PIMCO,"544,248 shares",PIMCO Total Return ESG Fund,,
+1141,The Lincoln National Life Insurance Company,Lincoln Financial,,,,
+1142,The Lincoln National Life Insurance Company,Lincoln Financial,,,,
+1143,The Lincoln National Life Insurance Company,Lincoln Financial,,,,
+1151,The Lincoln National Life Insurance Company,Lincoln Financial Group,,,,
+1152,The Lincoln National Life Insurance Company,Lincoln Financial Group,,,,
+1153,The Lincoln National Life Insurance Company,Lincoln Financial Group,,,,
+1161,The Lincoln National Life Insurance Company,Lincoln Financial,,,,
+1162,The Lincoln National Life Insurance Company,Lincoln Financial,,,,
+1163,The Lincoln National Life Insurance Company,Lincoln Financial,,,,
+1171,Fidelity Management Trust Company,Fidelity,,,,
+1172,Fidelity Management Trust Company,Fidelity,,,,
+1173,Fidelity Management Trust Company,Fidelity,,,,
+1181,Fidelity Management Trust Company,Fidelity,,,,
+1182,Fidelity Management Trust Company,Fidelity,,,,
+1183,Fidelity Management Trust Company,Fidelity,,,,
+1191,Fidelity Management Trust Company,Fidelity,,,,
+1192,Fidelity Management Trust Company,Fidelity,,,,
+1193,Fidelity Management Trust Company,Fidelity,,,,
+1201,Fidelity Management Trust Company,Fidelity,,,,
+1202,Fidelity Management Trust Company,Fidelity,,,,
+1203,Fidelity Management Trust Company,Fidelity,,,,
+1211,Fidelity Management Trust Company,Fidelity,,,,
+1212,Fidelity Management Trust Company,Fidelity,,,,
+1213,Fidelity Management Trust Company,Fidelity,,,,
+1221,Fidelity Management Trust Company,Fidelity,,,,
+1222,Fidelity Management Trust Company,Fidelity,,,,
+1223,Fidelity Management Trust Company,Fidelity,,,,
+1231,Fidelity Management Trust Company,Fidelity,,,,
+1232,Fidelity Management Trust Company,Fidelity,,,,
+1233,Fidelity Management Trust Company,Fidelity,,,,
+1241,Fidelity Management Trust Company,Fidelity,,,,
+1242,Fidelity Management Trust Company,Fidelity,,,,
+1243,Fidelity Management Trust Company,Fidelity,,,,
+1251,Fidelity Management Trust Company,Fidelity,,,,
+1252,Fidelity Management Trust Company,Fidelity,,,,
+1253,Fidelity Management Trust Company,Fidelity,,,,
+1261,Fidelity Management Trust Company,Fidelity,,,,
+1262,Fidelity Management Trust Company,Fidelity,,,,
+1263,Fidelity Management Trust Company,Fidelity,,,,
+1271,Fidelity Management Trust Company,Fidelity,,,,
+1272,Fidelity Management Trust Company,Fidelity,,,,
+1273,Fidelity Management Trust Company,Fidelity,,,,
+1281,Fidelity Management Trust Company,Fidelity,,,,
+1282,Fidelity Management Trust Company,Fidelity,,,,
+1283,Fidelity Management Trust Company,Fidelity,,,,
+1291,Fidelity Management Trust Company,Fidelity,,,,
+1292,Fidelity Management Trust Company,Fidelity,,,,
+1293,Fidelity Management Trust Company,Fidelity,,,,
+1301,Fidelity Management Trust Company,Fidelity,,,,
+1302,Fidelity Management Trust Company,Fidelity,,,,
+1303,Fidelity Management Trust Company,Fidelity,,,,
+1311,Fidelity Management Trust Company,Fidelity,,,,
+1312,Fidelity Management Trust Company,Fidelity,,,,
+1313,Fidelity Management Trust Company,Fidelity,,,,
+1321,Voya Retirement Insurance and Annuity Co,Voya,,,,
+1322,Voya Retirement Insurance and Annuity Co,Voya,,,,
+1323,Voya Retirement Insurance and Annuity Co,Voya,,,,
+1331,Voya Retirement Insurance and Annuity Co,Voya,,,,
+1332,Voya Retirement Insurance and Annuity Co,Voya,,,,
+1333,Voya Retirement Insurance and Annuity Co,Voya,,,,
+1341,Voya Retirement Insurance and Annuity Co,Voya,,,,
+1342,Voya Retirement Insurance and Annuity Co,Voya,,,,
+1343,Voya Retirement Insurance and Annuity Co,Voya,,,,
+1353,Voya Retirement Insurance and Annuity Co,Voya,,Retirement Insurance and Annuity Contract,,
+1354,Voya Retirement Insurance and Annuity Co,Voya,,Retirement Insurance and Annuity Contract,,
+1355,Voya Retirement Insurance and Annuity Co,Voya,,Retirement Insurance and Annuity Contract,,
+1361,VALIC CORE BOND FUND A,VALIC,,Core Bond Fund Class A,Corporate Bond,Mutual Fund
+1362,VALIC DIVIDEND VALUE A,VALIC,,Dividend Value Fund Class A,Other,Mutual Fund
+1363,VALIC GLOBAL REAL ESTATE FUND A,VALIC,,Global Real Estate Fund Class A,Real Estate,Mutual Fund
+1371,VALIC INTERNATL EQUITIES INDEX FUND A,VALIC,,International Equities Index Fund Class A,Mutual Fund,Index Fund
+1372,VALIC INTL OPPORTUNITIES A,VALIC,,International Opportunities Fund Class A,Other,Mutual Fund
+1373,VALIC INTL SOCIALLY RESPONSIBLE FUND A,VALIC,,International Socially Responsible Fund Class A,,
+1381,VALIC SMALL CAP GROWTH FUND A,VALIC,,Small Cap Growth Fund Class A,,
+1382,VALIC SMALL CAP INDEX FUND A,VALIC,,Small Cap Index Fund Class A,Mutual Fund,Index Fund
+1383,VALIC SMALL CAP SPECIAL VALUE FUND A,VALIC,,Small Cap Special Value Fund Class A,,
+1391,American Funds TRGTDT 2010 R6,American Funds,,Target Date 2010 Fund Class R6,,
+1392,American Funds TRGTDT 2015 R6,American Funds,,Target Date 2015 Fund Class R6,,
+1393,American Funds TRGTDT 2020 R6,American Funds,,Target Date 2020 Fund Class R6,,
+1401,American Funds TRGTDT 2060 R6,American Funds,,Target Date 2060 Fund Class R6,,
+1402,American Funds TRGTDT 2065 R6,American Funds,,Target Date 2065 Fund Class R6,,
+1403,DFA Global Real Estate SEC I,DFA,,Global Real Estate Securities Fund Institutional Class,Real Estate,Mutual Fund
+1411,Vanguard INST Extended MKT IDX,Vanguard,,Extended Market Index Fund Institutional Shares,Mutual Fund,Index Fund
+1412,Vanguard INSTL TOT INTL STK MKT,Vanguard,,Total International Stock Market Index Fund Institutional Shares,Mutual Fund,Index Fund
+1413,Vanguard INSTL TOT STK MKT,Vanguard,,Total Stock Market Index Fund Institutional Shares,Mutual Fund,Index Fund
+1421,SSGA G STIFF ERISA Qualified,State Street Global Advisors,,G STIFF ERISA Qualified,Other,Common/Collective Trust Fund
+1422,State Street Bank and Trust Company,State Street,,,,
+1423,T. Rowe Price Cash Reserves Trust,T. Rowe Price,,Cash Reserves Trust,Other,Money Market Fund
+1431,CREF Global Equities R4 College Retirement Equities Fund variable annuities,TIAA-CREF,,CREF Global Equities Account R4 (College Retirement Equities Fund variable annuities),,
+1432,CREF Growth R3 College Retirement Equities Fund variable annuities,TIAA-CREF,,CREF Growth Account R3 (College Retirement Equities Fund variable annuities),,
+1433,CREF Inflation-Linked Bond R3 College Retirement Equities Fund variable annuities,TIAA-CREF,,CREF Inflation-Linked Bond Account R3 (College Retirement Equities Fund variable annuities),Corporate Bond,Mutual Fund
+1441,Nuveen Internatl Eq Idx R6 Nuveen s,Nuveen,,Nuveen International Equity Index Fund R6,Other,Index Fund
+1442,Nuveen Large Cap Resp Eq R6 Nuveen s,Nuveen,,Nuveen Large Cap Responsible Equity Fund R6,Other,Mutual Fund
+1443,American Funds New World R6,American Funds,,New World Fund Class R6,,
+1451,Vanguard Infl Protect Sec Inst Vanguard sponsored s,Vanguard,,Inflation-Protected Securities Fund Institutional Shares,,
+1452,Vanguard Inst Idx Inst Plus Vanguard sponsored s,Vanguard,,Institutional Index Fund Institutional Plus Shares,Mutual Fund,Index Fund
+1453,Vanguard Intl Growth Adm Vanguard sponsored s,Vanguard,,International Growth Fund Admiral Shares,,
+1461,Vanguard Target Retire 2035 Vanguard sponsored s,Vanguard,,Target Retirement 2035 Fund,Target Date Fund,Mutual Fund
+1462,Vanguard Target Retire 2040 Vanguard sponsored s,Vanguard,,Target Retirement 2040 Fund,Target Date Fund,Mutual Fund
+1463,Vanguard Target Retire 2045 Vanguard sponsored s,Vanguard,,Target Retirement 2045 Fund,Target Date Fund,Mutual Fund
+1471,Vanguard Ttl Bd Mkt Idx InstPl Vanguard sponsored s,Vanguard,,Total Bond Market Index Fund Institutional Plus Shares,Mutual Fund,Index Fund
+1472,Vanguard Wellington Adm Vanguard sponsored s,Vanguard,,Wellington Fund Admiral Shares,,
+1473,"Notes Receivable From Participant Loan Fund, various maturity dates through 2034,",Notes Receivable From Participant,,Participant Loans (various maturity dates through 2034),Mutual Fund,Other
+1481,Vanguard Target Inc.,Vanguard,Registered Investment Company,Target Retirement Income Fund,Target Date Fund,Mutual Fund
+1482,Vanguard Target 2020,Vanguard,Registered Investment Company,Target Retirement 2020 Fund,Target Date Fund,Mutual Fund
+1483,Vanguard Target 2025,Vanguard,Registered Investment Company,Target Retirement 2025 Fund,Target Date Fund,Mutual Fund
+1491,Vanguard Target 2065,Vanguard,Registered Investment Company,Target Retirement 2065 Fund,Target Date Fund,Mutual Fund
+1492,Vanguard Target 2070,Vanguard,Registered Investment Company,Target Retirement 2070 Fund,Target Date Fund,Mutual Fund
+1493,Vanguard Total Bond,Vanguard,Registered Investment Company,Total Bond Market Index Fund,Corporate Bond,Index Fund
+1501,TIAA SRA Contracts,TIAA,Insurance contracts,SRA Contracts,,
+1502,TIAA GRA Contracts,TIAA,Insurance contracts,GRA Contracts,,
+1503,TIAA Retirement Choice Contracts,TIAA,Insurance contracts,Retirement Choice Contracts,,
+1511,BlackRock Mid Cap Growth Eq K,BlackRock,Registered investment companies,Mid Cap Growth Equity Fund Class K,,
+1512,CREF Core Bond R3,TIAA,Registered investment companies,CREF Core Bond Fund Class R3,Corporate Bond,Mutual Fund
+1513,CREF Equity Index R3,TIAA,Registered investment companies,CREF Equity Index Fund Class R3,Other,Index Fund
+1521,Loomis Sayles Sm Cap Growth N,Loomis Sayles,Registered investment companies,Small Cap Growth Fund Class N,Other,Mutual Fund
+1522,MFS Intl Diversification Cl R6,MFS,Registered investment companies,International Diversification Fund Class R6,Other,Mutual Fund
+1523,MFS Mid Cap Value Class R6,MFS,Registered investment companies,Mid Cap Value Fund Class R6,Other,Mutual Fund
+1531,Vanguard Inst Idx Inst Plus,Vanguard,Registered investment companies,Institutional Index Fund Institutional Plus Shares,Mutual Fund,Index Fund
+1532,Vanguard Long-Trm Bd Idx Inst,Vanguard,Registered investment companies,Long-Term Bond Index Fund Institutional Shares,Mutual Fund,Index Fund
+1533,Vanguard Mid-Cap Grw Idx Adm,Vanguard,Registered investment companies,Mid-Cap Growth Index Fund Admiral Shares,Mutual Fund,Index Fund
+1541,Vanguard Small-Cap Val Idx Inst,Vanguard,Registered investment companies,Small-Cap Value Index Fund Institutional Shares,Mutual Fund,Index Fund
+1542,Vanguard Target Retire 2020,Vanguard,Registered investment companies,Target Retirement 2020 Fund,Target Date Fund,Mutual Fund
+1543,Vanguard Target Retire 2025,Vanguard,Registered investment companies,Target Retirement 2025 Fund,Target Date Fund,Mutual Fund
+1551,Vanguard Target Retire 2065,Vanguard,Registered investment companies,Target Retirement 2065 Fund,Target Date Fund,Mutual Fund
+1552,Vanguard Target Retire 2070,Vanguard,Registered investment companies,Target Retirement 2070 Fund,Target Date Fund,Mutual Fund
+1553,Vanguard Target Retire Income,Vanguard,Registered investment companies,Target Retirement Income Fund,Target Date Fund,Mutual Fund
+1561,VALIC Amer Beacon Brdwy Lrg Cp Grw I,VALIC,Registered investment companies,Amer Beacon Broadway Large Cap Growth Fund Class I,Other,Mutual Fund
+1562,VALIC Ariel Appreciation Fund,VALIC,Registered investment companies,Ariel Appreciation Fund,,
+1563,VALIC Ariel Fund,VALIC,Registered investment companies,Ariel Fund,,
+1571,VALIC Growth Fund,VALIC,Registered investment companies,VALIC Growth Fund,,
+1572,VALIC GS Vit Gov Money Mkt Fd Inst,VALIC,Registered investment companies,VALIC GS Vit Government Money Market Fund Institutional,Other,Money Market Fund
+1573,VALIC High Yield Bond Fund,VALIC,Registered investment companies,VALIC High Yield Bond Fund,Corporate Bond,Mutual Fund
+1581,VALIC Large Capital Growth,VALIC,Registered investment companies,Large Capital Growth Fund,Other,Mutual Fund
+1582,VALIC Loan Escrow Fund,VALIC,Registered investment companies,Loan Escrow Fund,,
+1583,VALIC Mid Cap,VALIC,Registered investment companies,Mid Cap Fund,Other,Mutual Fund
+1591,VALIC Small Cap Special Value Fund,VALIC,Registered investment companies,Small Cap Special Value Fund,,
+1592,VALIC Small Cap Value Fund,VALIC,Registered investment companies,Small Cap Value Fund,,
+1593,VALIC Stock,VALIC,Registered investment companies,VALIC Stock,,
+1601,VALIC Vanguard Long-Term Treasury,VALIC,Registered investment companies,Vanguard Long-Term Treasury Fund,,
+1602,VALIC Vanguard Lt Inv-Grade Fund,VALIC,Registered investment companies,Vanguard Long-Term Investment-Grade Fund,,
+1603,VALIC Vanguard Wellington Fund Inc,VALIC,Registered investment companies,Vanguard Wellington Fund,,
+1611,American Funds Fundamental Investors Fund,American Funds,Mutual Fund,Fundamental Investors Fund,,
+1612,American Funds Income Fund of America Fund,American Funds,Mutual Fund,Income Fund of America Fund,,
+1613,American Funds New Perspective Fund,American Funds,Mutual Fund,New Perspective Fund,,
+1621,Dodge & Cox International Stock Fund,Dodge & Cox,Mutual Fund,Dodge & Cox International Stock Fund,Common Stock,Mutual Fund
+1622,Invesco Comstock Fund,Invesco,Mutual Fund,Invesco Comstock Fund,Common Stock,Mutual Fund
+1623,Lord Abbett Total Return Fund,Lord Abbett,Mutual Fund,Lord Abbett Total Return Fund,,
+1631,Vanguard Total Bond Market,Vanguard,Mutual Fund,Total Bond Market Fund,Corporate Bond,Mutual Fund
+1632,American Funds Europacific Growth Fund,American Funds,Pooled Separate Account,EuroPacific Growth Fund,,
+1633,Blackrock Equity Dividend Fund,BlackRock,Pooled Separate Account,Equity Dividend Fund,,
+1641,Wellington Dividend Growth Fund,Wellington Management,Pooled Separate Account,Wellington Dividend Growth Fund,,
+1642,Wellington Growth Opportunities Fund,Wellington Management,Pooled Separate Account,Wellington Growth Opportunities Fund,,
+1643,T. Rowe Price Blue Chip Growth Trust Fund,T. Rowe Price,Collective Investment Trust,Blue Chip Growth Trust Fund,Mutual Fund,Common/Collective Trust Fund
+1651,TIAA and CREF CREF Growth Account N/R,TIAA,,CREF Growth Account,,
+1652,TIAA and CREF CREF Inflation-Linked Bond Account N/R,TIAA,,CREF Inflation-Linked Bond Account,Corporate Bond,Other
+1653,TIAA and CREF CREF Money Market Account N/R,TIAA,,CREF Money Market Account,,
+1661,Vanguard Fiduciary Trust Company Vanguard FTSE Social Idx Inst N/R,Vanguard,,FTSE Social Index Fund Institutional Shares,Mutual Fund,Index Fund
+1662,Vanguard Fiduciary Trust Company Vanguard Global Equity Inv N/R,Vanguard,,Global Equity Fund Investor Shares,,
+1663,Vanguard Fiduciary Trust Company Vanguard Inflation Prot Sec Inst N/R,Vanguard,,Inflation-Protected Securities Fund Institutional Shares,,
+1671,Vanguard Fiduciary Trust Company Vanguard Inst Tgt Retirement 2045 N/R,Vanguard,,Institutional Target Retirement 2045 Fund,,
+1672,Vanguard Fiduciary Trust Company Vanguard Inst Tgt Retirement 2050 N/R,Vanguard,,Institutional Target Retirement 2050 Fund,,
+1673,Vanguard Fiduciary Trust Company Vanguard Inst Tgt Retirement 2055 N/R,Vanguard,,Institutional Target Retirement 2055 Fund,,
+1681,Loans receivable from participants 2034 0,Loans Receivable From Participants,,Participant Loans Receivable,,
+1682,TIAA and CREF TIAA Traditional Benefit-Responsive N/R,TIAA,,TIAA Traditional Benefit-Responsive,,
+1683,TIAA and CREF TIAA Traditional Non-Benefit- N/R,TIAA,,TIAA Traditional Non-Benefit-Responsive,,
+1691,TIAA and CREF CREF Stock Account N/R,TIAA-CREF,,CREF Stock Account,,
+1692,TIAA and CREF TIAA Real Estate Account N/R,TIAA-CREF,,TIAA Real Estate Account,,
+1693,PGIM Jennison Fund PGIM Jennison Small Company N/R,PGIM,,PGIM Jennison Small Company Fund,,
+1701,Vanguard Fiduciary Trust Company Vanguard Int'l Growth Adm N/R,Vanguard,,International Growth Fund Admiral Shares,,
+1702,Vanguard Fiduciary Trust Company Vanguard Inst Tgt Retirement 2020 N/R,Vanguard,,Institutional Target Retirement 2020 Fund,,
+1703,Vanguard Fiduciary Trust Company Vanguard Inst Tgt Retirement 2025 N/R,Vanguard,,Institutional Target Retirement 2025 Fund,,
+1711,Vanguard Fiduciary Trust Company Vanguard Inst Tgt Retirement 2065 N/R,Vanguard,,Institutional Target Retirement 2065 Fund,,
+1712,Vanguard Fiduciary Trust Company Vanguard Inst Tgt Retirement 2070 N/R,Vanguard,,Institutional Target Retirement 2070 Fund,,
+1713,Vanguard Fiduciary Trust Company Vanguard Inst Tgt Retirement Income N/R,Vanguard,,Institutional Target Retirement Income Fund,,
+1721,"October 15,",October 15,,October 15,,
+1722,50% Artisan / 50%BNY Mellon International Option,Artisan / BNY Mellon,,50% Artisan / 50% BNY Mellon International Option,,
+1723,50% Champlain / 50% Diamond Hill Small Cap Option,Champlain / Diamond Hill,,50% Champlain / 50% Diamond Hill Small Cap Option,,
+1731,Medley PSF Global Portfolio,Medley,,PSF Global Portfolio,,
+1732,Medley PSF Govt Income Portfolio,Medley,,PSF Government Income Portfolio,,
+1733,Medley PSF PGIM 50/50 Balanced Portfolio,Medley,,PSF PGIM 50/50 Balanced Portfolio,,
+1741,Transamerica Partners Short-Term Bond Account*,Transamerica,,Transamerica Partners Short-Term Bond Account,,
+1742,Transamerica Partners Small Cap Growth Account*,Transamerica,,Transamerica Partners Small Cap Growth Account,,
+1743,Transamerica Partners Small Cap Value Account*,Transamerica,,Transamerica Partners Small Cap Value Account,,
+1751,Vanguard Institutional Target Retirement 2040,Vanguard,,Institutional Target Retirement 2040 Fund,Target Date Fund,Mutual Fund
+1752,Vanguard Institutional Target Retirement 2045,Vanguard,,Institutional Target Retirement 2045 Fund,Target Date Fund,Mutual Fund
+1753,Vanguard Institutional Target Retirement 2050,Vanguard,,Institutional Target Retirement 2050 Fund,Target Date Fund,Mutual Fund
+1761,Lincoln Ab Vps Sust Global Thematic Port*,AllianceBernstein,,Lincoln AB VPS Sustainable Global Thematic Portfolio,Other,Mutual Fund
+1762,Lincoln American Funds Global Growth*,American Funds,,Lincoln American Funds Global Growth,,
+1763,Lincoln American Funds Growth Fund*,American Funds,,Lincoln American Funds Growth Fund,,
+1771,Lincoln Fidelityvip Freedom Target2035*,Fidelity,,Lincoln Fidelity VIP Freedom Target 2035 Fund,,
+1772,Lincoln Fidelityvip Freedom Target2045*,Fidelity,,Lincoln Fidelity VIP Freedom Target 2045 Fund,,
+1773,Lincoln Janus Henderson Glb Research*,Janus Henderson,,Lincoln Janus Henderson Global Research Fund,Other,Mutual Fund
+1781,Lincoln LVIP Br Inflation Protected*,Lincoln,,LVIP Br Inflation Protected,Other,Mutual Fund
+1782,Lincoln LVIP Dimensional Us Core Eqty1*,Lincoln,,LVIP Dimensional US Core Equity 1,Other,Mutual Fund
+1783,Lincoln LVIP FT Emerging MKT EQ Fund*,Lincoln,,LVIP FT Emerging Market Equity Fund,,
+1791,Lincoln LVIP Macquire Divers Floating Rate Fund*,Lincoln,,LVIP Macquarie Diversified Floating Rate Fund,,
+1792,Lincoln LVIP Macquire High Yield Fund*,Lincoln,,LVIP Macquarie High Yield Fund,,
+1793,Lincoln LVIP Macquire Smid Cap Core Fund*,Lincoln,,LVIP Macquarie SMID Cap Core Fund,,
+1801,Lincoln LVIP Ssga International Index*,SSGA,,Lincoln LVIP SSGA International Index,Other,Index Fund
+1802,Lincoln LVIP Ssga International Mgdvlt*,SSGA,,Lincoln LVIP SSGA International Managed Volatility,,
+1803,Lincoln LVIP Ssga S&P 500 Index*,SSGA,,Lincoln LVIP SSGA S&P 500 Index,Other,Index Fund
+1811,Lincoln Nb Amt Sustainable Eq Port*,Lincoln,,NB AMT Sustainable Equity Portfolio,,
+1812,Lincoln T. Rowe Price Int’L Stock*,Lincoln,,T. Rowe Price International Stock,Common Stock,Other
+1813,Transamerica Large Value Opportunities Variable*,Transamerica,,Large Value Opportunities Variable,,
+1821,Transamerica Financial Life Insurance Co. Fixed Fund*,Transamerica,,Financial Life Insurance Co. Fixed Fund,,
+1822,Transamerica Financial Life Insurance Co. Government Fixed Fund*,Transamerica,,Financial Life Insurance Co. Government Fixed Fund,,
+1823,Brighthouse BH/Wellington Balanced*,Brighthouse,,BH/Wellington Balanced,Other,Mutual Fund
+1831,Brighthouse Fid VIP Mid Cap Port SC 2*,Brighthouse Financial,,Fidelity VIP Mid Cap Portfolio Service Class 2,Other,Mutual Fund
+1832,Brighthouse Fidelity ContraFund – SC2*,Brighthouse Financial,,Fidelity ContraFund Service Class 2,,
+1833,Brighthouse Fidelity High Inc Port IC*,Brighthouse Financial,,Fidelity High Income Portfolio Initial Class,,
+1841,Brighthouse MFS Research International*,Brighthouse,,MFS Research International,Other,Mutual Fund
+1842,Brighthouse T. Rowe Price Large Cap Gro Port*,Brighthouse,,T. Rowe Price Large Cap Growth Portfolio,Other,Mutual Fund
+1843,Brighthouse T. Rowe Price Small CapGr*,Brighthouse,,T. Rowe Price Small Cap Growth Portfolio,Other,Mutual Fund
+1851,MetLife BH/WELLCREQIOPPR*,MetLife,,BH/WELLCREQIOPPR,,
+1852,MetLife BlackRock Bond Income*,BlackRock,,Bond Income,,
+1853,MetLife Fix Int Acct*,MetLife,,Fixed Interest Account,,
+1861,MetLife Wstrn Asst Mgt Strag Bd*,MetLife,,Western Asset Management Strategic Bond,,
+1862,Transamerica Financial Life Insurance Company Stable Fund*,Transamerica,,Stable Fund,Mutual Fund,Other
+1863,Fidelity VIP Govt Money Market Premier,Fidelity,,VIP Government Money Market Premier,,
+1871,Black Rock Russell 2000,BlackRock,,Russell 2000 Index Fund,Other,Index Fund
+1872,Fidelity Managed Income Portfolio II,Fidelity,,Managed Income Portfolio II,,
+1873,Spartan 500 Index Pool Class E,Fidelity,,Spartan 500 Index Pool Class E,Other,Index Fund
+1881,Vanguard Target Retirement 2050 Trust Flex,Vanguard,,Target Retirement 2050 Trust Flex,Target Date Fund,Common/Collective Trust Fund
+1882,Vanguard Target Retirement 2055 Trust Flex,Vanguard,,Target Retirement 2055 Trust Flex,Target Date Fund,Common/Collective Trust Fund
+1883,Vanguard Target Retirement 2060 Trust Flex,Vanguard,,Target Retirement 2060 Trust Flex,Target Date Fund,Common/Collective Trust Fund
+1891,Fidelity Real Estate,Fidelity,,Fidelity Real Estate,,
+1892,JPMorgan High Yield Bond Fund,JPMorgan,,High Yield Bond Fund,Corporate Bond,Mutual Fund
+1893,Meridian Growth Fund,Meridian,,Meridian Growth Fund,,
+1901,Vanguard PrimeCap Core Fund,Vanguard,,PrimeCap Core Fund,,
+1902,Fidelity Treasury Portfolio,Fidelity,,Treasury Portfolio,,
+1903,Pimco Total Return Fund,PIMCO,,Total Return Fund,,
+1911,Vanguard REIT,Vanguard,,REIT Index Fund,Mutual Fund,Index Fund
+1912,Vanguard Emerging Markets Fund,Vanguard,,Emerging Markets Stock Index Fund,Mutual Fund,Index Fund
+1913,Vanguard Inflation-Protected Securities,Vanguard,,Inflation-Protected Securities Fund,,
+1921,Vanguard Bond,Vanguard,,Bond,,
+1922,Vanguard Instl,Vanguard,,Institutional,,
+1923,Vanguard Total International Stock,Vanguard,,Total International Stock,Common Stock,Index Fund
+1931,Vanguard Target 2055 Fund,Vanguard,,Target Retirement 2055 Fund,Target Date Fund,Mutual Fund
+1932,Vanguard Target 2060 Fund,Vanguard,,Target Retirement 2060 Fund,Target Date Fund,Mutual Fund
+1933,Vanguard Target 2065 Fund,Vanguard,,Target Retirement 2065 Fund,Target Date Fund,Mutual Fund
+1942,VANGUARD TARGET RET INCOME TR,Vanguard,COMMON / COLLECTIVE TRUSTS,Target Retirement Income Trust,,
+1943,VANGUARD TL INTL STK MKT INDEX,Vanguard,COMMON / COLLECTIVE TRUSTS,Total International Stock Market Index Trust,,
+1944,VANGUARD TR INCOME & GROWTH TR,Vanguard,COMMON / COLLECTIVE TRUSTS,Income & Growth Trust,,
+1951,VANGUARD MIDCAP INDEX CL IP,Vanguard,MUTUAL FUNDS,Mid-Cap Index Fund Institutional Plus Shares,Mutual Fund,Index Fund
+1952,VANGUARD REIT INDEX FD CL INST,Vanguard,MUTUAL FUNDS,REIT Index Fund Institutional Shares,Mutual Fund,Index Fund
+1953,VANGUARD SMALL-CAP INDEX INST,Vanguard,MUTUAL FUNDS,Small-Cap Index Fund Institutional Shares,Mutual Fund,Index Fund
+1961,"VANGUARD INSTL 500 INDEX TRUST COMMON / COLLECTIVE TRUSTS 3,651,699,692",Vanguard,,Institutional 500 Index Trust,,
+1962,"VANGUARD INSTL TL BOND INDEX COMMON / COLLECTIVE TRUSTS 840,531,172",Vanguard,,Institutional Total Bond Index Trust,,
+1963,"VANGUARD TARGET RET 2020 TRUST COMMON / COLLECTIVE TRUSTS 144,138,241",Vanguard,,Target Retirement 2020 Trust,,
+1971,"VANGUARD TARGET RET 2060 TRUST COMMON / COLLECTIVE TRUSTS 414,296,639",Vanguard,,Target Retirement 2060 Trust,,
+1972,"VANGUARD TARGET RET 2065 TRUST COMMON / COLLECTIVE TRUSTS 145,105,787",Vanguard,,Target Retirement 2065 Trust,,
+1973,"VANGUARD TARGET RET 2070 TRUST COMMON / COLLECTIVE TRUSTS 20,631,721",Vanguard,,Target Retirement 2070 Trust,,
+1981,Vanguard Value Fund,Vanguard,,Vanguard Value Fund,,
+1982,Vanguard Federal +C60,Vanguard,,Vanguard Federal,,
+1983,Self Directed Brokerage Accounts,Self-Directed Brokerage Account,,Self Directed Brokerage Accounts,,
+1991,Vanguard Target 2020 Fund,Vanguard,,Target 2020 Fund,Target Date Fund,Mutual Fund
+1992,Vanguard Target 2025 Fund,Vanguard,,Target 2025 Fund,Target Date Fund,Mutual Fund
+1993,Vanguard Target 2030 Fund,Vanguard,,Target 2030 Fund,Target Date Fund,Mutual Fund
+2001,Vanguard Target 2070 Fund,Vanguard,,Target 2070 Fund,Target Date Fund,Mutual Fund
+2002,Vanguard Target Date Income,Vanguard,,Target Date Income Fund,Target Date Fund,Mutual Fund
+2003,Vanguard Target Retirement Income & Growth,Vanguard,,Target Retirement Income & Growth Fund,Target Date Fund,Mutual Fund
+2011,VANGUARD TR INCOME & GROWTH TR,Vanguard,COMMON / COLLECTIVE TRUSTS,Income & Growth Trust,,
+2012,LOAN FUND,Loan Fund,LOANS,Participant Loans,Mutual Fund,Other
+2013,VANGUARD FEDERAL MONEY MKT INV,Vanguard,MONEY MARKET,Federal Money Market Fund Investor Shares,,
+2021,VANGUARD US TREASURY MON,Vanguard,MUTUAL FUNDS,U.S. Treasury Money Market Fund,Mutual Fund,Money Market Fund
+2022,VANGUARD VALUE INDEX FD INSTL,Vanguard,MUTUAL FUNDS,Value Index Fund Institutional,Mutual Fund,Index Fund
+2023,SELF-DIRECT ACCT,Self-Directed Brokerage Account,OTHER ASSETS,Self-Directed Account,Other,Self-Directed Brokerage Account
+2031,"VANGUARD TARGET RET 2025 TRUST COMMON / COLLECTIVE TRUSTS 191,303,942",Vanguard,,Target Retirement 2025 Trust,,
+2032,"VANGUARD TARGET RET 2030 TRUST COMMON / COLLECTIVE TRUSTS 583,136,963",Vanguard,,Target Retirement 2030 Trust,,
+2033,"VANGUARD TARGET RET 2035 TRUST COMMON / COLLECTIVE TRUSTS 475,390,752",Vanguard,,Target Retirement 2035 Trust,,
+2041,Schwab 401(k) Equity Unit Fund,Schwab,,401(k) Equity Unit Fund,,
+2042,Schwab Employee Stock Option Plan Equity Unit Fund,Schwab,,Employee Stock Option Plan Equity Unit Fund,,
+2043,Schwab Ameritrade Converted Equity Unit Fund,Schwab,,Ameritrade Converted Equity Unit Fund,,
+2051,Schwab Fundamental International Small Equity,Schwab,,Fundamental International Small Company Index Fund,Mutual Fund,Index Fund
+2053,VANGUARD TRSY MONEY MKT INVSTR,Vanguard,Money Market / Cash Equivalent,Treasury Money Market Fund Investor Shares,,
+2054,FIDELITY SMALL CAP INDEX,Fidelity,Registered Investment Company,Small Cap Index Fund,Mutual Fund,Index Fund

@@ -77,19 +77,50 @@ def _normalize_for_manager_check(text):
     t = _re.sub(r"\s+(inc\.?|llc\.?|corp\.?|group|company|co\.?)$", "", t).strip()
     return t
 
+_GENERIC_CATEGORIES = frozenset({
+    "registered investment company", "pooled separate account",
+    "insurance general account", "group annuity contract",
+    "stable value fund", "self-directed accounts",
+    "self-directed brokerage account", "participant loan fund",
+    "common collective trust", "collective investment trust",
+    "separate account", "general account", "annuity contract",
+    "variable annuity", "fixed annuity", "bank collective fund",
+    "guaranteed investment contract", "gic", "brokerage account",
+    "mutual fund", "money market", "common stock", "reit",
+    "foreign currency", "employer securities",
+})
+
+_SHARE_CLASS_STRONG_RE = _re.compile(
+    r"(r[1-6]|institutional(?:\s+(?:plus|shares?))?|investor\s+shares?|"
+    r"admiral\s+shares?|signal\s+shares?|class\s+[a-z]|i\s*shares?|etf)",
+    _re.IGNORECASE,
+)
+
 def _score_as_fund_name(text):
     if not text or not text.strip():
         return -999
     t = text.strip().lower()
-    words = set(_re.findall(r"\w+", t))
+    # Collapse internal spaces (PDF extraction can add spaces mid-word)
+    t_collapsed = _re.sub(r"\s+", " ", t)
+    t_nospace = t_collapsed.replace(" ", "")
+    # Generic investment category label — strongly penalise
+    if t_collapsed in _GENERIC_CATEGORIES:
+        return -50
+    for cat in _GENERIC_CATEGORIES:
+        if cat.replace(" ", "") == t_nospace:
+            return -50
+    words = set(_re.findall(r"\w+", t))
     score = 0
     score += len(words & _FUND_KEYWORDS) * 3
     score -= len(words & _MANAGER_KEYWORDS) * 4
-    # Check exact match and normalized match against known managers
     if t in _KNOWN_MANAGERS or _normalize_for_manager_check(t) in _KNOWN_MANAGERS:
         score -= 20
-    if _SHARE_CLASS_RE.search(text):
+    if _SHARE_CLASS_STRONG_RE.search(text):
+        score += 15
+    elif _SHARE_CLASS_RE.search(text):
         score += 10
+    if _re.search(r"20[2-9]\d", text):
+        score += 20
     word_count = len(text.split())
     if 3 <= word_count <= 12:
         score += 2

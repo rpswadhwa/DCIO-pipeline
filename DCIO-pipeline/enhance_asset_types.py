@@ -3,70 +3,20 @@ Enhancement script to populate missing asset_type fields
 """
 import sqlite3
 import re
+import sys
+import os
 from pathlib import Path
+
+# Import shared patterns — works whether run standalone or as part of the package
+try:
+    from src.asset_type_patterns import detect_asset_type
+except ImportError:
+    sys.path.insert(0, os.path.dirname(__file__))
+    from asset_type_patterns import detect_asset_type
 
 
 def infer_asset_type(issuer, description):
-    """
-    Infer asset type from issuer name and description
-    
-    Returns:
-        Asset type string or None if cannot be determined
-    """
-    # Combine issuer and description for pattern matching
-    combined = f"{issuer} {description}".lower()
-    
-    # Asset type patterns (ordered by specificity)
-    patterns = [
-        # Specific patterns first
-        (r'collective trust fund|common/collective trust', 'Common/Collective Trust Fund'),
-        (r'self[-\s]?directed brokerage', 'Self-Directed Brokerage Account'),
-        (r'separately managed account|sma\b', 'Separately Managed Account'),
-        (r'commingled fund', 'Commingled Fund'),
-        (r'stable value fund', 'Stable Value Fund'),
-        (r'money market fund|mm fund|federal mm', 'Money Market Fund'),
-        
-        # Mutual fund patterns
-        (r'mutual fund|index fund|target retirement|target date', 'Mutual Fund'),
-        (r'income fund|growth fund|value fund|blend fund', 'Mutual Fund'),
-        (r'bond fund|equity fund|balanced fund', 'Mutual Fund'),
-        
-        # Stock patterns
-        (r'company stock fund|employer stock', 'Common Stock'),
-        (r'\bstock\b.*\bfund\b', 'Common Stock'),
-        (r'common stock', 'Common Stock'),
-        (r'preferred stock', 'Preferred Stock'),
-        
-        # Other patterns
-        (r'participant loan|notes receivable from participants', 'Participant Loan'),
-        (r'brokerage account|brokerge account', 'Self-Directed Brokerage Account'),
-        (r'partnership interest', 'Partnership Interest'),
-        (r'etf\b|exchange traded', 'ETF'),
-        (r'currency', 'Currency'),
-        (r'wrapper|wrap contract', 'Other'),
-    ]
-    
-    for pattern, asset_type in patterns:
-        if re.search(pattern, combined, re.IGNORECASE):
-            return asset_type
-    
-    # Additional heuristics for fund companies
-    # If issuer contains known fund companies and no asset type matched
-    fund_companies = ['vanguard', 'fidelity', 'pimco', 'blackrock', 'ssga', 
-                      'nuveen', 'metropolitan west', 'metwest', 'jpmorgan',
-                      'american funds', 't. rowe', 'spdr', 'ishares', 
-                      'earnest partners', 'dimensional', 'dodge cox']
-    
-    if any(company in combined for company in fund_companies):
-        # Default to mutual fund for known fund companies
-        return 'Mutual Fund'
-    
-    # Fallback: if description contains "fund" and we haven't classified it yet
-    # it's likely a mutual fund or investment fund
-    if re.search(r'\bfund\b', description.lower()):
-        return 'Mutual Fund'
-    
-    return None
+    return detect_asset_type(f"{description} {issuer}")
 
 
 def enhance_asset_types(db_path, verbose=True):

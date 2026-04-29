@@ -121,7 +121,37 @@ print("\n[STEP 5] Updating database with cleaned data...")
 with sqlite3.connect(db_path) as conn:
     cur = conn.cursor()
 
-    # Add fund_name column if it doesn't exist yet
+    # Create tables if they don't exist (handles fresh DB)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS plans (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sponsor_ein TEXT,
+            plan_name TEXT,
+            plan_number TEXT,
+            sponsor TEXT,
+            plan_year INTEGER,
+            source_pdf TEXT
+        )
+    """)
+    cur.execute("""
+        CREATE TABLE IF NOT EXISTS investments (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            sponsor_ein TEXT,
+            page_number INTEGER,
+            row_id INTEGER,
+            issuer_name TEXT,
+            investment_description TEXT,
+            asset_type TEXT,
+            par_value REAL,
+            cost REAL,
+            current_value REAL,
+            units_or_shares REAL,
+            confidence REAL,
+            fund_name TEXT
+        )
+    """)
+
+    # Add fund_name column if it doesn't exist yet (legacy DBs)
     existing_cols = [row[1] for row in cur.execute("PRAGMA table_info(investments)").fetchall()]
     if 'fund_name' not in existing_cols:
         cur.execute("ALTER TABLE investments ADD COLUMN fund_name TEXT")

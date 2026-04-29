@@ -1,10 +1,54 @@
 import pandas as pd
 import re
+from .asset_type_patterns import ASSET_TYPE_PATTERNS, detect_asset_type, detect_asset_type_strict
 
 _SHARES_OF_RE = re.compile(
     r'^\s*[\d,]+(?:\.\d+)?\s+shares?\s+of\s+(.+)$',
     re.IGNORECASE,
 )
+
+_FINANCIAL_JUNK_RE = re.compile(
+    r'(\d+\.\d+%)'                        # interest rate: 4.25%
+    r'|(\b\d{1,2}/\d{1,2}/\d{2,4}\b)'    # date: 03/15/2027
+    r'|(\b(?=[A-Z0-9]*[0-9])[A-Z0-9]{9}\b)'  # CUSIP: 912828YK0 (must contain digit)
+    r'|\b(due|maturing|coupon|collateral|maturity|interest|rate|dated)\b',
+    re.IGNORECASE,
+)
+
+# Strips trailing share/unit counts before asset type label check.
+# Handles both "Mutual Fund, 5,770,653 shares" (comma separator) and
+# "Mutual Fund-6,576,777 shares" (dash separator).
+# Uses two alternatives so plain years like "2035" are NOT stripped:
+#   1. any number followed by explicit shares/units keyword
+#   2. comma-formatted count (has internal commas like 5,770,653) — optional keyword
+_TRAILING_SHARES_RE = re.compile(
+    r'[,\s\-]+\d[\d,]*\s+(?:shares?|units?)\s*$'
+    r'|[,\s\-]+\d{1,3}(?:,\d{3})+\.?\d*\s*(?:shares?|units?)?\s*$',
+    re.IGNORECASE,
+)
+
+
+def is_meaningful_description(text: str) -> bool:
+    """
+    Returns True if text is a real fund name worth keeping.
+    Returns False if it is blank, a pure asset type label (with or without
+    trailing share counts), or financial junk.
+    """
+    text = (text or '').strip()
+    if not text:
+        return False
+
+    # Strip trailing share/unit counts then check if what remains is a pure asset type label
+    stripped = _TRAILING_SHARES_RE.sub('', text).strip()
+    for pattern, _ in ASSET_TYPE_PATTERNS:
+        if re.fullmatch(pattern, stripped, re.IGNORECASE):
+            return False
+
+    # Financial junk — rates, dates, CUSIPs, bond terminology
+    if _FINANCIAL_JUNK_RE.search(text):
+        return False
+
+    return True
 
 def extract_fund_names_from_descriptions(rows):
     """
@@ -31,43 +75,16 @@ def parse_investment_row(row):
     description = row.get('investment_description', '').strip()
     existing_asset_type = row.get('asset_type', '').strip()
     
-    # Asset type patterns (ordered from most specific to least specific)
-    asset_type_patterns = [
-        r'Common/Collective Trust Fund',
-        r'Collective Trust Fund',
-        r'Separately Managed Account',
-        r'Self-Directed Brokerage Account',
-        r'Commingled Fund',
-        r'Stable Value Fund',
-        r'Money Market Fund',
-        r'Mutual Fund',
-        r'Index Fund',
-        r'Common Stock',
-        r'Preferred Stock',
-        r'Currency',
-        r'Partnership Interest',
-        r'ETF'
-    ]
-    
-    # Check if asset type is embedded in issuer name
-    asset_type = existing_asset_type
-    for pattern in asset_type_patterns:
-        if re.search(pattern, issuer, re.IGNORECASE):
-            # Extract asset type and remove from issuer
-            asset_type = re.search(pattern, issuer, re.IGNORECASE).group(0)
-            issuer = re.sub(pattern, '', issuer, flags=re.IGNORECASE).strip()
-            break
-    
-    # Also check if asset type is in investment_description
-    if not asset_type:
-        for pattern in asset_type_patterns:
-            if re.search(pattern, description, re.IGNORECASE):
-                # Extract asset type and remove from description
-                asset_type = re.search(pattern, description, re.IGNORECASE).group(0)
-                description = re.sub(pattern, '', description, flags=re.IGNORECASE).strip()
-                # Clean up extra spaces, commas, dashes at start/end
-                description = re.sub(r'^[,\-\s/]+|[,\-\s/]+$', '', description).strip()
-                break
+    # Description-level type is more specific than a propagated section type.
+    # Use fullmatch so fund names containing type keywords (e.g. 'BlackRock Index Fund')
+    # don't override a correct section type.
+    desc_type = detect_asset_type_strict(description) if description else ''
+    if desc_type:
+        asset_type = desc_type
+    elif not existing_asset_type:
+        asset_type = detect_asset_type(issuer)
+    else:
+        asset_type = existing_asset_type
     
     return {
         'issuer_name': issuer,
@@ -284,7 +301,7 @@ def remove_metadata_rows(rows, preserve_loans=True, verbose=True):
     excluded_keywords = {
         "form 5500", "schedule", "omb no", "department", "plan number",
         "file as", "identity of", "issue lessor", "maturity date", "rate of",
-        "collateral", "cost", "current value", "par value", "commingled",
+        "collateral", "cost", "current value", "par value",
         "notes receivable", "self-directed", "section", "notes:",
         "loans to", "interest rates", "maturities",
     }
@@ -410,9 +427,9 @@ def _fund_specificity_score(row):
     best_lower = best.lower()
     if best_lower in _KNOWN_MANAGERS_LOWER:
         return 0
-    if re.search(r'20[2-9]\d', best):
+    if re.search(r'20[2-9]\d', best):
         return 200 + len(best)
-    if re.search(r'(fund|index|etf|trust|portfolio|class|shares?)', best_lower):
+    if re.search(r'(fund|index|etf|trust|portfolio|class|shares?)', best_lower):
         return 100 + len(best)
     return len(best)
 
@@ -470,6 +487,9 @@ def remove_cross_page_duplicates(rows, value_threshold=10000, verbose=True):
 
     for (pdf_key, desc), idxs in desc_groups.items():
         if len(idxs) < 2:
+            continue
+        # > 2 occurrences = generic category column value, not a fund name -> skip dedup
+        if len(idxs) > 2:
             continue
         def get_val(i):
             v = str(rows[i].get('current_value', '') or '').replace('$','').replace(',','').strip()

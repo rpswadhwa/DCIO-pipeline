@@ -12,3 +12,6 @@ if [ -n "$S3_INPUT_PATH" ]; then
 fi
 
 PYTHONPATH=. python3.11 -m src.run_pipeline
+
+echo "[CLASSIFICATION] Running asset class classification pipeline..."
+PYTHONPATH=. python3.11 run_classification.py

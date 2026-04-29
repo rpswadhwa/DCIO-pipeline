@@ -10,6 +10,7 @@ from rapidfuzz import process, fuzz
 
 import pandas as pd
 
+from .asset_type_patterns import ASSET_TYPE_PATTERNS, detect_asset_type
 from .data_cleaner import handle_split_rows, parse_investment_row
 from .utils import load_yaml, normalize_whitespace
 
@@ -19,67 +20,21 @@ _TOTAL_AFFIX_RE = re.compile(
     re.IGNORECASE,
 )
 
-# (pattern to match, canonical asset type name) — ordered most-specific first
-_SECTION_ASSET_TYPES = [
-    # "Investments in X" style headings (e.g. "Investments in mutual funds:")
-    (r'Investments?\s+in\s+mutual\s+funds?', 'Mutual Fund'),
-    (r'Investments?\s+in\s+money\s+markets?', 'Money Market Fund'),
-    (r'Investments?\s+in\s+common\s+collective\s+trusts?', 'Common/Collective Trust Fund'),
-    (r'Investments?\s+in\s+pooled\s+separate\s+accounts?', 'Commingled Fund'),
-    (r'Investments?\s+in\s+investment\s+contracts?', 'Stable Value Fund'),
-    (r'Investments?\s+in\s+index\s+funds?', 'Index Fund'),
-    # Plain asset type names / section labels
-    (r'Pooled\s+Separate\s+Accounts?', 'Pooled Separate Account'),
-    (r'Insurance\s+Company\s+General\s+Account\s+Contracts?', 'Insurance General Account'),
-    (r'General\s+Account\s+Contracts?', 'Insurance General Account'),
-    (r'Group\s+Annuity\s+Contracts?', 'Group Annuity Contract'),
-    (r'CREF\s+Accounts?', 'Group Annuity Contract'),
-    (r'Fully[\-\s]Benefit[\-\s]Responsive\s+Contracts?', 'Stable Value Fund'),
-    (r'Non[\-\s]Benefit[\-\s]Responsive\s+Contracts?', 'Stable Value Fund'),
-    (r'Common\s*/\s*Collective\s+Trust\s+Funds?', 'Common/Collective Trust Fund'),
-    (r'Collective\s*/\s*Common\s+Trust\s+Funds?', 'Common/Collective Trust Fund'),
-    (r'Common\s+Collective\s+Trust\s+Funds?', 'Common/Collective Trust Fund'),
-    (r'Collective\s+Investment\s+Trusts?', 'Common/Collective Trust Fund'),
-    (r'Collective\s+Trust\s+Funds?', 'Common/Collective Trust Fund'),
-    (r'Common\s+Collective\s+Trusts?', 'Common/Collective Trust Fund'),
-    (r'Separately\s+Managed\s+Accounts?', 'Separately Managed Account'),
-    (r'Self[\-\s]Directed\s+Brokerage\s+Accounts?', 'Self-Directed Brokerage Account'),
-    (r'Commingled\s+Funds?', 'Commingled Fund'),
-    (r'Stable\s+Value\s+Funds?', 'Stable Value Fund'),
-    (r'Money\s+Market\s+Funds?', 'Money Market Fund'),
-    (r'Institutional\s+Funds?', 'Mutual Fund'),
-    (r'Common\s+Stock\s+Funds?', 'Mutual Fund'),
-    (r'Common\s+Stock\s+Fund', 'Mutual Fund'),
-    (r'Registered\s+Investment\s+Compan(?:y|ies)', 'Mutual Fund'),
-    (r'Index\s+Funds?', 'Index Fund'),
-    (r'Mutual\s+Funds?', 'Mutual Fund'),
-    (r'Common\s+Stocks?', 'Common Stock'),
-    (r'Publicly[\-\s]traded\s+Stocks?', 'Publicly-traded Stock'),
-    (r'Preferred\s+Stocks?', 'Preferred Stock'),
-    (r'Employer\s+Stocks?', 'Employer Stock'),
-    (r'Employer\s+Securities', 'Employer Stock'),
-    (r'Partnership\s+Interests?', 'Partnership Interest'),
-    (r'ETFs?', 'ETF'),
-    (r'Participant\s+Loans?', 'Participant Loan'),
-    (r'Currenc(?:y|ies)', 'Currency'),
-]
-
 
 def _detect_section_heading(row_data: Dict, fields: List[str]) -> Optional[str]:
     """
     Returns canonical asset type string if this row is a section heading,
     otherwise None.
 
-    Matches regardless of whether the row also carries a current_value (handles
-    total rows labelled with a section name, e.g. "Total Mutual Funds" or
-    "Registered Investment Companies Total").  Leading/trailing total-type words
-    are stripped before matching so all four forms are caught:
-      - "Mutual Funds"
-      - "Total Mutual Funds"
-      - "Mutual Funds Total"
-      - "Registered Investment Companies Total"
+    A row with a current_value is always a data row, not a section heading.
+    Section headings are label-only rows (no dollar amount).
     """
-    for field in ('issuer_name', 'investment_description', 'asset_type'):
+    # If the row has a dollar value it is a data row, not a section heading.
+    cv = str(row_data.get('current_value', '')).strip()
+    if cv and cv not in ('', 'nan', '-', '**'):
+        return None
+
+    for field in ('issuer_name', 'investment_description', 'asset_type', 'par_value'):
         text = str(row_data.get(field, '')).strip()
         if not text or text == 'nan':
             continue
@@ -87,7 +42,7 @@ def _detect_section_heading(row_data: Dict, fields: List[str]) -> Optional[str]:
         text_clean = text.rstrip(':').strip()
         text_stripped = _TOTAL_AFFIX_RE.sub('', text_clean).strip()
         for candidate in {text_clean, text_stripped}:
-            for pattern, canonical in _SECTION_ASSET_TYPES:
+            for pattern, canonical in ASSET_TYPE_PATTERNS:
                 if re.fullmatch(pattern, candidate, re.IGNORECASE):
                     return canonical
 
@@ -679,6 +634,9 @@ def extract_tables_and_map(
         header_rows = []
         for idx in range(min(4, df.shape[0])):  # Changed from 8 to 4
             potential_header = [normalize_whitespace(h) for h in df.iloc[idx].tolist()]
+            # A row with only one non-empty cell is a section heading, never a table header
+            if len([h for h in potential_header if h]) == 1:
+                continue
             match_count = 0
             partial_match = False
             for h in potential_header:
@@ -732,6 +690,30 @@ def extract_tables_and_map(
             row_data["page_number"] = page_num
             row_data["row_id"] = row_idx - data_start_row + 1
             row = df.iloc[row_idx].tolist()
+
+            # If the entire row has only one non-empty cell it is a section heading label,
+            # not investment data. Match against known asset type patterns and update
+            # current_section_type; reset to '' for unrecognised headings so the previous
+            # type does not bleed into a new section.
+            non_empty = [normalize_whitespace(str(c)) for c in row if normalize_whitespace(str(c))]
+            if len(non_empty) == 1:
+                candidate = non_empty[0].rstrip(':').strip()
+                candidate_stripped = _TOTAL_AFFIX_RE.sub('', candidate).strip()
+                matched = None
+                for cand in (candidate, candidate_stripped):
+                    for pattern, canonical in ASSET_TYPE_PATTERNS:
+                        if re.fullmatch(pattern, cand, re.IGNORECASE):
+                            matched = canonical
+                            break
+                    if matched:
+                        break
+                if matched:
+                    current_section_type = matched
+                    print(f"    Section heading: '{matched}' (row {row_idx})")
+                else:
+                    current_section_type = ''
+                continue
+
             for col_idx, cell in enumerate(row):
                 text = normalize_whitespace(str(cell))
                 if not text:

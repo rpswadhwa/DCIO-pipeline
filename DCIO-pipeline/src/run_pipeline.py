@@ -20,7 +20,6 @@ from .validate import validate_pages
 from cleanup_investment_names import cleanup_investments
 from enhance_asset_types import enhance_asset_types
 from llm_enhance_investments import (
-    check_and_fix_asset_type_consistency,
     export_enhanced_csv,
     llm_enhance_investments,
 )
@@ -227,6 +226,10 @@ def main():
     cleanup_investments(db_path, verbose=True)
     enhance_asset_types(db_path, verbose=True)
 
+    pre_llm_csv_path = os.path.join(output_dir, "investments_pre_llm.csv")
+    export_enhanced_csv(db_path, pre_llm_csv_path, verbose=True)
+    print(f"  Pre-LLM snapshot saved: {pre_llm_csv_path}")
+
     llm_updates = 0
     if use_post_llm:
         print("\n[STEP 7] LLM enhancement")
@@ -242,8 +245,7 @@ def main():
     else:
         print("\n[STEP 7] LLM enhancement skipped (USE_POST_LLM=0)")
 
-    print("\n[STEP 8] Consistency check and exports")
-    check_and_fix_asset_type_consistency(db_path, verbose=True)
+    print("\n[STEP 8] Exports")
     export_enhanced_csv(db_path, clean_csv_path, verbose=True)
     export_enhanced_csv(db_path, legacy_csv_path, verbose=True)
     if llm_updates > 0:

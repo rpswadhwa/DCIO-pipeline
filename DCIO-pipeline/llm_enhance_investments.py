@@ -13,6 +13,9 @@ from pathlib import Path
 from openai import OpenAI
 from dotenv import load_dotenv
 import csv
+import sys
+sys.path.insert(0, os.path.dirname(__file__))
+from src.data_cleaner import is_meaningful_description
 
 # Load environment variables
 load_dotenv()
@@ -191,45 +194,38 @@ def review_investment_with_llm(batch_data, verbose=False):
 
 Review these investment records and improve the data quality by:
 
-1. **Issuer Name**: Should contain ONLY the asset manager/investment firm name (e.g., "Vanguard", "BlackRock", "Fidelity", "PIMCO")
-   - Remove fund names, classes, or investment details
-   - Standardize company names (e.g., "The Vanguard Group, Inc." → "Vanguard")
-   - Common abbreviations: "VG" or "VANG" → "Vanguard", "AF" → "American Funds"
-   - For individual stocks/securities, the issuer IS the company name
+1. **Issuer Name**: Extract and standardize the asset manager/firm name only
+   - If issuer contains only the manager name, standardize it: "The Vanguard Group, Inc." → "Vanguard"
+   - If issuer contains the full fund name, extract just the manager: "Vanguard Total Bond Market Index Fund" → "Vanguard"
+   - Common abbreviations: "VG"/"VANG" → "Vanguard", "AF" → "American Funds", "FID" → "Fidelity", "BLK" → "BlackRock"
+   - For individual stocks (INC, CORP, LLC, CO, PLC, LTD), keep the full company name unchanged
+   - Always return a value — never leave blank
 
-2. **Investment Description**: Should contain the specific fund/investment name
-   - Include fund name, class, series (e.g., "Target Retirement 2025 Fund", "500 Index Fund Institutional Class")
-   - For stocks, use the company name
-   - Clean up abbreviations where obvious: "INST" → "Institutional", "IDX" → "Index", "IS" → "Institutional Shares"
-   - Expand truncated names: "INTL" → "International", "STK" → "Stock", "MKT" → "Market", "BD" → "Bond"
-   - Remove asset type information (it goes in asset_type field)
+2. **Investment Description**: Expand abbreviations ONLY — never shorten
+   - Keep the full text exactly as-is, only expanding clear abbreviations in-place
+   - Expand: "INST" → "Institutional", "IDX" → "Index", "IS" → "Institutional Shares"
+   - Expand: "INTL" → "International", "STK" → "Stock", "MKT" → "Market", "BD" → "Bond"
+   - Expand: "FD" → "Fund", "RET" → "Retirement", "TR" → "Trust", "CL" → "Class"
+   - Expand: "TRGTDT" / "TRGT DT" → "Target Date", "SMCAP" → "Small Cap", "LGCAP" → "Large Cap"
+   - Do NOT remove anything — manager name, asset type words, years, share classes
+   - Do NOT reorder or restructure
+   - CRITICAL: if the description contains a fund name (even if it also appears in the issuer field), preserve the FULL fund name — never reduce it to just the manager name
+   - If description is blank, a pure asset type label ("Mutual Fund"), or financial details ("4.25% due 2027") — leave it exactly as-is, do not change it
 
-3. **Asset Type**: Standardize to one of these categories:
-   - Common Stock
-   - Preferred Stock
-   - Mutual Fund
-   - Common/Collective Trust Fund
-   - Index Fund
-   - Money Market Fund
-   - Self-Directed Brokerage Account
-   - Corporate Bond
-   - Government Bond
-   - Partnership Interest
-   - Real Estate
-   - Other
-   - Currency
-
-IMPORTANT RULES:
-- For individual stocks (company names with INC, CORP, LLC, CO, PLC, LTD), the issuer and description are the SAME (the company name)
-- For funds, separate the asset manager (issuer) from the fund name (description)
-- "VG IS" = "Vanguard Institutional Shares" → Issuer: "Vanguard", Description: expand the fund name
-- If a field looks correct, keep it as-is
-- Only make changes where there's clear improvement needed
+3. **Asset Type**: Only change if clearly wrong or blank
+   - Valid values: Common Stock, Preferred Stock, Mutual Fund, Common/Collective Trust Fund, Index Fund, Money Market Fund, Self-Directed Brokerage Account, Corporate Bond, Government Bond, Partnership Interest, Real Estate, Currency, ETF, Target Date Fund, Participant Loan, Other
+   - If already set to a valid value that is plausible — leave it unchanged
+   - Never expand an abbreviation that is already spelled out elsewhere in the same string
 
 EXAMPLES:
-- "VG IS TL INTL STK MK" → Issuer: "Vanguard", Desc: "Total International Stock Market Index Fund Institutional Shares"
-- "HARRIS OAKMRK INTL 3" → Issuer: "Harris Associates", Desc: "Oakmark International Fund Class 3"
-- "ALPHABET INC CL A" → Issuer: "ALPHABET INC CL A", Desc: "ALPHABET INC CL A" (stock - same for both)
+- issuer="VG", desc="VG IS TL INTL STK MK IDX FD" → Issuer: "Vanguard", Desc: "Vanguard Institutional Total International Stock Market Index Fund"
+- issuer="Vanguard Total Bond Market Index Fund", desc="" → Issuer: "Vanguard", Desc: "" (leave blank)
+- issuer="Fidelity Management Trust Company", desc="Freedom Blend 2035 Mutual Fund" → Issuer: "Fidelity", Desc: "Freedom Blend 2035 Mutual Fund"
+- issuer="ALPHABET INC CL A", desc="ALPHABET INC CL A" → Issuer: "ALPHABET INC CL A", Desc: "ALPHABET INC CL A" (stock — unchanged)
+- issuer="Northern Trust", desc="Mutual Fund" → Issuer: "Northern Trust", Desc: "Mutual Fund" (leave as-is)
+- issuer="American Funds TRGTDT 2010 R6", desc="American Funds TRGTDT 2010 R6" → Issuer: "American Funds", Desc: "American Funds Target Date 2010 R6" (expand abbr in desc, keep full name — do NOT reduce to just "American Funds")
+- issuer="AF TRGTDT 2025 R6", desc="AF TRGTDT 2025 R6" → Issuer: "American Funds", Desc: "American Funds Target Date 2025 R6"
+- issuer="Vanguard Cash Reserves Federal MM Fund Admiral Shares", desc="Vanguard Cash Reserves Federal MM Fund Admiral Shares" → Issuer: "Vanguard", Desc: "Vanguard Cash Reserves Federal Money Market Fund Admiral Shares"
 
 Here are the investments to review:
 
@@ -273,7 +269,6 @@ Respond ONLY with the JSON array, no additional text."""
                 }
             ],
             temperature=0.1,
-            max_completion_tokens=4000
         )
         
         response_text = response.choices[0].message.content.strip()
@@ -384,9 +379,6 @@ def llm_enhance_investments(db_path, batch_size=10, max_batches=None, verbose=Tr
                 clean_desc = desc.strip() if desc else ''
                 clean_asset_type = atype.strip() if atype else ''
 
-                if not clean_asset_type:
-                    clean_asset_type = infer_asset_type(clean_issuer, clean_desc)
-
                 cursor.execute("""
                     UPDATE investments
                     SET issuer_name = ?, investment_description = ?, asset_type = ?
@@ -486,10 +478,15 @@ def export_enhanced_csv(db_path, output_path, verbose=True):
             import os as _os
             row_data['pdf_stem'] = _os.path.splitext(_os.path.basename(source_pdf))[0] if source_pdf else ''
 
+            # Fund name selection: use investment_description if meaningful,
+            # otherwise fall back to issuer_name
+            desc = (row_data.get('investment_description') or '').strip()
+            issuer = (row_data.get('issuer_name') or '').strip()
+            if not is_meaningful_description(desc):
+                row_data['investment_description'] = issuer
+
             # Ensure asset_type is always present and standardized
             asset_type = (row_data.get('asset_type') or '').strip()
-            if not asset_type:
-                asset_type = infer_asset_type(row_data['issuer_name'], row_data.get('investment_description', ''))
             row_data['asset_type'] = asset_type
 
             # Infer Morningstar ticker for mutual funds/target date funds
