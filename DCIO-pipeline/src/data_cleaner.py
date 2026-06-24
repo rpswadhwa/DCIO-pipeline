@@ -14,6 +14,19 @@ _FINANCIAL_JUNK_RE = re.compile(
     r'|\b(due|maturing|coupon|collateral|maturity|interest|rate|dated)\b',
     re.IGNORECASE,
 )
+_IDENTIFIER_TOKEN_RE = re.compile(
+    r'\b(?:CUSIP|SEDOL)\s*:?\s*[A-Z0-9]+\b'
+    r'|\b(?=[A-Z0-9]*[0-9])[A-Z0-9]{9}\b',
+    re.IGNORECASE,
+)
+_VALUE_TOKEN_RE = re.compile(
+    r'\$?\(?\d{1,3}(?:,\d{3})+(?:\.\d+)?\)?'
+    r'|\$?\(?\d+\.\d+\)?'
+)
+_JUNK_WORD_RE = re.compile(
+    r'\b(due|maturing|coupon|collateral|maturity|interest|rate|dated)\b',
+    re.IGNORECASE,
+)
 
 # Strips trailing share/unit counts before asset type label check.
 # Handles both "Mutual Fund, 5,770,653 shares" (comma separator) and
@@ -45,7 +58,12 @@ def is_meaningful_description(text: str) -> bool:
             return False
 
     # Financial junk — rates, dates, CUSIPs, bond terminology
-    if _FINANCIAL_JUNK_RE.search(text):
+    name_candidate = _IDENTIFIER_TOKEN_RE.sub(' ', stripped)
+    name_candidate = _VALUE_TOKEN_RE.sub(' ', name_candidate)
+    name_candidate = _JUNK_WORD_RE.sub(' ', name_candidate)
+    name_candidate = re.sub(r'\b\d{1,2}/\d{1,2}/\d{2,4}\b', ' ', name_candidate)
+    name_candidate = re.sub(r'\s+', ' ', name_candidate).strip(' *:;.,-')
+    if not name_candidate:
         return False
 
     return True
@@ -272,7 +290,16 @@ def remove_total_rows(rows, verbose=True):
         # Also remove if both issuer and description are empty (blank row)
         if not issuer and not description:
             is_total = True
-        
+
+        # NEW: issuer is a pure asset-type/category label (e.g. "Registered Investment Companies",
+        # "Mutual Fund"), description is not a real fund/manager name, and has a current_value.
+        # These are subtotal rows that don't use the word "Total".
+        if not is_total and issuer:
+            value_str = str(row.get('current_value', '')).strip()
+            has_value = bool(value_str) and value_str not in ('0', 'nan', '')
+            if has_value and not is_meaningful_description(issuer):
+                is_total = True
+
         if is_total:
             if verbose:
                 print(f"  Removing Total row: {issuer[:40]} | {description[:40]}")

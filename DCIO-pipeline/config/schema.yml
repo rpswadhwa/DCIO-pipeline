@@ -27,6 +27,9 @@ schema:
       - "issuer or obligor"
       - "identity of issue"
       - "identity of investment"
+      - "fund name"
+      - "investment name"
+      - "security name"
     investment_description:
       - "description"
       - "investment description"
@@ -36,6 +39,7 @@ schema:
     asset_type:
       - "asset type"
       - "type"
+      - "classification"
       - "category"
     par_value:
       - "par value"
@@ -45,15 +49,19 @@ schema:
       - "cost"
       - "cost of investment"
       - "book value"
+      - "historical cost"
     current_value:
       - "current value"
       - "fair value"
       - "market value"
+      - "total market value"
       - "value"
     units_or_shares:
       - "units"
       - "shares"
       - "units or shares"
+      - "share balance"
+      - "share amount"
 validation:
   confidence_threshold: 0.75
   low_confidence_threshold: 0.6

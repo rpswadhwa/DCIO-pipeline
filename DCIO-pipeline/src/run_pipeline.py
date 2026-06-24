@@ -1,6 +1,7 @@
 import csv
 import json
 import os
+import subprocess
 from typing import Dict, List
 
 from dotenv import load_dotenv
@@ -13,7 +14,7 @@ from .llm_map import map_rows_with_llm
 from .load_db import load_cleaned_pipeline_results, reset_db
 from .normalize_images import normalize_pages
 from .ocr_passes import run_ocr
-from .text_extract import classify_pages_text, extract_tables_and_map
+from .text_extract import classify_pages_text, extract_tables_and_map, _has_see_attachment, find_attachment_pages, find_structural_investment_pages, _SEE_ATTACHMENT_RE, _DETAIL_REFERENCE_RE, expand_continuation_pages
 from .utils import ensure_dir, read_env
 from .validate import validate_pages
 
@@ -24,6 +25,7 @@ from llm_enhance_investments import (
     llm_enhance_investments,
 )
 from .mf_mapping_enrichment import enrich_mf_classes
+from .stage_report import generate_stage_compare, generate_stage_pivot
 
 _VALIDATION_ENABLED = os.getenv("VALIDATION_ENABLED", "0") == "1"
 if _VALIDATION_ENABLED:
@@ -61,6 +63,37 @@ def upload_to_s3(file_path: str, s3_path: str):
         return False
 
 
+def sync_s3_inputs(s3_input_path: str, input_dir: str) -> None:
+    """Sync PDF inputs from S3 into the local input folder when configured."""
+    if not s3_input_path:
+        return
+    if not s3_input_path.startswith("s3://"):
+        print(f"  Invalid S3 input path, skipping sync: {s3_input_path}")
+        return
+
+    ensure_dir(input_dir)
+    print(f"  Syncing PDF inputs from {s3_input_path} to {input_dir}")
+    cmd = [
+        "aws",
+        "s3",
+        "sync",
+        s3_input_path,
+        input_dir,
+        "--exclude",
+        "*",
+        "--include",
+        "*.pdf",
+        "--region",
+        read_env("AWS_REGION", "us-east-1"),
+    ]
+    subprocess.run(cmd, check=True)
+    pdf_count = sum(
+        1 for name in os.listdir(input_dir)
+        if name.lower().endswith(".pdf")
+    )
+    print(f"  Local PDF inputs ready: {pdf_count}")
+
+
 def _write_csv(path: str, rows: List[Dict], preferred_fields: List[str] = None) -> None:
     if not rows:
         return
@@ -79,6 +112,18 @@ def _write_csv(path: str, rows: List[Dict], preferred_fields: List[str] = None) 
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(rows)
+
+
+
+def _has_useful_extracted_rows(page_data: List[Dict]) -> bool:
+    for page in page_data:
+        for row in page.get("mapped_rows", []):
+            issuer = str(row.get("issuer_name", "") or "").strip()
+            desc = str(row.get("investment_description", "") or "").strip()
+            value = str(row.get("current_value", "") or "").strip()
+            if (issuer or desc) and value and value not in {"**", "-", "nan"}:
+                return True
+    return False
 
 
 def _collect_extracted_rows(pages: List[Dict], plan_info_map: Dict[str, Dict], plan_year: int) -> List[Dict]:
@@ -108,6 +153,7 @@ def main():
     input_dir = read_env("INPUT_DIR", "data/inputs")
     output_dir = read_env("OUTPUT_DIR", "data/outputs")
     images_dir = os.path.join(output_dir, "images")
+    ensure_dir(input_dir)
     ensure_dir(output_dir)
     ensure_dir(images_dir)
 
@@ -137,6 +183,13 @@ def main():
     print("FORM 5500 PIPELINE")
     print("=" * 60)
 
+    s3_input_path = read_env(
+        "S3_INPUT_PATH",
+        "s3://retirementinsights-bronze/filings_5500_pdf/year=2024/raw/",
+    )
+    if read_env("SYNC_S3_INPUTS", "1") != "0":
+        sync_s3_inputs(s3_input_path, input_dir)
+
     if use_ocr:
         print("\n[STEP 1] OCR extraction")
         pages = ingest_pdfs(input_dir, images_dir, dpi=dpi)
@@ -165,6 +218,11 @@ def main():
             pages.extend(classified)
 
             supp_nums = [p["page_number"] for p in classified if p.get("is_supplemental") == 1]
+            expanded_supp_nums = expand_continuation_pages(pdf_path, supp_nums)
+            if expanded_supp_nums != supp_nums:
+                added_pages = [p for p in expanded_supp_nums if p not in supp_nums]
+                print(f"    Continuation pages added: {added_pages}")
+            supp_nums = expanded_supp_nums
             print(f"    Supplemental pages: {supp_nums}")
 
             plan_info, page_data = extract_tables_and_map(
@@ -176,6 +234,68 @@ def main():
             )
             if plan_info:
                 plan_info_map[pdf_stem] = plan_info
+
+            if not _has_useful_extracted_rows(page_data):
+                structural_nums = find_structural_investment_pages(pdf_path)
+                structural_nums = [p for p in structural_nums if p not in supp_nums]
+                if structural_nums:
+                    print(f"    Structural fallback pages found: {structural_nums}")
+                    fallback_plan_info, fallback_data = extract_tables_and_map(
+                        pdf_path,
+                        structural_nums,
+                        schema_yml,
+                        model,
+                        use_llm=use_llm,
+                    )
+                    if fallback_plan_info and not plan_info:
+                        plan_info = fallback_plan_info
+                        plan_info_map[pdf_stem] = fallback_plan_info
+                    if _has_useful_extracted_rows(fallback_data):
+                        page_data = fallback_data
+                        supp_nums = structural_nums
+
+            # Attachment page handling: if any row says "see attachment",
+            # scan pages after the last supplemental page for the actual data
+            if supp_nums and _has_see_attachment(page_data):
+                # Use the earliest page where "see attachment" was found as the
+                # starting point — attachment data follows immediately after that page
+                see_attach_page_nums = [
+                    page["page_number"] for page in page_data
+                    if any(
+                        _SEE_ATTACHMENT_RE.search(str(row.get("issuer_name", "") or ""))
+                        or _SEE_ATTACHMENT_RE.search(str(row.get("investment_description", "") or ""))
+                        for row in page.get("mapped_rows", [])
+                    )
+                ]
+                last_sup = min(see_attach_page_nums) if see_attach_page_nums else max(supp_nums)
+                attachment_nums = find_attachment_pages(pdf_path, last_sup, keywords_yml, ignore_negatives=True)
+                if attachment_nums:
+                    print(f"    Attachment pages found: {attachment_nums}")
+                    _, attach_data = extract_tables_and_map(
+                        pdf_path, attachment_nums, schema_yml, model, use_llm=use_llm,
+                    )
+                    # Drop the summary "see attachment" rows — detail is now in attach_data
+                    for page in page_data:
+                        page["mapped_rows"] = [
+                            r for r in page.get("mapped_rows", [])
+                            if not _SEE_ATTACHMENT_RE.search(str(r.get("issuer_name", "") or ""))
+                        ]
+                    supplemental_pages.extend(attach_data)
+
+            # Drop rollup rows that point to detail exhibits already selected for extraction,
+            # such as "refer to Exhibit A - investments". This mirrors see-attachment
+            # behavior without triggering a broad forward scan.
+            for page in page_data:
+                page["mapped_rows"] = [
+                    r for r in page.get("mapped_rows", [])
+                    if not _DETAIL_REFERENCE_RE.search(
+                        " ".join(
+                            str(r.get(field, "") or "")
+                            for field in ("issuer_name", "investment_description", "asset_type", "current_value")
+                        )
+                    )
+                ]
+
             supplemental_pages.extend(page_data)
 
     print("\n[STEP 2] QA report")
@@ -304,6 +424,17 @@ def main():
             print("\n[STEP 11] MF enrichment skipped (ENRICH_MF_ENABLED=0)")
     else:
         print("\n[STEP 10] Validation skipped (VALIDATION_ENABLED not set)")
+
+
+    print("\n[STEP 12] Stage comparison reports")
+    try:
+        data_dir = os.path.join(os.path.dirname(__file__), "..", "data", "outputs")
+        compare_path = generate_stage_compare(data_dir, "/tmp")
+        pivot_path   = generate_stage_pivot(data_dir, "/tmp")
+        print(f"  stage_compare -> {compare_path}")
+        print(f"  stage_pivot   -> {pivot_path}")
+    except Exception as exc:
+        print(f"  stage report failed: {exc}")
 
     print("\n" + "=" * 60)
     print("PIPELINE COMPLETE")
