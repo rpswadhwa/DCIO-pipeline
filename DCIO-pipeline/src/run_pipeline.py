@@ -25,11 +25,6 @@ from llm_enhance_investments import (
     llm_enhance_investments,
 )
 from .mf_mapping_enrichment import enrich_mf_classes
-from .stage_report import generate_stage_compare, generate_stage_pivot
-
-_VALIDATION_ENABLED = os.getenv("VALIDATION_ENABLED", "0") == "1"
-if _VALIDATION_ENABLED:
-    from .post_extract_validator import run_post_extract_validation
 
 
 def upload_to_s3(file_path: str, s3_path: str):
@@ -149,6 +144,7 @@ def _collect_extracted_rows(pages: List[Dict], plan_info_map: Dict[str, Dict], p
 
 def main():
     load_dotenv()
+    validation_enabled = read_env("VALIDATION_ENABLED", "0") == "1"
 
     input_dir = read_env("INPUT_DIR", "data/inputs")
     output_dir = read_env("OUTPUT_DIR", "data/outputs")
@@ -378,7 +374,8 @@ def main():
     else:
         print("\n[STEP 9] S3 upload skipped (S3_BUCKET_PATH not set)")
 
-    if _VALIDATION_ENABLED:
+    if validation_enabled:
+        from .post_extract_validator import run_post_extract_validation
         print("\n[STEP 10] Post-extraction validation")
         counts = run_post_extract_validation(
             db_path=db_path,
@@ -426,15 +423,22 @@ def main():
         print("\n[STEP 10] Validation skipped (VALIDATION_ENABLED not set)")
 
 
-    print("\n[STEP 12] Stage comparison reports")
-    try:
-        data_dir = os.path.join(os.path.dirname(__file__), "..", "data", "outputs")
-        compare_path = generate_stage_compare(data_dir, "/tmp")
-        pivot_path   = generate_stage_pivot(data_dir, "/tmp")
-        print(f"  stage_compare -> {compare_path}")
-        print(f"  stage_pivot   -> {pivot_path}")
-    except Exception as exc:
-        print(f"  stage report failed: {exc}")
+    if read_env("STAGE_REPORT_ENABLED", "0") == "1":
+        print("\n[STEP 12] Stage comparison reports")
+        try:
+            from .stage_report import generate_stage_compare, generate_stage_pivot
+
+            data_dir = os.path.join(os.path.dirname(__file__), "..", "data", "outputs")
+            compare_path = generate_stage_compare(data_dir, "/tmp")
+            pivot_path = generate_stage_pivot(data_dir, "/tmp")
+            print(f"  stage_compare -> {compare_path}")
+            print(f"  stage_pivot   -> {pivot_path}")
+        except ImportError:
+            print("  stage report skipped: stage_report module not available")
+        except Exception as exc:
+            print(f"  stage report failed: {exc}")
+    else:
+        print("\n[STEP 12] Stage comparison reports skipped (STAGE_REPORT_ENABLED=0)")
 
     print("\n" + "=" * 60)
     print("PIPELINE COMPLETE")

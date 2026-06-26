@@ -526,9 +526,6 @@ def run_post_extract_validation(
                                    too_large.sum(), expected)
                     error_df = error_df[~too_large]
             if not error_df.empty:
-                # The validation error table keeps the original five-column schema.
-                # raw_sponsor_name is only present on plan_mf_history_v3.
-                error_df = error_df.drop(columns=["raw_sponsor_name"], errors="ignore")
                 write_iceberg_via_athena(error_df, validated_glue_db, error_table)
             logger.warning("FAIL %s: extracted=%.0f expected=%.0f diff=%.2f%% (%d MF rows)",
                            pdf_stem, extracted, expected, pct_diff * 100, len(error_df))
