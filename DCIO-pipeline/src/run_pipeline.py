@@ -2,6 +2,7 @@ import csv
 import json
 import os
 import subprocess
+from datetime import datetime
 from typing import Dict, List
 
 from dotenv import load_dotenv
@@ -58,7 +59,96 @@ def upload_to_s3(file_path: str, s3_path: str):
         return False
 
 
-def sync_s3_inputs(s3_input_path: str, input_dir: str) -> None:
+def _normalize_s3_prefix(s3_path: str) -> str:
+    return s3_path.rstrip("/") + "/"
+
+
+def _list_s3_child_prefixes(s3_prefix: str) -> List[str]:
+    cmd = [
+        "aws",
+        "s3",
+        "ls",
+        _normalize_s3_prefix(s3_prefix),
+        "--region",
+        read_env("AWS_REGION", "us-east-1"),
+    ]
+    result = subprocess.run(cmd, check=True, capture_output=True, text=True)
+    prefixes: List[str] = []
+    base = _normalize_s3_prefix(s3_prefix)
+    for line in result.stdout.splitlines():
+        stripped = line.strip()
+        if not stripped.startswith("PRE "):
+            continue
+        child = stripped[4:].strip()
+        if child:
+            prefixes.append(base + child)
+    return prefixes
+
+
+def _extract_date_key(s3_prefix: str) -> str:
+    import re
+    match = re.search(r'date=(\d{4}-\d{2}-\d{2})/?$', s3_prefix)
+    return match.group(1) if match else ""
+
+
+def resolve_s3_input_paths(s3_input_path: str, plan_year: int, rolling_years: int) -> List[str]:
+    """Resolve the S3 prefixes to sync.
+
+    If the input path already points to a concrete year/date/raw prefix, use it directly.
+    If it points to the filings_5500_pdf root, resolve the latest date= folder for each
+    of the last N years, falling back to raw/ when no date folders exist yet.
+    """
+    normalized = _normalize_s3_prefix(s3_input_path)
+    if "year=" in normalized:
+        return [normalized]
+
+    resolved: List[str] = []
+    for year in range(plan_year, plan_year - rolling_years, -1):
+        year_prefix = f"{normalized}year={year}/"
+        try:
+            children = _list_s3_child_prefixes(year_prefix)
+        except subprocess.CalledProcessError as exc:
+            print(f"  Failed to inspect {year_prefix}: {exc}")
+            continue
+
+        date_prefixes = [p for p in children if "/date=" in p]
+        if date_prefixes:
+            latest = max(date_prefixes, key=_extract_date_key)
+            resolved.append(latest)
+            continue
+
+        raw_prefixes = [p for p in children if p.rstrip("/").endswith("/raw")]
+        if raw_prefixes:
+            resolved.append(raw_prefixes[0])
+            continue
+
+        print(f"  No date=/raw child folders found under {year_prefix}")
+
+    return resolved or [normalized]
+
+
+def _clear_local_pdf_inputs(input_dir: str) -> None:
+    removed = 0
+    for root, _, files in os.walk(input_dir):
+        for name in files:
+            if not name.lower().endswith('.pdf'):
+                continue
+            os.remove(os.path.join(root, name))
+            removed += 1
+    if removed:
+        print(f"  Cleared {removed} existing local PDF(s) from {input_dir}")
+
+
+def _iter_local_pdf_files(input_dir: str) -> List[str]:
+    pdfs: List[str] = []
+    for root, _, files in os.walk(input_dir):
+        for name in files:
+            if name.lower().endswith('.pdf'):
+                pdfs.append(os.path.join(root, name))
+    return sorted(pdfs)
+
+
+def sync_s3_inputs(s3_input_path: str, input_dir: str, plan_year: int, rolling_years: int = 3) -> None:
     """Sync PDF inputs from S3 into the local input folder when configured."""
     if not s3_input_path:
         return
@@ -67,25 +157,26 @@ def sync_s3_inputs(s3_input_path: str, input_dir: str) -> None:
         return
 
     ensure_dir(input_dir)
-    print(f"  Syncing PDF inputs from {s3_input_path} to {input_dir}")
-    cmd = [
-        "aws",
-        "s3",
-        "sync",
-        s3_input_path,
-        input_dir,
-        "--exclude",
-        "*",
-        "--include",
-        "*.pdf",
-        "--region",
-        read_env("AWS_REGION", "us-east-1"),
-    ]
-    subprocess.run(cmd, check=True)
-    pdf_count = sum(
-        1 for name in os.listdir(input_dir)
-        if name.lower().endswith(".pdf")
-    )
+    _clear_local_pdf_inputs(input_dir)
+    resolved_paths = resolve_s3_input_paths(s3_input_path, plan_year, rolling_years)
+    print(f"  Resolved {len(resolved_paths)} S3 input prefix(es)")
+    for resolved_path in resolved_paths:
+        print(f"  Syncing PDF inputs from {resolved_path} to {input_dir}")
+        cmd = [
+            "aws",
+            "s3",
+            "sync",
+            resolved_path,
+            input_dir,
+            "--exclude",
+            "*",
+            "--include",
+            "*.pdf",
+            "--region",
+            read_env("AWS_REGION", "us-east-1"),
+        ]
+        subprocess.run(cmd, check=True)
+    pdf_count = len(_iter_local_pdf_files(input_dir))
     print(f"  Local PDF inputs ready: {pdf_count}")
 
 
@@ -161,7 +252,7 @@ def main():
     llm_batch_size = int(read_env("POST_LLM_BATCH_SIZE", "10"))
     llm_max_batches_raw = read_env("POST_LLM_MAX_BATCHES", "")
     llm_max_batches = int(llm_max_batches_raw) if llm_max_batches_raw else None
-    plan_year = int(read_env("PLAN_YEAR", "2024"))
+    plan_year = int(read_env("PLAN_YEAR", str(datetime.now().year)))
 
     keywords_yml = read_env("KEYWORDS_YML", "config/keywords.yml")
     schema_yml = read_env("SCHEMA_YML", "config/schema.yml")
@@ -181,10 +272,11 @@ def main():
 
     s3_input_path = read_env(
         "S3_INPUT_PATH",
-        "s3://retirementinsights-bronze/filings_5500_pdf/year=2024/raw/",
+        "s3://retirementinsights-bronze/filings_5500_pdf/",
     )
+    sync_rolling_years = int(read_env("SYNC_ROLLING_YEARS", "4"))
     if read_env("SYNC_S3_INPUTS", "1") != "0":
-        sync_s3_inputs(s3_input_path, input_dir)
+        sync_s3_inputs(s3_input_path, input_dir, plan_year, rolling_years=sync_rolling_years)
 
     if use_ocr:
         print("\n[STEP 1] OCR extraction")
@@ -202,13 +294,10 @@ def main():
         supplemental_pages = []
         plan_info_map = {}
 
-        for fname in sorted(os.listdir(input_dir)):
-            if not fname.lower().endswith(".pdf"):
-                continue
-
-            pdf_path = os.path.join(input_dir, fname)
+        for pdf_path in _iter_local_pdf_files(input_dir):
+            fname = os.path.basename(pdf_path)
             pdf_stem = fname.rsplit(".", 1)[0]
-            print(f"  Processing {fname}")
+            print(f"  Processing {os.path.relpath(pdf_path, input_dir)}")
 
             classified = classify_pages_text(pdf_path, keywords_yml)
             pages.extend(classified)
@@ -391,6 +480,10 @@ def main():
             validated_glue_db=read_env("VALIDATED_GLUE_DB", "default"),
             validated_table=read_env("VALIDATED_TABLE", "plan_mf_history_v3"),
             error_table=read_env("VALIDATION_ERROR_TABLE", "plan_mf_history_validation_errors"),
+            summary_table=read_env("VALIDATION_SUMMARY_TABLE", "plan_mf_history_validation_summary"),
+            summary_glue_db=read_env("VALIDATION_SUMMARY_GLUE_DB",
+                read_env("VALIDATED_GLUE_DB", "default")),
+            manual_review_tolerance=float(read_env("MANUAL_REVIEW_TOLERANCE", "0.10")),
         )
         print(f"  {counts['passed']} passed, {counts['failed']} failed, {counts['skipped']} skipped")
 

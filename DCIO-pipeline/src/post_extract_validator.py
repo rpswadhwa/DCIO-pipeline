@@ -214,23 +214,6 @@ def load_reference(glue_db: str, table: str, workgroup: str,
 
 
 # ---------------------------------------------------------------------------
-# Final row loader (post-LLM SQLite)
-# ---------------------------------------------------------------------------
-
-def load_final_rows(db_path: str) -> List[Dict]:
-    """Read the investments table from the post-LLM SQLite database."""
-    con = sqlite3.connect(db_path)
-    con.row_factory = sqlite3.Row
-    try:
-        cursor = con.execute("SELECT * FROM investments")
-        rows = [dict(r) for r in cursor.fetchall()]
-    finally:
-        con.close()
-    logger.info("Loaded %d rows from SQLite investments table", len(rows))
-    return rows
-
-
-# ---------------------------------------------------------------------------
 # MF total aggregator
 # ---------------------------------------------------------------------------
 
@@ -429,6 +412,99 @@ def write_iceberg_via_athena(df: pd.DataFrame, glue_db: str, table: str) -> None
 
     logger.info("Wrote %d rows to Iceberg table %s.%s", total, glue_db, table)
 
+
+def write_validation_summary_via_athena(df: pd.DataFrame, glue_db: str, table: str) -> None:
+    """Write ack-level validation summary rows to an Iceberg table via Athena."""
+    import awswrangler as wr
+    import math
+    import os
+
+    if df.empty:
+        logger.info("No validation summary rows to write to %s.%s", glue_db, table)
+        return
+
+    workgroup = os.getenv("ATHENA_WORKGROUP", "primary")
+    s3_staging = os.getenv("ATHENA_STAGING_S3")
+
+    ack_ids = df["ack_id"].dropna().unique().tolist()
+    if ack_ids:
+        ids_sql = ", ".join("'" + str(a).replace("'", "''") + "'" for a in ack_ids)
+        delete_sql = f"DELETE FROM {glue_db}.{table} WHERE ack_id IN ({ids_sql})"
+        try:
+            delete_qid = wr.athena.start_query_execution(
+                sql=delete_sql,
+                database=glue_db,
+                workgroup=workgroup,
+                s3_output=s3_staging,
+            )
+            wr.athena.wait_query(query_execution_id=delete_qid)
+            logger.info(
+                "Deleted existing validation summary rows for %d ack_ids from %s.%s",
+                len(ack_ids), glue_db, table,
+            )
+        except Exception as exc:
+            logger.warning(
+                "DELETE skipped for validation summary %s.%s: %s",
+                glue_db, table, exc,
+            )
+
+    batch_size = 200
+    total = len(df)
+    for start in range(0, total, batch_size):
+        batch = df.iloc[start:start + batch_size]
+        values_parts = []
+        for _, row in batch.iterrows():
+            def q(v):
+                if v is None:
+                    return "NULL"
+                try:
+                    if math.isnan(float(v)):
+                        return "NULL"
+                except (TypeError, ValueError):
+                    pass
+                return "'" + str(v).replace("'", "''") + "'"
+
+            def n(v):
+                try:
+                    return "NULL" if v is None or math.isnan(float(v)) else str(float(v))
+                except (TypeError, ValueError):
+                    return "NULL"
+
+            values_parts.append(
+                "({}, {}, {}, {}, {}, {}, {}, {}, {})".format(
+                    q(row.get("ack_id")),
+                    q(row.get("plan_id")),
+                    n(row.get("extracted_amt_mutual_funds")),
+                    n(row.get("reference_amt_mutual_funds")),
+                    n(row.get("difference_amt")),
+                    n(row.get("difference_pct")),
+                    q(row.get("validation_status")),
+                    q(row.get("gap_reason")),
+                    q(row.get("run_ts")),
+                )
+            )
+
+        sql = (
+            "INSERT INTO {}.{} "
+            "("
+            "ack_id, plan_id, extracted_amt_mutual_funds, reference_amt_mutual_funds, "
+            "difference_amt, difference_pct, validation_status, gap_reason, run_ts"
+            ") VALUES {}".format(glue_db, table, ", ".join(values_parts))
+        )
+        query_id = wr.athena.start_query_execution(
+            sql=sql,
+            database=glue_db,
+            workgroup=workgroup,
+            s3_output=s3_staging,
+        )
+        wr.athena.wait_query(query_execution_id=query_id)
+        logger.info(
+            "Inserted validation summary rows %d-%d into Iceberg %s.%s",
+            start, start + len(batch), glue_db, table,
+        )
+
+    logger.info("Wrote %d validation summary rows to %s.%s", total, glue_db, table)
+
 # ---------------------------------------------------------------------------
 # Orchestrator
 # ---------------------------------------------------------------------------
@@ -445,6 +521,9 @@ def run_post_extract_validation(
     validated_glue_db: str,
     validated_table: str,
     error_table: str,
+    summary_table: str,
+    summary_glue_db: str,
+    manual_review_tolerance: float,
 ) -> Dict[str, int]:
     """Run the post-extraction validation gate and write results to Parquet.
 
@@ -457,6 +536,7 @@ def run_post_extract_validation(
     """
     run_ts = datetime.now(timezone.utc).isoformat()
     counts = {"passed": 0, "failed": 0, "skipped": 0}
+    summary_records: List[Dict[str, object]] = []
 
     rows = load_final_rows(db_path)
     if not rows:
@@ -478,6 +558,17 @@ def run_post_extract_validation(
 
         if pdf_stem not in reference:
             logger.warning("SKIP %s: not found in reference table", pdf_stem)
+            summary_records.append({
+                "ack_id": pdf_stem,
+                "plan_id": None,
+                "extracted_amt_mutual_funds": extracted_totals.get(pdf_stem, 0.0),
+                "reference_amt_mutual_funds": None,
+                "difference_amt": None,
+                "difference_pct": None,
+                "validation_status": "SKIP",
+                "gap_reason": "REFERENCE_NOT_FOUND",
+                "run_ts": run_ts,
+            })
             counts["skipped"] += 1
             continue
 
@@ -486,6 +577,17 @@ def run_post_extract_validation(
         plan_id = str(ref_entry.get("plan_id", "") or "").strip()
         if expected <= 0:
             logger.warning("SKIP %s: reference amt_mutual_funds is zero/null", pdf_stem)
+            summary_records.append({
+                "ack_id": pdf_stem,
+                "plan_id": plan_id,
+                "extracted_amt_mutual_funds": extracted_totals.get(pdf_stem, 0.0),
+                "reference_amt_mutual_funds": expected,
+                "difference_amt": None,
+                "difference_pct": None,
+                "validation_status": "SKIP",
+                "gap_reason": "REFERENCE_ZERO_OR_NULL",
+                "run_ts": run_ts,
+            })
             counts["skipped"] += 1
             continue
 
@@ -499,6 +601,19 @@ def run_post_extract_validation(
             )
         else:
             passes, pct_diff = validate_pdf(extracted, expected, tolerance)
+
+        difference_amt = extracted - expected
+        summary_records.append({
+            "ack_id": pdf_stem,
+            "plan_id": plan_id,
+            "extracted_amt_mutual_funds": extracted,
+            "reference_amt_mutual_funds": expected,
+            "difference_amt": difference_amt,
+            "difference_pct": pct_diff,
+            "validation_status": "MANUAL_REVIEW" if pct_diff > manual_review_tolerance else ("PASS" if passes else "FAIL"),
+            "gap_reason": "MF_TOTAL_GT_10_PCT_OFF" if pct_diff > manual_review_tolerance else "WITHIN_10_PCT",
+            "run_ts": run_ts,
+        })
 
         if passes:
             df = build_mf_rows_df(stem_rows)
@@ -531,9 +646,24 @@ def run_post_extract_validation(
                            pdf_stem, extracted, expected, pct_diff * 100, len(error_df))
             counts["failed"] += 1
 
-    logger.info("Validation complete — passed=%d failed=%d skipped=%d",
+    if summary_records:
+        summary_df = pd.DataFrame(summary_records, columns=[
+            "ack_id",
+            "plan_id",
+            "extracted_amt_mutual_funds",
+            "reference_amt_mutual_funds",
+            "difference_amt",
+            "difference_pct",
+            "validation_status",
+            "gap_reason",
+            "run_ts",
+        ])
+        write_validation_summary_via_athena(summary_df, summary_glue_db, summary_table)
+
+    logger.info("Validation complete - passed=%d failed=%d skipped=%d",
                 counts["passed"], counts["failed"], counts["skipped"])
     return counts
+
 
 
 def load_final_rows(db_path: str):

@@ -1247,8 +1247,6 @@ def _looks_like_structural_investment_continuation(text: str) -> bool:
 
 
 
-
-
 def _infer_first_section_asset_type(text: str) -> str:
     """Infer the first asset section heading on a structural investment schedule page."""
     section_map = [
