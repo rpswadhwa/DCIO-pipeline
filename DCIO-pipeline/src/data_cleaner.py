@@ -1,6 +1,7 @@
 import pandas as pd
 import re
 from .asset_type_patterns import ASSET_TYPE_PATTERNS, detect_asset_type, detect_asset_type_strict
+from .ditto_fix import fill_ditto_marks
 
 _SHARES_OF_RE = re.compile(
     r'^\s*[\d,]+(?:\.\d+)?\s+shares?\s+of\s+(.+)$',
@@ -97,6 +98,8 @@ def parse_investment_row(row):
     # Use fullmatch so fund names containing type keywords (e.g. 'BlackRock Index Fund')
     # don't override a correct section type.
     desc_type = detect_asset_type_strict(description) if description else ''
+    if not desc_type and description and ',' in description:
+        desc_type = detect_asset_type_strict(description.split(',', 1)[0])
     if desc_type:
         asset_type = desc_type
     elif not existing_asset_type:
@@ -597,6 +600,7 @@ def clean_investment_data(rows, preserve_loans=True, remove_dupes=True, verbose=
         print(f"Starting with: {len(rows)} records")
     
     # Step 0: Extract fund names from "X shares of Fund Name" descriptions
+    rows = fill_ditto_marks(rows)
     rows = extract_fund_names_from_descriptions(rows)
 
     # Step 1: Remove total/summary rows

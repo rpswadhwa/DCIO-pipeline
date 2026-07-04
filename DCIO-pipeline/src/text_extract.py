@@ -1042,7 +1042,7 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
                 data_start_idx = i + 1
                 break
 
-        multiply_by_1000 = _page_values_are_in_thousands('\n'.join(lines[:12]))
+        multiply_by_1000 = _page_values_are_in_thousands(text)
 
         # Two value patterns:
         # 1. "** $VALUE" or "** VALUE"  (classic Form 5500 format)
@@ -1075,6 +1075,14 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
         }
         current_section_type = inherited_asset_type or ''
 
+        _footnote_re = re.compile(r'(?:\s*(?:\([A-Za-z0-9]{1,3}\)|\*+)\s*,?)+\s*$')
+        _split_value_re = re.compile(r'(\d{1,3})\s+([\d,]*\d)')
+        def _rejoin_split_number(_text):
+            def _repl(m):
+                joined = m.group(1) + m.group(2)
+                return joined if re.fullmatch(r'\d{1,3}(?:,\d{3})+', joined) else m.group(0)
+            return _split_value_re.sub(_repl, _text)
+
         row_num = 0
         for i in range(data_start_idx, len(lines)):
             line = lines[i].strip()
@@ -1087,6 +1095,7 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
             # Check value FIRST — a line with a dollar amount is always a data row,
             # even if it contains an asset-type keyword like "Registered Investment
             # Company".  Section heading detection only fires when no value is found.
+            line = _footnote_re.sub('', _rejoin_split_number(line)).rstrip()
             value_match = star_value_pattern.search(line)
             if value_match:
                 current_value = value_match.group(1).replace(',', '')
@@ -1175,6 +1184,15 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
                 if trailing_asset_type:
                     asset_type = trailing_asset_type
                     issuer_description = stripped_description
+
+            if not asset_type and re.search(r'[\d,]+\s+(?:units|shares)\b', issuer_description, re.IGNORECASE):
+                _ud = issuer_description.upper()
+                for _k, _v in asset_type_patterns.items():
+                    _pos = _ud.find(_k)
+                    if _pos != -1:
+                        asset_type = _v
+                        issuer_description = issuer_description[:_pos].strip().rstrip(',').strip()
+                        break
 
             issuer_name = issuer_description.lstrip('*').rstrip('*').strip()
             if not issuer_name:
@@ -1348,6 +1366,53 @@ def find_structural_investment_pages(pdf_path: str, max_pages: int = 1000) -> Li
         print(f"    [fallback] Error scanning structural investment pages: {exc}")
     return pages
 
+
+_SCHEDULE_OF_TITLE_TYPE_MAP = [
+    (r'REGISTERED\s+INVESTMENT\s+COMPAN', 'Mutual Fund'),
+    (r'MUTUAL\s+FUND', 'Mutual Fund'),
+    (r'MONEY\s+MARKET', 'Money Market Fund'),
+    (r'COMMON\s*/?\s*COLLECTIVE\s+TRUST|COLLECTIVE\s+INVESTMENT', 'Common/Collective Trust Fund'),
+    (r'POOLED\s+SEPARATE\s+ACCOUNT', 'Commingled Fund'),
+    (r'SELF[\s-]*DIRECTED\s+BROKERAGE', 'Self-Directed Brokerage Account'),
+    (r'GUARANTEED\s+INVESTMENT\s+CONTRACT|GUARANTEED\s+INSURANCE', 'Guaranteed Investment Contract'),
+    (r'U\.?\s*S\.?\s+GOVERNMENT|GOVERNMENT\s+(SECURITIES|OBLIGATIONS|AGENC)', 'Government Securities'),
+    (r'MUNICIPAL', 'Government Securities'),
+    (r'CORPORATE\s+DEBT|CORPORATE\s+BOND|DEBT\s+INSTRUMENT', 'Corporate Debt'),
+    (r'PREFERRED\s+STOCK', 'Preferred Stock'),
+    (r'CORPORATE\s+STOCK|COMMON\s+STOCK', 'Common Stock'),
+    (r'INTEREST[\s-]*BEARING\s+CASH|CASH\s+EQUIVALENT', 'Cash'),
+    (r'PARTICIPANT\s+LOAN', 'Participant Loan'),
+    (r'REAL\s+ESTATE', 'Real Estate'),
+    (r'PARTNERSHIP', 'Partnership Interest'),
+    (r'EMPLOYER\s+(STOCK|SECURITIES)', 'Employer Stock'),
+]
+
+
+def _infer_schedule_of_title_asset_type(text: str) -> str:
+    """Map an audited sub-schedule page title ('SCHEDULE OF <asset type>') to a
+    canonical asset_type. 5500 audited 4i schedules split holdings into per-asset-type
+    sub-schedules (e.g. 'SCHEDULE OF U.S. GOVERNMENT SECURITIES', 'SCHEDULE OF CORPORATE
+    STOCK - COMMON', 'SCHEDULE OF REGISTERED INVESTMENT COMPANIES'). Tagging rows with
+    the sub-schedule type lets the MF load gate keep only mutual-fund (RIC) sub-schedules
+    and drop bond/stock/cash sub-schedules that otherwise leak through as blank-type
+    numeric-name junk. Uses a dedicated title map (NOT row-level ASSET_TYPE_PATTERNS) so
+    fund NAMES are never mis-tagged.
+    """
+    for line in (text or "").splitlines()[:8]:
+        u = normalize_whitespace(line).upper()
+        m = re.match(r'SCHEDULE\s+OF\s+(.+)$', u)
+        if not m:
+            continue
+        title = m.group(1)
+        if 'ASSETS HELD' in title or 'INVESTMENT PURPOSES' in title:
+            continue
+        for pattern, atype in _SCHEDULE_OF_TITLE_TYPE_MAP:
+            if re.search(pattern, title):
+                return atype
+        return ''
+    return ''
+
+
 def extract_tables_and_map(
     pdf_path: str,
     supplemental_pages: List[int],
@@ -1451,11 +1516,14 @@ def extract_tables_and_map(
     default_pages = [p for p in supplemental_pages if p not in section_table_areas_by_page]
     tables = []
     if default_pages:
-        tables.extend(camelot.read_pdf(
-            pdf_path,
-            pages=",".join(str(p) for p in default_pages),
-            flavor="stream",
-        ))
+        try:
+            tables.extend(camelot.read_pdf(
+                pdf_path,
+                pages=",".join(str(p) for p in default_pages),
+                flavor="stream",
+            ))
+        except Exception as _exc:
+            print(f"    Camelot failed on default pages {default_pages}: {_exc}")
     section_asset_type_by_table: Dict[int, str] = {}
     for page_num in supplemental_pages:
         section_table_areas = section_table_areas_by_page.get(page_num, [])
@@ -1463,12 +1531,16 @@ def extract_tables_and_map(
             continue
         print(f"    Splitting page {page_num} into {len(section_table_areas)} section table areas")
         for table_area, section_asset_type in section_table_areas:
-            section_tables = list(camelot.read_pdf(
-                pdf_path,
-                pages=str(page_num),
-                flavor="stream",
-                table_areas=[table_area],
-            ))
+            try:
+                section_tables = list(camelot.read_pdf(
+                    pdf_path,
+                    pages=str(page_num),
+                    flavor="stream",
+                    table_areas=[table_area],
+                ))
+            except Exception as _exc:
+                print(f"    Skipping section area on page {page_num}: {_exc}")
+                section_tables = []
             for section_table in section_tables:
                 tables.append(section_table)
                 section_asset_type_by_table[id(section_table)] = section_asset_type
@@ -1819,4 +1891,27 @@ def extract_tables_and_map(
             }
         )
     
+    # --- Sub-schedule title asset-type tagging (audited 4i "SCHEDULE OF <type>" pages) ---
+    # Fill blank asset_type from each page's sub-schedule title so non-MF sub-schedules
+    # (govt/corporate bonds, stocks, cash) are dropped by the MF load gate instead of
+    # leaking through as numeric-name junk; "registered investment companies" -> Mutual Fund.
+    try:
+        _title_type_by_page: Dict[int, str] = {}
+        with pdfplumber.open(pdf_path) as _ttl_doc:
+            _npages = len(_ttl_doc.pages)
+            for _entry in result:
+                _pn = _entry.get("page_number")
+                if isinstance(_pn, int) and _pn not in _title_type_by_page and 1 <= _pn <= _npages:
+                    _htxt = _ttl_doc.pages[_pn - 1].extract_text() or ""
+                    _title_type_by_page[_pn] = _infer_schedule_of_title_asset_type(_htxt)
+        for _entry in result:
+            _ptype = _title_type_by_page.get(_entry.get("page_number"), "")
+            if not _ptype:
+                continue
+            for _row in _entry.get("mapped_rows", []):
+                if not normalize_whitespace(str(_row.get("asset_type", "") or "")).strip():
+                    _row["asset_type"] = _ptype
+    except Exception as _ttl_exc:
+        print(f"    [sub-schedule tag] skipped: {_ttl_exc}")
+
     return plan_info, result

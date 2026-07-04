@@ -136,6 +136,9 @@ def pick_fund_name(issuer_name, investment_description):
     """
     issuer = str(issuer_name or "").strip()
     desc = _clean_description(str(investment_description or "").strip())
+    from .ditto_fix import is_junk_name
+    if is_junk_name(desc):
+        desc = ""
     if not issuer and not desc:
         return ""
     if not issuer:
@@ -261,8 +264,38 @@ def validate_pdf(extracted: float, expected: float,
 # DataFrame builders
 # ---------------------------------------------------------------------------
 
+_MF_PREFIX_RE = _re.compile(r'^\s*mutual\s+funds?\s*[-,:]?\s*', _re.IGNORECASE)
+_MF_NAME_FILLER_RE = _re.compile(
+    r'(?i)\b(sub)?totals?\b|\bcontinued\b|\bshares\b|\bregistered\s+investment\s+compan\w*\b'
+    r'|\binvestments?\b|\bn/?a\b|[^A-Za-z]')
+_ANNUITY_VEHICLE_RE = _re.compile(
+    r'(?i)(variable\s+annuit|annuity\s+(account|contract|compan|co\b)'
+    r'|insurance\s+(and\s+)?annuity|traditional\s+annuity|\bCREF\b'
+    r'|college\s+retirement\s+equities|teachers\s+insurance\s+and\s+annuity)')
+
+
+def _normalize_mf_name(name: str) -> str:
+    """Strip a leading 'Mutual Fund(s)' type label from a candidate fund name and reject
+    subtotal / type-only rows. Audited MF sub-schedules prepend the asset-type label to
+    each fund ('Mutual Fund Fidelity 500 Index') and emit section subtotals
+    ('Mutual Funds Total') / nameless placeholders ('Mutual Fund N/A'). Returns the cleaned
+    name, or '' for subtotal/type-only rows (so the name-quality gate drops them).
+    """
+    n = (name or "").strip()
+    if not n:
+        return ""
+    if n.lower().startswith("mutual fund"):
+        stripped = _MF_PREFIX_RE.sub("", n).strip()
+        residual = _MF_NAME_FILLER_RE.sub(" ", stripped)
+        if not _re.search(r"[A-Za-z]", residual):
+            return ""
+        return stripped
+    return n
+
+
 def build_mf_rows_df(rows: List[Dict],
-                     mf_types: frozenset = MF_ASSET_TYPES) -> pd.DataFrame:
+                     mf_types: frozenset = MF_ASSET_TYPES,
+                     validation_status: str = "UNVALIDATED") -> pd.DataFrame:
     """Build the plan_mf_history_v3 DataFrame from MF rows for a passing PDF.
 
     Filters to MF asset types only and maps to the three target columns:
@@ -272,18 +305,42 @@ def build_mf_rows_df(rows: List[Dict],
 
     Rows with unparseable current_value are included with NaN.
     """
+    # Non-MF asset types that must NOT be loaded into the MF table even if unclassified elsewhere.
+    _non_mf = {"common stock","preferred stock","employer stock","common/collective trust fund",
+               "commingled fund","separately managed account","self-directed brokerage account",
+               "participant loan","guaranteed insurance contract","guaranteed investment contract",
+               "stable value fund","insurance general account","group annuity contract",
+               "partnership interest","currency"}
     records = []
     for row in rows:
         asset_type = str(row.get("asset_type", "") or "").strip().lower()
-        if asset_type not in mf_types:
+        _val = parse_currency_value(row.get("current_value"))
+        # Load MF-typed rows; also load blank/unknown-type rows that have a value
+        # (the "no asset type" case -> classify in post-processing). Skip explicit non-MF.
+        if asset_type in _non_mf:
+            continue
+        if asset_type and asset_type not in mf_types:
+            continue
+        if not asset_type and _val is None:
+            continue
+        _name = _normalize_mf_name(pick_fund_name(row.get("issuer_name"), row.get("investment_description")))
+        # Name-quality gate: drop blank / numeric-only (bond rates, share counts, mis-mapped
+        # columns) and "Mutual Fund(s) Total/Shares/N-A" subtotal/type-only rows
+        # (_normalize_mf_name returns '' for those).
+        if not _name or not _re.search(r"[A-Za-z]", _name):
+            continue
+        # Scope: annuity / insurance vehicles (CREF, TIAA Traditional, Voya/Empower
+        # Retirement Insurance & Annuity, variable annuity accounts) are not mutual funds.
+        if _ANNUITY_VEHICLE_RE.search(_name):
             continue
         records.append({
             "ack_id": str(row.get("pdf_stem", "") or "").strip(),
-            "raw_entity_name": pick_fund_name(row.get("issuer_name"), row.get("investment_description")),
+            "raw_entity_name": _name,
             "raw_sponsor_name": str(row.get("issuer_name", "") or "").strip(),
-            "plan_investment_amt": parse_currency_value(row.get("current_value")),
+            "plan_investment_amt": _val,
             "asset_class": "PENDING_AI",
             "asset_sub_class": "PENDING_AI",
+            "validation_status": validation_status,
         })
     return pd.DataFrame(records, columns=[
         "ack_id",
@@ -292,6 +349,7 @@ def build_mf_rows_df(rows: List[Dict],
         "plan_investment_amt",
         "asset_class",
         "asset_sub_class",
+        "validation_status",
     ])
 
 
@@ -363,7 +421,7 @@ def write_iceberg_via_athena(df: pd.DataFrame, glue_db: str, table: str) -> None
         except Exception as e:
             logger.warning("DELETE skipped for %s.%s (not a transactional table?): %s", glue_db, table, e)
 
-    batch_size = 200
+    batch_size = 500
     total = len(df)
     for start in range(0, total, batch_size):
         batch = df.iloc[start:start + batch_size]
@@ -381,24 +439,28 @@ def write_iceberg_via_athena(df: pd.DataFrame, glue_db: str, table: str) -> None
 
             amt = row.get("plan_investment_amt")
             try:
-                amt_sql = "NULL" if (amt is None or math.isnan(float(amt))) else str(float(amt))
+                _a = float(amt)
+                # DECIMAL(18,2) overflows ~1e16; null obvious overflow/garbage
+                # and use fixed-point (no exponent) formatting for valid values.
+                amt_sql = "NULL" if (math.isnan(_a) or abs(_a) >= 1e15) else ("%.2f" % _a)
             except (TypeError, ValueError):
                 amt_sql = "NULL"
 
             values_parts.append(
-                "({}, {}, {}, {}, {}, {})".format(
+                "({}, {}, {}, {}, {}, {}, {})".format(
                     q(row.get("ack_id")),
                     q(row.get("raw_entity_name")),
                     q(row.get("raw_sponsor_name")),
                     amt_sql,
                     q(row.get("asset_class", "PENDING_AI")),
                     q(row.get("asset_sub_class", "PENDING_AI")),
+                    q(row.get("validation_status", "UNVALIDATED")),
                 )
             )
 
         sql = (
             "INSERT INTO {}.{} "
-            "(ack_id, raw_entity_name, raw_sponsor_name, plan_investment_amt, asset_class, asset_sub_class) "
+            "(ack_id, raw_entity_name, raw_sponsor_name, plan_investment_amt, asset_class, asset_sub_class, validation_status) "
             "VALUES {}".format(glue_db, table, ", ".join(values_parts))
         )
         query_id = wr.athena.start_query_execution(
@@ -448,7 +510,7 @@ def write_validation_summary_via_athena(df: pd.DataFrame, glue_db: str, table: s
                 glue_db, table, exc,
             )
 
-    batch_size = 200
+    batch_size = 500
     total = len(df)
     for start in range(0, total, batch_size):
         batch = df.iloc[start:start + batch_size]
@@ -616,34 +678,8 @@ def run_post_extract_validation(
         })
 
         if passes:
-            df = build_mf_rows_df(stem_rows)
-            if not df.empty and expected > 0:
-                too_large = df['plan_investment_amt'] > expected
-                if too_large.any():
-                    logger.warning("Dropping %d rows where single value > expected total %.0f: %s",
-                                   too_large.sum(), expected,
-                                   df.loc[too_large, 'raw_entity_name'].tolist())
-                    df = df[~too_large]
-            if df.empty:
-                logger.warning("PASS %s but no MF rows to write", pdf_stem)
-                counts["passed"] += 1
-                continue
-            write_iceberg_via_athena(df, validated_glue_db, validated_table)
-            logger.info("PASS %s: extracted=%.0f expected=%.0f diff=%.2f%% (%d MF rows written)",
-                        pdf_stem, extracted, expected, pct_diff * 100, len(df))
             counts["passed"] += 1
         else:
-            error_df = build_mf_rows_df(stem_rows)
-            if not error_df.empty and expected > 0:
-                too_large = error_df['plan_investment_amt'] > expected
-                if too_large.any():
-                    logger.warning("Dropping %d error rows where single value > expected total %.0f",
-                                   too_large.sum(), expected)
-                    error_df = error_df[~too_large]
-            if not error_df.empty:
-                write_iceberg_via_athena(error_df, validated_glue_db, error_table)
-            logger.warning("FAIL %s: extracted=%.0f expected=%.0f diff=%.2f%% (%d MF rows)",
-                           pdf_stem, extracted, expected, pct_diff * 100, len(error_df))
             counts["failed"] += 1
 
     if summary_records:
@@ -659,6 +695,20 @@ def run_post_extract_validation(
             "run_ts",
         ])
         write_validation_summary_via_athena(summary_df, summary_glue_db, summary_table)
+
+    # LOAD-ALL: write every extracted mutual-fund row to the MF table, tagged with
+    # its summary status (UNVALIDATED when there is no usable certified reference).
+    status_by_ack = {r["ack_id"]: r["validation_status"] for r in summary_records}
+    all_mf = []
+    for _stem, _srows in rows_by_stem.items():
+        _st = status_by_ack.get(_stem) or "UNVALIDATED"
+        if _st == "SKIP":
+            _st = "UNVALIDATED"
+        _df = build_mf_rows_df(_srows, validation_status=_st)
+        if not _df.empty:
+            all_mf.append(_df)
+    if all_mf:
+        write_iceberg_via_athena(pd.concat(all_mf, ignore_index=True), validated_glue_db, validated_table)
 
     logger.info("Validation complete - passed=%d failed=%d skipped=%d",
                 counts["passed"], counts["failed"], counts["skipped"])
