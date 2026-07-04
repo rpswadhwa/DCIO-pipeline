@@ -274,6 +274,23 @@ _ANNUITY_VEHICLE_RE = _re.compile(
     r'|college\s+retirement\s+equities|teachers\s+insurance\s+and\s+annuity)')
 
 
+_TRAILING_VALUE_RE = _re.compile(
+    r'(?i)(\s+(\d{1,3}(,\d{3})+|\d{5,}|\d[\d,\.]*\s+(shares?|units?|shs)))+\s*$')
+
+
+def _strip_trailing_value_tokens(name: str) -> str:
+    """Strip share-count / value tokens that bled onto the end of a fund name from
+    adjacent columns (e.g. 'Vanguard Mid-Cap Index Admiral 2,437',
+    'ISHARES CORE MSCI EAFE ETF 2127315', 'Fidelity Advisor Intl 15,751 shares 408,266').
+    Only removes comma-grouped numbers, >=5-digit bare integers, and 'N shares/units'
+    tokens -- so 4-digit target-date years (2050) and index numbers (500/2000) are kept.
+    """
+    if not name:
+        return name
+    cleaned = _TRAILING_VALUE_RE.sub('', name).strip()
+    return cleaned or name
+
+
 def _normalize_mf_name(name: str) -> str:
     """Strip a leading 'Mutual Fund(s)' type label from a candidate fund name and reject
     subtotal / type-only rows. Audited MF sub-schedules prepend the asset-type label to
@@ -323,7 +340,7 @@ def build_mf_rows_df(rows: List[Dict],
             continue
         if not asset_type and _val is None:
             continue
-        _name = _normalize_mf_name(pick_fund_name(row.get("issuer_name"), row.get("investment_description")))
+        _name = _strip_trailing_value_tokens(_normalize_mf_name(pick_fund_name(row.get("issuer_name"), row.get("investment_description"))))
         # Name-quality gate: drop blank / numeric-only (bond rates, share counts, mis-mapped
         # columns) and "Mutual Fund(s) Total/Shares/N-A" subtotal/type-only rows
         # (_normalize_mf_name returns '' for those).
