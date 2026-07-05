@@ -76,10 +76,16 @@ def classify_section_line(line: str) -> Optional[str]:
     for rx, atype in _SECTION_MAP:
         m = rx.search(s)
         if m:
-            # the matched label must dominate the line (header, not a fund name):
-            # allow a little decoration (bullets, "Total", parentheses) around it
+            # the matched label must DOMINATE the line (a header, not a fund name that
+            # merely contains the words). Strip the label + common section-noun
+            # decoration; if a real brand/fund name remains, it is not a header.
             residue = rx.sub("", s)
-            residue = re.sub(r"(?i)\b(total|schedule of|held|investments?|at\s+fair\s+value|s)\b", "", residue)
+            residue = re.sub(
+                r"(?i)\b(total|sub|schedule|of|held|investments?|instruments?|"
+                r"securit(?:y|ies)|accounts?|obligations?|compan(?:y|ies)|funds?|"
+                r"trusts?|stocks?|contracts?|deposits?|cash|equivalents?|at|fair|"
+                r"value|and|other|the|for|purposes|u|s)\b",
+                "", residue)
             residue = re.sub(r"[^A-Za-z]", "", residue)
             if len(residue) <= 3:
                 return atype
@@ -109,21 +115,31 @@ def _cluster_lines(words: List[Dict], y_tol: float = 3.0):
     return out
 
 
-def _value_variants(current_value) -> List[str]:
-    """String forms a row's value might take on the page (raw vs de-scaled)."""
-    out = []
+def _value_variants(current_value) -> set:
+    """Numeric string forms a row's value might take on the page (raw vs de-scaled),
+    all comma-stripped for comparison against a line's trailing number."""
+    out = set()
     try:
         v = float(str(current_value).replace(",", ""))
     except (TypeError, ValueError):
         return out
     iv = int(round(v))
-    out.append(f"{iv:,}")
-    out.append(str(iv))
-    if iv % 1000 == 0:  # page may show "(in thousands)" -> row scaled x1000
-        k = iv // 1000
-        out.append(f"{k:,}")
-        out.append(str(k))
+    out.add(str(iv))
+    if iv % 1000 == 0:            # page may show "(in thousands)" -> row scaled x1000
+        out.add(str(iv // 1000))
     return out
+
+
+_NUM_TOKEN_RE = re.compile(r"\d[\d,]*(?:\.\d+)?")
+
+
+def _line_trailing_number(text: str) -> Optional[str]:
+    """The last numeric token on a line (holdings put current value at line end),
+    comma-stripped and truncated to the integer part."""
+    nums = _NUM_TOKEN_RE.findall(text or "")
+    if not nums:
+        return None
+    return nums[-1].replace(",", "").split(".")[0]
 
 
 def retype_page(page_words: List[Dict], rows: List[Dict], carry_type: Optional[str]) -> Optional[str]:
@@ -148,20 +164,22 @@ def retype_page(page_words: List[Dict], rows: List[Dict], carry_type: Optional[s
                 break
         return cur
 
-    # locate each row's y via its value token, then its name token
+    # locate each row's y: (1) by its value == a line's trailing number, else
+    # (2) by its name appearing on a line. If unlocatable, section_at(None)
+    # falls back to the carried section -> stragglers still get the right type.
     for row in rows:
         y = None
         variants = _value_variants(row.get("current_value"))
         if variants:
             for top, text, _ in lines:
-                if any(v in text for v in variants):
-                    y = top  # last matching line (values near bottom of wrapped rows)
+                if _line_trailing_number(text) in variants:
+                    y = top  # last matching line (values sit at the row's baseline)
         if y is None:
             nm = (row.get("issuer_name") or row.get("investment_description") or "").strip()
-            tok = next((t for t in nm.split() if len(t) >= 5 and _DIGIT_RE.search(t) is None), "")
-            if tok:
+            key = nm[:18].upper()
+            if len(key) >= 4:
                 for top, text, _ in lines:
-                    if tok in text:
+                    if key in text.upper():
                         y = top
                         break
         sect = section_at(y)
@@ -206,3 +224,47 @@ def retype_result(result: List[Dict], pdf_path: str) -> Dict[str, int]:
                 if a and a != b and a not in MF_SECTION_TYPES:
                     stats["retyped_non_mf"] += 1
     return stats
+
+
+# ---------------------------------------------------------------------------
+# Row-level cleanup (subtotal drop + dedup) -- also isolated to the Stage-2 path.
+# ---------------------------------------------------------------------------
+_TOTAL_PREFIX_RE = re.compile(r"(?i)^\s*(sub[\s-]?)?totals?\b")
+
+
+def is_section_subtotal(name: str) -> bool:
+    """True if `name` is a section subtotal line ("Total Corporate Debt Instruments",
+    "Total Self-Directed Brokerage Accounts", bare "Total"/"Subtotal"). Requires the
+    line to START with total/subtotal AND either name a section (from _SECTION_MAP)
+    or be a bare total -- so real funds ("PIMCO Total Return", "Vanguard Total Bond
+    Market") are never dropped (they don't start with 'Total ' + a section label)."""
+    s = (name or "").strip()
+    if not _TOTAL_PREFIX_RE.match(s):
+        return False
+    if re.fullmatch(r"(?i)\s*(sub[\s-]?)?totals?\s*", s):
+        return True
+    return any(rx.search(s) for rx, _ in _SECTION_MAP)
+
+
+def flatten_clean(result: List[Dict]) -> List[Dict]:
+    """Flatten an extraction result to a row list, dropping section-subtotal rows
+    and de-duplicating identical (issuer, description, value) rows (the core
+    extractor's table+text double-pass can emit each holding twice). Isolated to
+    Stage 2 -- the core pipeline is unaffected."""
+    seen = set()
+    out: List[Dict] = []
+    for entry in result:
+        for r in entry.get("mapped_rows", []):
+            name = (r.get("issuer_name") or r.get("investment_description") or "").strip()
+            if is_section_subtotal(name):
+                continue
+            key = (
+                str(r.get("issuer_name", "") or "").strip().upper(),
+                str(r.get("investment_description", "") or "").strip().upper(),
+                str(r.get("current_value", "") or "").strip(),
+            )
+            if key in seen:
+                continue
+            seen.add(key)
+            out.append(r)
+    return out
