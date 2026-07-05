@@ -302,6 +302,17 @@ _TOTAL_LINE_RE = _re.compile(
     r')')
 
 
+# CUSIP-continuation-line artifact detector (FIX 20, Mode 1 over-capture).
+# Northern-Trust-style master-trust schedules ("5500 Supplemental Schedules") render each
+# holding as a TWO-line record: line 1 = "<security desc> <shares> <cost> <current value>",
+# line 2 = "CUSIP: <9-char id>". The extractor mis-reads the CUSIP continuation line as its
+# own holding -- name becomes "CUSIP" (or a wrapped fund-name tail like "INDEX FD ADMIRAL
+# SHS CUSIP") and the 9-digit CUSIP id (e.g. 989207105) parses as a $989M "value".
+# Schlumberger master trust alone produced ~896 such rows summing to $352B of fake AUM.
+# The token "CUSIP" never appears in a genuine fund name, so matching it anywhere is zero-FP.
+_CUSIP_ARTIFACT_RE = _re.compile(r'(?i)\bCUSIP\b')
+
+
 def _strip_trailing_value_tokens(name: str) -> str:
     """Strip share-count / value tokens that bled onto the end of a fund name from
     adjacent columns (e.g. 'Vanguard Mid-Cap Index Admiral 2,437',
@@ -375,6 +386,10 @@ def build_mf_rows_df(rows: List[Dict],
         # (EXCLUDING PARTICIPANT LOANS)" row). Anchored patterns keep real "Total Return"/
         # "Total Stock Market" funds (see _TOTAL_LINE_RE).
         if _TOTAL_LINE_RE.search(_name):
+            continue
+        # Mode 1 over-capture: drop CUSIP-continuation-line artifacts (name contains the
+        # token "CUSIP"; the 9-digit CUSIP id was mis-read as the value). See _CUSIP_ARTIFACT_RE.
+        if _CUSIP_ARTIFACT_RE.search(_name):
             continue
         # Scope: annuity / insurance vehicles (CREF, TIAA Traditional, Voya/Empower
         # Retirement Insurance & Annuity, variable annuity accounts) are not mutual funds.
