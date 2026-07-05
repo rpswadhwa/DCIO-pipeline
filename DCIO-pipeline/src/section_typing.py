@@ -231,6 +231,20 @@ def retype_result(result: List[Dict], pdf_path: str) -> Dict[str, int]:
 # ---------------------------------------------------------------------------
 _TOTAL_PREFIX_RE = re.compile(r"(?i)^\s*(sub[\s-]?)?totals?\b")
 
+# Name-based CIT catch (defense-in-depth). CITs must be EXCLUDED from the MF table
+# (captured elsewhere). Section-typing removes CITs where the "Common/Collective
+# Trusts" section is detected; this catches CIT holdings on plans/pages where the
+# section header was missed and the row arrived blank- or MF-typed. Patterns are
+# distinctive to collective vehicles so real mutual funds (which may say "Trust",
+# e.g. "iShares Trust") are NOT hit.
+_CIT_NAME_RE = re.compile(
+    r"(?i)(collective\s+(trust|investment|fund)|commingled|common\s*/\s*collective"
+    r"|\bcoll(?:ective)?\s+(trust|tr|inv)\b|\bC\s*/\s*C\s+trust\b|\bCCT\b)")
+
+
+def looks_like_cit(name: str) -> bool:
+    return bool(_CIT_NAME_RE.search(name or ""))
+
 
 def is_section_subtotal(name: str) -> bool:
     """True if `name` is a section subtotal line ("Total Corporate Debt Instruments",
@@ -258,6 +272,10 @@ def flatten_clean(result: List[Dict]) -> List[Dict]:
             name = (r.get("issuer_name") or r.get("investment_description") or "").strip()
             if is_section_subtotal(name):
                 continue
+            # Name-based CIT catch: force the CIT type so the load gate drops it,
+            # even if the section header was missed (row blank- or MF-typed).
+            if looks_like_cit(name):
+                r["asset_type"] = "Common/Collective Trust Fund"
             key = (
                 str(r.get("issuer_name", "") or "").strip().upper(),
                 str(r.get("investment_description", "") or "").strip().upper(),
