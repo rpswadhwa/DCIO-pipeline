@@ -278,6 +278,30 @@ _TRAILING_VALUE_RE = _re.compile(
     r'(?i)(\s+(\d{1,3}(,\d{3})+|\d{5,}|\d[\d,\.]*\s+(shares?|units?|shs)))+\s*$')
 
 
+# Total-line / participant-loan-line detector (FIX 19, Mode 2 over-capture).
+# Audited 4i schedules end with grand-total / plan-total lines that some layouts
+# (e.g. Amazon 401k) capture as a "holding": e.g. the literal line
+#   TOTAL INVESTMENTS (EXCLUDING PARTICIPANT LOANS) 34,167,624
+# gets loaded as a fund named "EXCLUDING" / "TOTAL INVESTMENTS ..." worth $34.2B,
+# swamping the real ~$2B mutual-fund sleeve. Participant-loan lines
+# ("...10.5%, MATURING THROUGH 2050") also leak in as junk names ("105 MATURING THROUGH").
+# Every total-label pattern is ANCHORED at start-of-name because genuine funds lead with a
+# brand/manager token ("Vanguard Total Stock Market", "PIMCO Total Return") -- a total line
+# leads with the label itself. "investments" is matched plural-only so singular fund names
+# like "Total Investment Grade Credit" are never hit.
+_TOTAL_LINE_RE = _re.compile(
+    r'(?i)('
+    r'excluding\s+participant\s+loans?'            # (EXCLUDING PARTICIPANT LOANS) -- any position
+    r'|maturing\s+through'                          # participant-loan line fragment
+    r'|^\s*excluding\b'                             # captured fragment 'EXCLUDING'
+    r'|^\s*grand\s+total\b'
+    r'|^\s*(sub[-\s]?)?total\s*$'                   # bare 'Total' / 'Subtotal' / 'Sub-total'
+    r'|^\s*total\s+investments\b'                   # TOTAL INVESTMENTS (plural)
+    r'|^\s*total\s+(net\s+)?assets?\b'              # TOTAL (NET) ASSETS
+    r'|^\s*total\s+(mutual\s+funds?|common\s+stock|collective|holdings?|value)\b'
+    r')')
+
+
 def _strip_trailing_value_tokens(name: str) -> str:
     """Strip share-count / value tokens that bled onto the end of a fund name from
     adjacent columns (e.g. 'Vanguard Mid-Cap Index Admiral 2,437',
@@ -345,6 +369,12 @@ def build_mf_rows_df(rows: List[Dict],
         # columns) and "Mutual Fund(s) Total/Shares/N-A" subtotal/type-only rows
         # (_normalize_mf_name returns '' for those).
         if not _name or not _re.search(r"[A-Za-z]", _name):
+            continue
+        # Mode 2 over-capture: drop grand-total / plan-total lines and participant-loan
+        # line fragments captured as a holding (e.g. Amazon's $34.2B "TOTAL INVESTMENTS
+        # (EXCLUDING PARTICIPANT LOANS)" row). Anchored patterns keep real "Total Return"/
+        # "Total Stock Market" funds (see _TOTAL_LINE_RE).
+        if _TOTAL_LINE_RE.search(_name):
             continue
         # Scope: annuity / insurance vehicles (CREF, TIAA Traditional, Voya/Empower
         # Retirement Insurance & Annuity, variable annuity accounts) are not mutual funds.
