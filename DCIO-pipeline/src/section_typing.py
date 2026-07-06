@@ -154,9 +154,15 @@ def retype_page(page_words: List[Dict], rows: List[Dict], carry_type: Optional[s
             headers.append((top, atype))
 
     def section_at(y: Optional[float]) -> Optional[str]:
-        cur = carry_type
+        # CONSERVATIVE: return None when the row's position is unknown, so we do
+        # NOT overwrite the extractor's own type with a possibly-stale carried
+        # section. This prevents a wrong carry from bleeding across a whole
+        # document (e.g. Wells Fargo, where matching failed and a 'Participant
+        # Loan' carry got stamped onto every fund). Located rows -- including on
+        # header-less continuation pages -- still inherit the carried section.
         if y is None:
-            return cur
+            return None
+        cur = carry_type
         for htop, atype in headers:
             if htop <= y + 1.0:
                 cur = atype
@@ -165,8 +171,8 @@ def retype_page(page_words: List[Dict], rows: List[Dict], carry_type: Optional[s
         return cur
 
     # locate each row's y: (1) by its value == a line's trailing number, else
-    # (2) by its name appearing on a line. If unlocatable, section_at(None)
-    # falls back to the carried section -> stragglers still get the right type.
+    # (2) by its name appearing on a line. Rows we CANNOT locate are left with
+    # their existing asset_type (we only override when confidently placed).
     for row in rows:
         y = None
         variants = _value_variants(row.get("current_value"))
@@ -183,9 +189,11 @@ def retype_page(page_words: List[Dict], rows: List[Dict], carry_type: Optional[s
                         y = top
                         break
         sect = section_at(y)
-        if sect and sect not in MF_SECTION_TYPES:
+        if sect is None:
+            continue                            # unlocated -> trust extractor's type
+        if sect not in MF_SECTION_TYPES:
             row["asset_type"] = sect            # non-MF -> gate will drop it
-        elif sect in MF_SECTION_TYPES and not str(row.get("asset_type") or "").strip():
+        elif not str(row.get("asset_type") or "").strip():
             row["asset_type"] = sect            # only fill blanks with MF type
 
     # section in effect at page bottom
