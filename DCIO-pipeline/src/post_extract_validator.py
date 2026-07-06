@@ -367,6 +367,13 @@ def build_mf_rows_df(rows: List[Dict],
     for row in rows:
         asset_type = str(row.get("asset_type", "") or "").strip().lower()
         _val = parse_currency_value(row.get("current_value"))
+        # FIX 21 (garbage-value guard): no single mutual-fund holding in one plan is $20B+
+        # (largest observed legit position ~$8.5B). A value at/above that is a parse error --
+        # e.g. triple-rendered PDFs where every digit repeats 3x ("444000777777000222" ~ 4.4e17),
+        # concatenated columns, or master-trust aggregate lines. Treat as no value so the row is
+        # dropped (blank-type) / not counted, instead of inflating the plan's MF total.
+        if _val is not None and _val >= 2e10:
+            _val = None
         # Load MF-typed rows; also load blank/unknown-type rows that have a value
         # (the "no asset type" case -> classify in post-processing). Skip explicit non-MF.
         if asset_type in _non_mf:
