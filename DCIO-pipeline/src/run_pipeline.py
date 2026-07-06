@@ -292,6 +292,23 @@ def main():
                     )
                 ]
 
+            # Section-typing correction stage (src/section_typing.py): re-type rows by
+            # their PDF section and drop CIT / subtotal / duplicate junk -- AFTER
+            # extraction, BEFORE the final validator -- so non-MF holdings (bonds,
+            # stocks, treasuries, collective trusts) are excluded from plan_mf_history_v3.
+            # EXCEPTION PATH ONLY: DEFAULT OFF. The normal full run does NOT touch the
+            # ~44K good plans with this. It is enabled (SECTION_TYPING=1) only for the
+            # targeted re-run over flagged over-capture / quarantine plans, then swapped
+            # in per-ACK. Conservative (only downgrades non-MF).
+            if read_env("SECTION_TYPING", "0") == "1":
+                try:
+                    from .section_typing import apply_section_typing_stage
+                    _st_stats = apply_section_typing_stage(page_data, pdf_path)
+                    if any(_st_stats.values()):
+                        print(f"    Section-typing: {_st_stats}")
+                except Exception as _st_exc:
+                    print(f"    [section-typing] stage skipped: {_st_exc}")
+
             supplemental_pages.extend(page_data)
 
     print("\n[STEP 2] QA report")

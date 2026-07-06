@@ -294,3 +294,50 @@ def flatten_clean(result: List[Dict]) -> List[Dict]:
             seen.add(key)
             out.append(r)
     return out
+
+
+def apply_section_typing_stage(result: List[Dict], pdf_path: str) -> Dict[str, int]:
+    """PIPELINE STAGE (in-place): the production entry point, called per-PDF in
+    run_pipeline AFTER extraction and BEFORE the final validator. Mutates each
+    page's `mapped_rows` in place so the rest of the pipeline (flatten -> validator)
+    sees corrected rows. Combines, in order:
+      1. section retyping by PDF geometry (retype_result) -- bonds/stocks/CIT/govt
+         etc. get their true non-MF asset_type (validator drops non-MF types);
+      2. name-based CIT catch (CITs are captured elsewhere -> excluded from MF);
+      3. drop section-subtotal rows ("Total Corporate Debt Instruments" ...);
+      4. de-dup identical (issuer, description, value) rows (table+text double-pass).
+    Conservative: only ever downgrades non-MF rows / removes junk -- never turns a
+    real fund into a non-fund. Safe to run for every plan. Stats dict returned.
+    """
+    stats = {"retyped_non_mf": 0, "cit_caught": 0, "subtotals_dropped": 0, "deduped": 0}
+    # 1. geometric section retyping
+    try:
+        rt = retype_result(result, pdf_path)
+        stats["retyped_non_mf"] = rt.get("retyped_non_mf", 0)
+    except Exception as exc:  # never let the stage break extraction
+        print(f"    [section-typing] retype skipped: {exc}")
+    # 2-4. CIT catch + subtotal drop + dedup, in place
+    seen = set()
+    for entry in result:
+        kept = []
+        for r in entry.get("mapped_rows", []):
+            name = (r.get("issuer_name") or r.get("investment_description") or "").strip()
+            if is_section_subtotal(name):
+                stats["subtotals_dropped"] += 1
+                continue
+            if looks_like_cit(name) and str(r.get("asset_type") or "").strip().lower() not in (
+                    "common/collective trust fund", "commingled fund"):
+                r["asset_type"] = "Common/Collective Trust Fund"
+                stats["cit_caught"] += 1
+            key = (
+                str(r.get("issuer_name", "") or "").strip().upper(),
+                str(r.get("investment_description", "") or "").strip().upper(),
+                str(r.get("current_value", "") or "").strip(),
+            )
+            if key in seen:
+                stats["deduped"] += 1
+                continue
+            seen.add(key)
+            kept.append(r)
+        entry["mapped_rows"] = kept
+    return stats
