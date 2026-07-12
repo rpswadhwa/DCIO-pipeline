@@ -66,7 +66,7 @@ _KNOWN_MANAGERS = frozenset({
 
 _SHARE_CLASS_RE = _re.compile(
     r"(class\s+[a-z]|institutional|investor|admiral|signal|"
-    r"premium|select|premier|r\d+|i\s*shares?)",
+    r"premium|select|premier|r[\s-]?\d+(?=\s|$)|i\s*shares?)",
     _re.IGNORECASE,
 )
 
@@ -91,7 +91,7 @@ _GENERIC_CATEGORIES = frozenset({
 })
 
 _SHARE_CLASS_STRONG_RE = _re.compile(
-    r"(r[1-6]|institutional(?:\s+(?:plus|shares?))?|investor\s+shares?|"
+    r"(r[\s-]?[1-6](?=\s|$)|institutional(?:\s+(?:plus|shares?))?|investor\s+shares?|"
     r"admiral\s+shares?|signal\s+shares?|class\s+[a-z]|i\s*shares?|etf)",
     _re.IGNORECASE,
 )
