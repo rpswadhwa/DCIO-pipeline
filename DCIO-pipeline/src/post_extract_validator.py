@@ -347,7 +347,8 @@ def _normalize_mf_name(name: str) -> str:
 
 def build_mf_rows_df(rows: List[Dict],
                      mf_types: frozenset = MF_ASSET_TYPES,
-                     validation_status: str = "UNVALIDATED") -> pd.DataFrame:
+                     validation_status: str = "UNVALIDATED",
+                     mf_only: bool = True) -> pd.DataFrame:
     """Build the plan_mf_history_v3 DataFrame from MF rows for a passing PDF.
 
     Filters to MF asset types only and maps to the three target columns:
@@ -376,11 +377,14 @@ def build_mf_rows_df(rows: List[Dict],
             _val = None
         # Load MF-typed rows; also load blank/unknown-type rows that have a value
         # (the "no asset type" case -> classify in post-processing). Skip explicit non-MF.
-        if asset_type in _non_mf:
+        # mf_only=True (MF table): drop explicit non-MF vehicle types here.
+        # mf_only=False (staging): KEEP all vehicle types (tagged with asset_type) so CITs/
+        # stocks/bonds land in staging and can be routed to their own tables downstream.
+        if mf_only and asset_type in _non_mf:
             continue
-        if asset_type and asset_type not in mf_types:
+        if mf_only and asset_type and asset_type not in mf_types:
             continue
-        if not asset_type and _val is None:
+        if not asset_type and _val is None:     # blank type with no value = junk, drop in both
             continue
         _name = _strip_trailing_value_tokens(_normalize_mf_name(pick_fund_name(row.get("issuer_name"), row.get("investment_description"))))
         # Name-quality gate: drop blank / numeric-only (bond rates, share counts, mis-mapped
@@ -400,7 +404,7 @@ def build_mf_rows_df(rows: List[Dict],
             continue
         # Scope: annuity / insurance vehicles (CREF, TIAA Traditional, Voya/Empower
         # Retirement Insurance & Annuity, variable annuity accounts) are not mutual funds.
-        if _ANNUITY_VEHICLE_RE.search(_name):
+        if mf_only and _ANNUITY_VEHICLE_RE.search(_name):
             continue
         records.append({
             "ack_id": str(row.get("pdf_stem", "") or "").strip(),
@@ -410,6 +414,9 @@ def build_mf_rows_df(rows: List[Dict],
             "asset_class": "PENDING_AI",
             "asset_sub_class": "PENDING_AI",
             "validation_status": validation_status,
+            # Persist the deterministic, file-derived vehicle type so it is never lost.
+            # Blank means "not identified from the file" (do NOT treat as mutual fund downstream).
+            "asset_type": asset_type,
         })
     return pd.DataFrame(records, columns=[
         "ack_id",
@@ -419,6 +426,7 @@ def build_mf_rows_df(rows: List[Dict],
         "asset_class",
         "asset_sub_class",
         "validation_status",
+        "asset_type",
     ])
 
 
@@ -454,8 +462,11 @@ def write_parquet(df: pd.DataFrame, s3_path: str, glue_db: str,
 # ---------------------------------------------------------------------------
 # Iceberg writer via Athena INSERT INTO
 # ---------------------------------------------------------------------------
-def write_iceberg_via_athena(df: pd.DataFrame, glue_db: str, table: str) -> None:
-    """Write rows to an Iceberg table via Athena INSERT INTO statements."""
+def write_iceberg_via_athena(df: pd.DataFrame, glue_db: str, table: str,
+                             include_asset_type: bool = False) -> None:
+    """Write rows to an Iceberg table via Athena INSERT INTO statements.
+    include_asset_type=True writes the extra asset_type column (used for the staging table);
+    default False keeps the original 7-column write for plan_mf_history_v3 (unchanged)."""
     import awswrangler as wr
     import math
     import os
@@ -471,6 +482,9 @@ def write_iceberg_via_athena(df: pd.DataFrame, glue_db: str, table: str) -> None
         if col not in df.columns:
             df = df.copy()
             df[col] = "PENDING_AI"
+    if include_asset_type and "asset_type" not in df.columns:   # blank = not identified from the file
+        df = df.copy()
+        df["asset_type"] = ""
 
     # Delete existing rows for these ack_ids before inserting (idempotency)
     # Only works for Iceberg/transactional tables; skips silently for plain Hive tables
@@ -515,23 +529,24 @@ def write_iceberg_via_athena(df: pd.DataFrame, glue_db: str, table: str) -> None
             except (TypeError, ValueError):
                 amt_sql = "NULL"
 
-            values_parts.append(
-                "({}, {}, {}, {}, {}, {}, {})".format(
-                    q(row.get("ack_id")),
-                    q(row.get("raw_entity_name")),
-                    q(row.get("raw_sponsor_name")),
-                    amt_sql,
-                    q(row.get("asset_class", "PENDING_AI")),
-                    q(row.get("asset_sub_class", "PENDING_AI")),
-                    q(row.get("validation_status", "UNVALIDATED")),
-                )
-            )
+            _vals = [
+                q(row.get("ack_id")),
+                q(row.get("raw_entity_name")),
+                q(row.get("raw_sponsor_name")),
+                amt_sql,
+                q(row.get("asset_class", "PENDING_AI")),
+                q(row.get("asset_sub_class", "PENDING_AI")),
+                q(row.get("validation_status", "UNVALIDATED")),
+            ]
+            if include_asset_type:
+                _vals.append(q(row.get("asset_type", "")))
+            values_parts.append("(" + ", ".join(_vals) + ")")
 
-        sql = (
-            "INSERT INTO {}.{} "
-            "(ack_id, raw_entity_name, raw_sponsor_name, plan_investment_amt, asset_class, asset_sub_class, validation_status) "
-            "VALUES {}".format(glue_db, table, ", ".join(values_parts))
-        )
+        _cols = ("ack_id, raw_entity_name, raw_sponsor_name, plan_investment_amt, "
+                 "asset_class, asset_sub_class, validation_status")
+        if include_asset_type:
+            _cols += ", asset_type"
+        sql = "INSERT INTO {}.{} ({}) VALUES {}".format(glue_db, table, _cols, ", ".join(values_parts))
         query_id = wr.athena.start_query_execution(
             sql=sql,
             database=glue_db,
@@ -635,6 +650,31 @@ def write_validation_summary_via_athena(df: pd.DataFrame, glue_db: str, table: s
         )
 
     logger.info("Wrote %d validation summary rows to %s.%s", total, glue_db, table)
+
+def _route_mf_from_staging(glue_db: str, staging_table: str, target_table: str, ack_ids: list) -> None:
+    """Populate the MF table from staging: only rows whose file-derived asset_type is an MF type.
+    Deletes the run's acks from target first (idempotent), then inserts the MF subset (7 cols)."""
+    import awswrangler as wr
+    import os
+    if not ack_ids:
+        return
+    wg = os.getenv("ATHENA_WORKGROUP", "primary")
+    s3 = os.getenv("ATHENA_STAGING_S3")
+    ids = ", ".join("'" + str(a).replace("'", "''") + "'" for a in ack_ids)
+    mf = ", ".join("'" + t + "'" for t in sorted(MF_ASSET_TYPES))
+    stmts = [
+        f"DELETE FROM {glue_db}.{target_table} WHERE ack_id IN ({ids})",
+        ("INSERT INTO {gd}.{tt} "
+         "(ack_id, raw_entity_name, raw_sponsor_name, plan_investment_amt, asset_class, asset_sub_class, validation_status) "
+         "SELECT ack_id, raw_entity_name, raw_sponsor_name, plan_investment_amt, asset_class, asset_sub_class, validation_status "
+         "FROM {gd}.{st} WHERE ack_id IN ({ids}) AND lower(trim(asset_type)) IN ({mf})"
+         ).format(gd=glue_db, tt=target_table, st=staging_table, ids=ids, mf=mf),
+    ]
+    for sql in stmts:
+        qid = wr.athena.start_query_execution(sql=sql, database=glue_db, workgroup=wg, s3_output=s3)
+        wr.athena.wait_query(query_execution_id=qid)
+    logger.info("Routed MF rows %s -> %s for %d acks", staging_table, target_table, len(ack_ids))
+
 
 # ---------------------------------------------------------------------------
 # Orchestrator
@@ -765,19 +805,29 @@ def run_post_extract_validation(
         ])
         write_validation_summary_via_athena(summary_df, summary_glue_db, summary_table)
 
-    # LOAD-ALL: write every extracted mutual-fund row to the MF table, tagged with
-    # its summary status (UNVALIDATED when there is no usable certified reference).
+    # LOAD-ALL. Default path (no staging configured) is UNCHANGED: build MF-only rows and write
+    # them to validated_table. If HOLDINGS_STAGING_TABLE is set, write ALL vehicle types (tagged
+    # with the file-derived asset_type) to staging, then route only the MF-typed rows into
+    # validated_table -- so plan_mf_history_v3 stays MF-only and CITs/etc. remain in staging.
+    import os as _os
+    staging_table = _os.getenv("HOLDINGS_STAGING_TABLE", "").strip()
     status_by_ack = {r["ack_id"]: r["validation_status"] for r in summary_records}
-    all_mf = []
+    all_rows = []
     for _stem, _srows in rows_by_stem.items():
         _st = status_by_ack.get(_stem) or "UNVALIDATED"
         if _st == "SKIP":
             _st = "UNVALIDATED"
-        _df = build_mf_rows_df(_srows, validation_status=_st)
+        _df = build_mf_rows_df(_srows, validation_status=_st, mf_only=(not staging_table))
         if not _df.empty:
-            all_mf.append(_df)
-    if all_mf:
-        write_iceberg_via_athena(pd.concat(all_mf, ignore_index=True), validated_glue_db, validated_table)
+            all_rows.append(_df)
+    if all_rows:
+        combined = pd.concat(all_rows, ignore_index=True)
+        if staging_table:
+            write_iceberg_via_athena(combined, validated_glue_db, staging_table, include_asset_type=True)
+            _route_mf_from_staging(validated_glue_db, staging_table, validated_table,
+                                   combined["ack_id"].dropna().unique().tolist())
+        else:
+            write_iceberg_via_athena(combined, validated_glue_db, validated_table)
 
     logger.info("Validation complete - passed=%d failed=%d skipped=%d",
                 counts["passed"], counts["failed"], counts["skipped"])
