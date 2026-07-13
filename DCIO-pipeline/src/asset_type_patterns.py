@@ -24,6 +24,8 @@ ASSET_TYPE_PATTERNS = [
     (r'Collective\s+Investment\s+Funds?',                       'Common/Collective Trust Fund'),
     (r'Collective\s+Trust\s+Funds?',                            'Common/Collective Trust Fund'),
     (r'Common\s+Collective\s+Trusts?',                          'Common/Collective Trust Fund'),
+    (r'Collective\s+Trusts?',                                   'Common/Collective Trust Fund'),
+    (r'Common\s+Trust\s+Funds?',                                'Common/Collective Trust Fund'),
     (r'Pooled\s+Separate\s+Accounts?',                          'Commingled Fund'),
     (r'Separately\s+Managed\s+Accounts?',                       'Separately Managed Account'),
     (r'Self[\-\s]Directed\s+Brokerage\s+Accounts?',             'Self-Directed Brokerage Account'),
