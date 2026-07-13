@@ -247,11 +247,44 @@ _TOTAL_PREFIX_RE = re.compile(r"(?i)^\s*(sub[\s-]?)?totals?\b")
 # e.g. "iShares Trust") are NOT hit.
 _CIT_NAME_RE = re.compile(
     r"(?i)(collective\s+(trust|investment|fund)|commingled|common\s*/\s*collective"
-    r"|\bcoll(?:ective)?\s+(trust|tr|inv)\b|\bC\s*/\s*C\s+trust\b|\bCCT\b)")
+    r"|\bcoll(?:ective)?\s+(trust|tr|inv)\b|\bC\s*/\s*C\s+trust\b|\bCCT\b"
+    # --- mode B additions (2026-07-07): distinctive collective-vehicle name forms.
+    # These deliberately avoid bare "Trust" (protects real MFs like "iShares Trust",
+    # "T. Rowe Price ... Trust"). VALIDATE false-positives vs PASS/MANUAL before deploy.
+    # "…500 Index Trust" (CIT) but NOT "Vanguard Index Trust … Fund" (the legal registrant
+    # name of real Vanguard index MUTUAL funds) -> require no "fund" later in the name.
+    r"|\bindex\s+trust\b(?!.*\bfund\b)"
+    r"|\btrust\s+plus\b"                        # "Vanguard Target Retirement ... Trust Plus"
+    r"|\bpool\s+fund\b|\bindex\s+pool\b"        # "Spartan 500 Index Pool Fund" (NOT bare 'pooled separate account')
+    r"|non[-\s]*lending\s+series"               # "State Street ... Non-Lending Series Fund" (CIT)
+    r")")
 
 
 def looks_like_cit(name: str) -> bool:
     return bool(_CIT_NAME_RE.search(name or ""))
+
+
+# --- mode D (2026-07-07): self-directed brokerage / brokerage-window rows. A non-MF
+# vehicle (a pass-through window, not a fund) -> force the SDBA type so the load gate
+# drops it. Specific tokens only, to avoid hitting a real "... brokerage" fund name.
+_SDBA_NAME_RE = re.compile(
+    r"(?i)(brokerage\s*link|self[-\s]*directed\s+brokerage|brokerage\s+window|\bSDBA\b"
+    r"|personal\s+choice\s+retirement|schwab\s+pcra|\bPCRA\b|self[-\s]*managed\s+account)")
+
+
+def looks_like_sdba(name: str) -> bool:
+    return bool(_SDBA_NAME_RE.search(name or ""))
+
+
+def _cit_sdba_name(r: Dict) -> str:
+    """Combined issuer + description name for CIT/SDBA matching. The collective/brokerage
+    token frequently sits in whichever of the two fields is NOT the primary one, so a
+    single-field check (issuer_name OR investment_description) leaks CITs that then load
+    as MF and get mis-classified (Target Date / Equity). Checking the concatenation of
+    both fields catches them. (2026-07-07 fix for the CIT-catch leak.)"""
+    a = str(r.get("issuer_name", "") or "").strip()
+    b = str(r.get("investment_description", "") or "").strip()
+    return (a + " " + b).strip() if (a and b) else (a or b)
 
 
 def is_section_subtotal(name: str) -> bool:
@@ -282,8 +315,12 @@ def flatten_clean(result: List[Dict]) -> List[Dict]:
                 continue
             # Name-based CIT catch: force the CIT type so the load gate drops it,
             # even if the section header was missed (row blank- or MF-typed).
-            if looks_like_cit(name):
+            cname = _cit_sdba_name(r)
+            if looks_like_cit(cname):
                 r["asset_type"] = "Common/Collective Trust Fund"
+            # Mode D: self-directed brokerage window -> non-MF type, dropped by gate.
+            elif looks_like_sdba(cname):
+                r["asset_type"] = "Self-Directed Brokerage Account"
             key = (
                 str(r.get("issuer_name", "") or "").strip().upper(),
                 str(r.get("investment_description", "") or "").strip().upper(),
@@ -309,7 +346,8 @@ def apply_section_typing_stage(result: List[Dict], pdf_path: str) -> Dict[str, i
     Conservative: only ever downgrades non-MF rows / removes junk -- never turns a
     real fund into a non-fund. Safe to run for every plan. Stats dict returned.
     """
-    stats = {"retyped_non_mf": 0, "cit_caught": 0, "subtotals_dropped": 0, "deduped": 0}
+    stats = {"retyped_non_mf": 0, "cit_caught": 0, "sdba_caught": 0,
+             "subtotals_dropped": 0, "deduped": 0}
     # 1. geometric section retyping
     try:
         rt = retype_result(result, pdf_path)
@@ -325,10 +363,16 @@ def apply_section_typing_stage(result: List[Dict], pdf_path: str) -> Dict[str, i
             if is_section_subtotal(name):
                 stats["subtotals_dropped"] += 1
                 continue
-            if looks_like_cit(name) and str(r.get("asset_type") or "").strip().lower() not in (
+            cname = _cit_sdba_name(r)
+            if looks_like_cit(cname) and str(r.get("asset_type") or "").strip().lower() not in (
                     "common/collective trust fund", "commingled fund"):
                 r["asset_type"] = "Common/Collective Trust Fund"
                 stats["cit_caught"] += 1
+            # Mode D: self-directed brokerage window -> non-MF type, dropped by gate.
+            elif looks_like_sdba(cname) and str(r.get("asset_type") or "").strip().lower() != \
+                    "self-directed brokerage account":
+                r["asset_type"] = "Self-Directed Brokerage Account"
+                stats["sdba_caught"] = stats.get("sdba_caught", 0) + 1
             key = (
                 str(r.get("issuer_name", "") or "").strip().upper(),
                 str(r.get("investment_description", "") or "").strip().upper(),
