@@ -206,24 +206,30 @@ def clean_plan(rows: List[Dict], grand_total_tol: float = 0.02) -> Dict:
             if others > 0 and abs(vals[i] - others) <= grand_total_tol * others:
                 gt_mask[i] = True
 
-    # Tier 1c (mode E structural): per-manager / per-section SUBTOTAL row -> its value
-    # ~= sum of a contiguous run of the immediately-preceding rows. Gated on the name
-    # containing the word "total"/"subtotal" AND the block math, so a real fund named
-    # "... Total Return" (whose value won't equal a preceding block) is never removed.
+    # Tier 1c (mode E structural): per-manager / per-section SUBTOTAL row -> value ~= sum
+    # of a preceding run of rows, gated only on the name containing "total"/"subtotal".
+    # DISABLED 2026-07-13. In practice it fires on REAL funds -- "Vanguard Total Stock
+    # Market", "PIMCO Total Return", "SP Total Market Index", "Metropolitan West Total
+    # Return Bond" -- whose value coincidentally equals a preceding block. The block math
+    # is only meaningful in true reading order, but plan_mf_history_v3 has no page/row_id
+    # key, so rows arrive in arbitrary order and the coincidences are spurious. On the
+    # over-capture dry-run it removed 268 rows / $1.96B, mostly real holdings. Re-enable
+    # ONLY with a reliable reading-order key AND a name guard that excludes fund-name
+    # "total" (Total Stock Market / Total Bond / Total Return / Total Market Index).
     st_mask = [False] * n
-    for i in range(n):
-        if gt_mask[i] or dedup_mask[i]:
-            continue
-        if not _TOTAL_WORD_RE.search(_name(rows[i])) or vals[i] <= 0:
-            continue
-        run = 0.0
-        for j in range(i - 1, -1, -1):
-            if gt_mask[j] or dedup_mask[j] or st_mask[j] or _TOTAL_WORD_RE.search(_name(rows[j])):
-                break                      # block ends at a prior total / flagged row
-            run += vals[j]
-            if j < i - 1 and abs(vals[i] - run) <= grand_total_tol * vals[i]:
-                st_mask[i] = True          # matched a >=2-row preceding block
-                break
+    # for i in range(n):
+    #     if gt_mask[i] or dedup_mask[i]:
+    #         continue
+    #     if not _TOTAL_WORD_RE.search(_name(rows[i])) or vals[i] <= 0:
+    #         continue
+    #     run = 0.0
+    #     for j in range(i - 1, -1, -1):
+    #         if gt_mask[j] or dedup_mask[j] or st_mask[j] or _TOTAL_WORD_RE.search(_name(rows[j])):
+    #             break                      # block ends at a prior total / flagged row
+    #         run += vals[j]
+    #         if j < i - 1 and abs(vals[i] - run) <= grand_total_tol * vals[i]:
+    #             st_mask[i] = True          # matched a >=2-row preceding block
+    #             break
 
     for i, r in enumerate(rows):
         if dedup_mask[i]:
