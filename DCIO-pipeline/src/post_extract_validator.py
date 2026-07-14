@@ -294,6 +294,60 @@ def _write_junk_drop_log(drop_log):
         logger.warning("Could not write junk drop log: %s", exc)
 
 
+_SUBTOTAL_PREFIX_RE = _re.compile(r'(?i)^\s*(?:sub)?total\b')
+
+
+def _trailing_subtotal_type(name: str) -> str:
+    """If `name` is a TRAILING type-subtotal line -- either "Total ... <type>" or a bare
+    type-label line ("Common/Collective Trusts", "Registered Investment Companies") -- return
+    its canonical asset type, else ''. A plain fund name never qualifies: it must start with
+    Total/Subtotal, or be exactly a type label (fullmatch)."""
+    from .asset_type_patterns import detect_asset_type, detect_asset_type_strict
+    n = (name or "").strip().rstrip(':')
+    if not n:
+        return ''
+    t = detect_asset_type(n)
+    if not t:
+        return ''
+    if _SUBTOTAL_PREFIX_RE.match(n):          # "Total investments in mutual funds"
+        return t
+    if detect_asset_type_strict(n):           # bare type-label line "Common/Collective Trusts"
+        return t
+    return ''
+
+
+def apply_trailing_subtotal_types(rows: List[Dict]) -> int:
+    """Reverse-propagate asset type from a TRAILING subtotal line to the still-untyped rows
+    above it (the block it summarizes). FALLBACK ONLY: fills a row's asset_type only when it
+    is still BLANK after section-heading + per-row-type detection. Rows are processed in
+    reading order (page, row_id); a type-subtotal -- or an already-typed row -- ends the
+    block. Runs BEFORE junk removal, while the subtotal lines are still present. Mutates rows
+    in place; returns the number of rows back-filled."""
+    def _key(r):
+        try:
+            return (int(r.get("page_number", 0) or 0), int(r.get("row_id", 0) or 0))
+        except (TypeError, ValueError):
+            return (0, 0)
+    def _name(r):
+        return (str(r.get("issuer_name", "") or "") + " " +
+                str(r.get("investment_description", "") or "")).strip()
+    buffer: List[Dict] = []
+    filled = 0
+    for r in sorted(rows, key=_key):
+        sub_type = _trailing_subtotal_type(_name(r))
+        if sub_type:
+            for b in buffer:
+                if not str(b.get("asset_type", "") or "").strip():
+                    b["asset_type"] = sub_type
+                    filled += 1
+            buffer = []
+        elif str(r.get("asset_type", "") or "").strip():
+            buffer = []          # already typed by heading/per-row -> block boundary
+        else:
+            buffer.append(r)
+    return filled
+
+
 # ---------------------------------------------------------------------------
 # Tolerance check
 # ---------------------------------------------------------------------------
@@ -770,6 +824,19 @@ def run_post_extract_validation(
     rows, _n_dup = dedup_plan_rows(rows)
     if _n_dup:
         logger.info("Deduped %d exact scrape-duplicate row(s) before validation/load", _n_dup)
+
+    # Trailing-subtotal typing (FALLBACK): reverse-propagate asset type from a "Total ..." /
+    # bare-type-label subtotal line to the still-untyped rows above it. Only fills rows still
+    # BLANK after the section-heading + per-row-type methods. Per plan, in reading order, and
+    # BEFORE junk removal (the subtotal lines get dropped there).
+    _rt_by_stem: Dict[str, List[Dict]] = defaultdict(list)
+    for _r in rows:
+        _rt_by_stem[str(_r.get("pdf_stem", "") or "").strip()].append(_r)
+    _rt_filled = 0
+    for _pr in _rt_by_stem.values():
+        _rt_filled += apply_trailing_subtotal_types(_pr)
+    if _rt_filled:
+        logger.info("Trailing-subtotal typing filled %d untyped row(s)", _rt_filled)
 
     # Junk filter (ALWAYS ON). Removes provable non-holdings -- grand-total by math,
     # header/label lexicon, participant loans, accounting lines, dates, bond fragments,
