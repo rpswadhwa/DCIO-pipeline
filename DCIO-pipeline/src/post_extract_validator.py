@@ -275,6 +275,25 @@ def dedup_plan_rows(rows: List[Dict]):
     return out, removed
 
 
+def _write_junk_drop_log(drop_log):
+    """Write rows removed by the JUNK_FILTER stage to a CSV for audit/visibility.
+    drop_log: list of (ack_id, name, value, reason). Best-effort; never fatal."""
+    import csv as _csv
+    import os as _os
+    from datetime import datetime as _dt
+    out_dir = _os.getenv("OUTPUT_DIR", "data/outputs")
+    try:
+        _os.makedirs(out_dir, exist_ok=True)
+        path = _os.path.join(out_dir, "junk_dropped_%s.csv" % _dt.now().strftime("%Y%m%d_%H%M%S"))
+        with open(path, "w", newline="", encoding="utf-8") as f:
+            w = _csv.writer(f)
+            w.writerow(["ack_id", "name", "value", "reason"])
+            w.writerows(drop_log)
+        logger.info("JUNK_FILTER drop log -> %s (%d rows)", path, len(drop_log))
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("Could not write junk drop log: %s", exc)
+
+
 # ---------------------------------------------------------------------------
 # Tolerance check
 # ---------------------------------------------------------------------------
@@ -751,6 +770,37 @@ def run_post_extract_validation(
     rows, _n_dup = dedup_plan_rows(rows)
     if _n_dup:
         logger.info("Deduped %d exact scrape-duplicate row(s) before validation/load", _n_dup)
+
+    # Junk filter (GATED by JUNK_FILTER=1; default off). Removes provable non-holdings --
+    # grand-total by math, header/label lexicon, participant loans, accounting lines, dates,
+    # bond fragments, generic words. Runs PER PLAN, BEFORE the total and the load, so junk
+    # never enters plan_mf_history_v3 and never inflates the pass/fail total. Dropped rows
+    # are written to a CSV for visibility. junk_detect reads fund_name + plan_investment_amt,
+    # so we attach those (from pick_fund_name / current_value) then strip them off survivors.
+    from .junk_detect import clean_plan as _junk_clean_plan, is_enabled as _junk_enabled
+    if _junk_enabled():
+        _by_stem: Dict[str, List[Dict]] = defaultdict(list)
+        for _r in rows:
+            _by_stem[str(_r.get("pdf_stem", "") or "").strip()].append(_r)
+        _kept: List[Dict] = []
+        _drops: List[tuple] = []
+        for _stem, _prows in _by_stem.items():
+            for _r in _prows:
+                _r["fund_name"] = pick_fund_name(_r.get("issuer_name"), _r.get("investment_description"))
+                _r["plan_investment_amt"] = parse_currency_value(_r.get("current_value"))
+            _res = _junk_clean_plan(_prows)
+            for _r in _res["keep"]:
+                _r.pop("fund_name", None)
+                _r.pop("plan_investment_amt", None)
+            _kept.extend(_res["keep"])
+            for _r, _reason in _res["removed_junk"]:
+                _drops.append((_stem, _r.get("fund_name", ""), _r.get("plan_investment_amt"), _reason))
+            for _r in _res.get("dedup_removed", []):
+                _drops.append((_stem, _r.get("fund_name", ""), _r.get("plan_investment_amt"), "exact duplicate"))
+        rows = _kept
+        if _drops:
+            logger.info("JUNK_FILTER removed %d row(s) across %d plan(s)", len(_drops), len(_by_stem))
+            _write_junk_drop_log(_drops)
 
     reference = load_reference(glue_db, ref_table, workgroup, s3_staging)
     extracted_totals = compute_extracted_mf_totals(rows)
