@@ -16,6 +16,13 @@ ASSET_TYPE_PATTERNS = [
     (r'CREF\s+Accounts?',                                       'Group Annuity Contract'),
     (r'Fully[\-\s]Benefit[\-\s]Responsive\s+Contracts?',       'Stable Value Fund'),
     (r'Non[\-\s]Benefit[\-\s]Responsive\s+Contracts?',         'Stable Value Fund'),
+    # COMBINED heading: one section labeled BOTH mutual funds AND collective trusts, over a
+    # MIXED block with no per-row type to split them. Must NOT be typed as pure CIT -- that
+    # wrongly excludes the real MFs -- so it gets its OWN label, identifiable for a later
+    # MF-vs-CIT apportionment step. MUST precede the Collective Trust patterns below.
+    (r'Mutual\s+Funds?\s+and\s+Common\s*/?\s*Collective\s+Trusts?', 'Mutual Fund/Collective Trust'),
+    (r'Mutual\s+Funds?\s+and\s+Collective\s+Trusts?',              'Mutual Fund/Collective Trust'),
+    (r'Short[\-\s]Term\s+Investment\s+Funds?',                     'Short-Term Investment Fund'),
     (r'Common\s*/\s*Collective\s+Trust\s+Funds?',               'Common/Collective Trust Fund'),
     (r'Common\s*/\s*Collective\s+Trusts?',                      'Common/Collective Trust Fund'),
     (r'Collective\s*/\s*Common\s+Trust\s+Funds?',               'Common/Collective Trust Fund'),
