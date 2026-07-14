@@ -103,7 +103,14 @@ def parse_investment_row(row):
     if desc_type:
         asset_type = desc_type
     elif not existing_asset_type:
-        asset_type = detect_asset_type(issuer)
+        # FIX 1 (no name-based typing): if the file gave no type -- no section heading and
+        # no explicit label -- leave it BLANK. Do NOT infer the vehicle type from the fund
+        # NAME. detect_asset_type(issuer) was a substring match, so an impostor named
+        # "...Index Fund" / "...Money Market" (really a CIT/stock/bond) got counted as MF ->
+        # over-capture. Type must be deterministic from the file only; blank rows are
+        # excluded from the MF table. NOTE: real funds under an UNRECOGNIZED heading also go
+        # blank -> under-capture; the heading-gap sweep recovers those from their heading.
+        asset_type = ''
     else:
         asset_type = existing_asset_type
     
