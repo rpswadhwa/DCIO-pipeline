@@ -25,7 +25,9 @@ ASSET_TYPE_PATTERNS = [
     (r'Collective\s+Trust\s+Funds?',                            'Common/Collective Trust Fund'),
     (r'Collective\s+Trusts?',                                   'Common/Collective Trust Fund'),
     (r'Common\s+Collective\s+Trusts?',                          'Common/Collective Trust Fund'),
+    (r'Collecti\w{0,3}e\s+Trusts?',                             'Common/Collective Trust Fund'),  # OCR-tolerant: "Collecti11e Trusts"
     (r'Pooled\s+Separate\s+Accounts?',                          'Commingled Fund'),
+    (r'Pooled\s+Funds?',                                        'Commingled Fund'),
     (r'Separately\s+Managed\s+Accounts?',                       'Separately Managed Account'),
     (r'Self[\-\s]Directed\s+Brokerage\s+Accounts?',             'Self-Directed Brokerage Account'),
     (r'Commingled\s+Funds?',                                    'Commingled Fund'),
@@ -72,5 +74,50 @@ def detect_asset_type_strict(text: str) -> str:
     text = text.strip().rstrip(':')
     for pattern, asset_type in ASSET_TYPE_PATTERNS:
         if re.fullmatch(pattern, text, re.IGNORECASE):
+            return asset_type
+    return ''
+
+
+# Per-row asset-type DECLARATIONS carried in the row itself -- a dedicated "Type:" column
+# value, or a vehicle-type phrase at the start/end of the column-(c) description
+# ("Common/Collective Trust", "Insurance Company Separate Account", "mutual fund,",
+# "Collective investment in ...", "Pooled Separate Accounts"). Used when there is NO
+# section heading. Deliberately EXCLUDES bare name-ish fund types ("Index Fund", "Fund")
+# so a fund NAME never triggers a type -- only an explicit vehicle declaration does.
+# Ordered non-MF-first so an explicit CIT / separate account / stock wins over an
+# incidental trailing "fund" token in the same string.
+ROW_TYPE_PATTERNS = [
+    (r'insurance\s+company\s+separate\s+accounts?',    'Separately Managed Account'),
+    (r'pooled\s+separate\s+accounts?',                 'Commingled Fund'),
+    (r'separate(?:ly)?\s+managed\s+accounts?',         'Separately Managed Account'),
+    (r'common\s*/?\s*collective\s+trusts?',            'Common/Collective Trust Fund'),
+    (r'collective\s+investment\s+trusts?',             'Common/Collective Trust Fund'),
+    (r'collective\s+investment',                       'Common/Collective Trust Fund'),
+    (r'collecti\w{0,3}e\s+trusts?',                     'Common/Collective Trust Fund'),  # OCR-tolerant
+    (r'commingled',                                    'Commingled Fund'),
+    (r'pooled\s+funds?',                               'Commingled Fund'),
+    (r'group\s+annuity',                               'Group Annuity Contract'),
+    (r'guaranteed\s+(?:investment\s+contract|income)', 'Stable Value Fund'),
+    (r'stable\s+value',                                'Stable Value Fund'),
+    (r'registered\s+investment\s+compan(?:y|ies)',     'Mutual Fund'),
+    (r'money\s+market',                                'Money Market Fund'),
+    (r'employer\s+securit(?:y|ies)',                   'Employer Stock'),
+    (r'(?:self[\-\s]?directed\s+)?brokerage\s+account', 'Self-Directed Brokerage Account'),
+    (r'common\s+stock',                                'Common Stock'),
+    (r'lifecycle\s+investment\s+option',               'Target Date Fund'),
+    (r'target[\-\s]date',                              'Target Date Fund'),
+    (r'mutual\s+funds?',                               'Mutual Fund'),
+]
+
+
+def detect_asset_type_row(text: str) -> str:
+    """Detect a per-row asset-type DECLARATION carried in the row (a Type-column value or a
+    vehicle-type phrase in the description). Non-name-based: only explicit vehicle-type
+    phrases match, so a fund NAME never triggers a type. Returns '' if the row carries no
+    explicit type. Used when the section heading gave nothing."""
+    if not text:
+        return ''
+    for pattern, asset_type in ROW_TYPE_PATTERNS:
+        if re.search(pattern, text, re.IGNORECASE):
             return asset_type
     return ''

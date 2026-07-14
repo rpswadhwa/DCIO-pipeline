@@ -1,6 +1,6 @@
 import pandas as pd
 import re
-from .asset_type_patterns import ASSET_TYPE_PATTERNS, detect_asset_type, detect_asset_type_strict
+from .asset_type_patterns import ASSET_TYPE_PATTERNS, detect_asset_type, detect_asset_type_strict, detect_asset_type_row
 from .ditto_fix import fill_ditto_marks
 
 _SHARES_OF_RE = re.compile(
@@ -97,22 +97,30 @@ def parse_investment_row(row):
     # Description-level type is more specific than a propagated section type.
     # Use fullmatch so fund names containing type keywords (e.g. 'BlackRock Index Fund')
     # don't override a correct section type.
+    # Asset type is taken ONLY from the file, in this order of authority:
+    #   1. desc_type  -- the row's own description IS an exact type label (fullmatch)
+    #   2. row_type   -- an EXPLICIT per-row vehicle declaration: a dedicated "Type:" column
+    #      value or a type phrase in the description ("Common/Collective Trust", "Insurance
+    #      Company Separate Account", "mutual fund,", "Collective investment in ..."). This
+    #      OVERRIDES a propagated section heading (Fix 2): a row that says it's a CIT/separate
+    #      account is not a mutual fund just because it sits under a "Mutual Funds" block.
+    #   3. existing_asset_type -- the propagated section heading.
+    #   4. blank -- the file gave no type. NEVER guess from the fund NAME (Fix 1): a substring
+    #      match on the name over-typed impostors ("...Index Fund" that is really a CIT) as MF.
+    # detect_asset_type_row is non-name-based (only explicit vehicle phrases), so a fund name
+    # never triggers a type here.
     desc_type = detect_asset_type_strict(description) if description else ''
     if not desc_type and description and ',' in description:
         desc_type = detect_asset_type_strict(description.split(',', 1)[0])
+    row_type = detect_asset_type_row(description) or detect_asset_type_row(issuer)
     if desc_type:
         asset_type = desc_type
-    elif not existing_asset_type:
-        # FIX 1 (no name-based typing): if the file gave no type -- no section heading and
-        # no explicit label -- leave it BLANK. Do NOT infer the vehicle type from the fund
-        # NAME. detect_asset_type(issuer) was a substring match, so an impostor named
-        # "...Index Fund" / "...Money Market" (really a CIT/stock/bond) got counted as MF ->
-        # over-capture. Type must be deterministic from the file only; blank rows are
-        # excluded from the MF table. NOTE: real funds under an UNRECOGNIZED heading also go
-        # blank -> under-capture; the heading-gap sweep recovers those from their heading.
-        asset_type = ''
-    else:
+    elif row_type:
+        asset_type = row_type
+    elif existing_asset_type:
         asset_type = existing_asset_type
+    else:
+        asset_type = ''
     
     return {
         'issuer_name': issuer,
