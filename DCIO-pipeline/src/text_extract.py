@@ -1076,7 +1076,12 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
         current_section_type = inherited_asset_type or ''
 
         _footnote_re = re.compile(r'(?:\s*(?:\([A-Za-z0-9]{1,3}\)|\*+)\s*,?)+\s*$')
-        _split_value_re = re.compile(r'(?<![A-Za-z])(\d{1,3})\s+([\d,]*\d)')
+        # Rejoin a space-split leading number group into the value (e.g. "6 1,962,451" ->
+        # "61,962,451"). The lookbehind excludes a LETTER (so "R6 2,072,867" is left alone)
+        # and a HYPHEN (so a hyphenated share class "R-6 1,962,451" is NOT merged -- the "6"
+        # is a share class, not a millions digit; without this it leaked into the value and
+        # truncated the name to "...R-").
+        _split_value_re = re.compile(r'(?<![A-Za-z-])(\d{1,3})\s+([\d,]*\d)')
         def _rejoin_split_number(_text):
             def _repl(m):
                 joined = m.group(1) + m.group(2)
