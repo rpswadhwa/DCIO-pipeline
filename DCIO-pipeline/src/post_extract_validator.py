@@ -244,6 +244,37 @@ def compute_extracted_mf_totals(rows: List[Dict],
     return dict(totals)
 
 
+def dedup_plan_rows(rows: List[Dict]):
+    """Drop exact scrape-duplicates WITHIN each plan before validation and load.
+
+    A duplicate = same plan (pdf_stem) + same normalized issuer|description + same value
+    (rounded, > 0). An identical holding+value appearing twice in one plan is a double
+    capture (page-overlap / re-parse), never a second real position, so dropping the extra
+    copies is always safe. Keeps the first occurrence. Returns (deduped_rows, n_removed).
+
+    Must run up front -- BEFORE compute_extracted_mf_totals -- so both the pass/fail total
+    and the loaded rows exclude duplicates; otherwise dupes keep inflating a plan's MF
+    total and falsely flag it OVER_CAPTURE. Rows with no/zero value are never deduped.
+    """
+    seen = set()
+    out: List[Dict] = []
+    removed = 0
+    for row in rows:
+        val = parse_currency_value(row.get("current_value"))
+        if val is not None and val > 0:
+            stem = str(row.get("pdf_stem", "") or "").strip()
+            name = _re.sub(r"[^a-z0-9]", "",
+                           (str(row.get("issuer_name", "") or "") + "|" +
+                            str(row.get("investment_description", "") or "")).lower())
+            key = (stem, name, round(val, 2))
+            if key in seen:
+                removed += 1
+                continue
+            seen.add(key)
+        out.append(row)
+    return out, removed
+
+
 # ---------------------------------------------------------------------------
 # Tolerance check
 # ---------------------------------------------------------------------------
@@ -713,6 +744,13 @@ def run_post_extract_validation(
     if not rows:
         logger.warning("No rows found in SQLite — validation skipped entirely")
         return counts
+
+    # Data hygiene (always on): remove exact within-plan scrape-duplicates up front, so
+    # both the pass/fail total below and the loaded rows exclude them. Safe -- an identical
+    # holding+value twice in one plan is a double capture, never a second real position.
+    rows, _n_dup = dedup_plan_rows(rows)
+    if _n_dup:
+        logger.info("Deduped %d exact scrape-duplicate row(s) before validation/load", _n_dup)
 
     reference = load_reference(glue_db, ref_table, workgroup, s3_staging)
     extracted_totals = compute_extracted_mf_totals(rows)
