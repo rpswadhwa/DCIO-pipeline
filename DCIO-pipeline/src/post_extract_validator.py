@@ -244,35 +244,162 @@ def compute_extracted_mf_totals(rows: List[Dict],
     return dict(totals)
 
 
+# ---------------------------------------------------------------------------
+# Duplicate detection helpers (used by dedup_plan_rows)
+# ---------------------------------------------------------------------------
+import difflib as _difflib
+
+_DEDUP_VAL_TOL = 3.0        # a duplicate page can re-parse the same value +/- a dollar or two
+# filler / share-class tokens that don't distinguish two funds
+_DEDUP_STOP = {
+    'fund', 'funds', 'fd', 'the', 'of', 'shares', 'share', 'cl', 'class', 'premier', 'inst',
+    'institutional', 'adm', 'admiral', 'inv', 'investor', 'r', 'r6', 'r5', 'r4', 'r3', 'r2', 'r1',
+    'a', 'b', 'c', 'k', 'i', 'ii', 'iii', 'n', 'y', 'z', 'trust', 'trusts', 'portfolio', 'port',
+    'plus', 'pl', 'svc', 'service', 'retirement',
+}
+
+
+def _dd_clean(s):
+    return _re.sub(r'\s+', ' ', _re.sub(r'[^a-z0-9 ]', ' ', str(s or '').lower())).strip()
+
+
+def _dd_norm(s):
+    """De-doubling normalize: collapse a repeated word run or a whole-phrase repeat.
+    'Vanguard Vanguard Institutional Index' and 'X X' (phrase repeated) -> the single form."""
+    toks = _dd_clean(s).split()
+    out = []
+    for t in toks:
+        if not out or out[-1] != t:
+            out.append(t)
+    toks = out
+    n = len(toks)
+    for size in range(1, n // 2 + 1):
+        if n % size == 0 and all(toks[i] == toks[i % size] for i in range(n)):
+            toks = toks[:size]
+            break
+    return ' '.join(toks)
+
+
+def _dd_sigtoks(s):
+    return [t for t in _dd_clean(s).split() if t and t not in _DEDUP_STOP]
+
+
+def _dd_tokmatch(a, b):
+    if a == b:
+        return True
+    if len(a) >= 3 and len(b) >= 3 and (a.startswith(b) or b.startswith(a)):
+        return True   # abbreviation: FID->FIDELITY, INC->INCOME
+    return len(a) >= 4 and len(b) >= 4 and _difflib.SequenceMatcher(None, a, b).ratio() >= 0.82
+
+
+def _dd_years(ts):
+    return set(t for t in ts if _re.fullmatch(r'(19|20)\d\d', t))
+
+
+def _dd_samefund(n1, n2):
+    ta, tb = _dd_sigtoks(n1), _dd_sigtoks(n2)
+    if not ta or not tb:
+        return False
+    ya, yb = _dd_years(ta), _dd_years(tb)
+    if ya and yb and ya != yb:
+        return False   # GUARD: different target-date years are different funds
+    m = sum(1 for x in ta if any(_dd_tokmatch(x, y) for y in tb))
+    return m / min(len(ta), len(tb)) >= 0.7
+
+
+_DD_GENERIC_RE = _re.compile(
+    r'(?i)^(college retirement equities fund|investments? at fair value|value of interest in|'
+    r'dividends?\s*/?\s*interest|interest[- ]bearing cash|cash equivalents?|other assets)')
+_DD_MANAGERS = {
+    'fidelity', 'vanguard', 'american funds', 'pimco', 'blackrock', 'jp morgan', 'jpmorgan',
+    'columbia', 'nuveen', 'putnam', 'mfs', 'dfa', 'pgim', 'charles schwab', 'schwab', 'bny mellon',
+    'empower', 'principal', 'fidelity investments', 'fidelity management trust co',
+    'fidelity management trust company', 'the vanguard group inc', 'great gray trust company',
+    'sei trust company', 'baird asset management',
+}
+
+
+def _dd_is_generic(name):
+    nd = _dd_norm(name)
+    return bool(_DD_GENERIC_RE.match(str(name or '').strip())) or nd in _DD_MANAGERS or not _dd_sigtoks(name)
+
+
+def _dd_is_dupe(v1, n1, v2, n2):
+    """Return a rule name if the two (value, name) rows are the same holding, else False."""
+    d = abs(v1 - v2)
+    if d > _DEDUP_VAL_TOL:
+        return False
+    if _dd_norm(n1) == _dd_norm(n2):
+        return 'norm_equal'                 # de-doubling / case / punctuation
+    if _dd_samefund(n1, n2):
+        return 'token_fuzzy'                # abbreviations, with year guard
+    if d <= 0.5 and (_dd_is_generic(n1) != _dd_is_generic(n2)):
+        return 'generic'                    # a generic/wrapper label == a specific holding (exact value)
+    return False
+
+
 def dedup_plan_rows(rows: List[Dict]):
-    """Drop exact scrape-duplicates WITHIN each plan before validation and load.
+    """Drop scrape-duplicates WITHIN each plan before validation and load.
 
-    A duplicate = same plan (pdf_stem) + same normalized issuer|description + same value
-    (rounded, > 0). An identical holding+value appearing twice in one plan is a double
-    capture (page-overlap / re-parse), never a second real position, so dropping the extra
-    copies is always safe. Keeps the first occurrence. Returns (deduped_rows, n_removed).
+    Two rows in the same plan (pdf_stem) with values within +/-$3 are the same holding when
+    their names match under any of: de-doubling-normalized equality ('Vanguard Vanguard X' ==
+    'Vanguard X'); token-fuzzy same-fund (abbreviations like FID->Fidelity, guarded so adjacent
+    target-date years never merge); or a generic/wrapper label ('College Retirement Equities
+    Fund variable annuities', a bare manager name) sitting at the SAME value as a specific
+    holding (an extraction-created phantom copy). Duplicates never a second real position, so
+    dropping the extra copies is safe; keeps the most specific/complete name. Returns
+    (deduped_rows, n_removed). Rows with no/zero value are never deduped.
 
-    Must run up front -- BEFORE compute_extracted_mf_totals -- so both the pass/fail total
-    and the loaded rows exclude duplicates; otherwise dupes keep inflating a plan's MF
-    total and falsely flag it OVER_CAPTURE. Rows with no/zero value are never deduped.
+    Must run up front -- BEFORE compute_extracted_mf_totals -- so both the pass/fail total and
+    the loaded rows exclude duplicates; otherwise dupes inflate a plan's MF total -> false OVER.
     """
-    seen = set()
-    out: List[Dict] = []
-    removed = 0
-    for row in rows:
-        val = parse_currency_value(row.get("current_value"))
-        if val is not None and val > 0:
-            stem = str(row.get("pdf_stem", "") or "").strip()
-            name = _re.sub(r"[^a-z0-9]", "",
-                           (str(row.get("issuer_name", "") or "") + "|" +
-                            str(row.get("investment_description", "") or "")).lower())
-            key = (stem, name, round(val, 2))
-            if key in seen:
-                removed += 1
+    n = len(rows)
+    vals = [None] * n
+    names = [''] * n
+    by_stem = defaultdict(list)
+    for i, row in enumerate(rows):
+        v = parse_currency_value(row.get("current_value"))
+        if v is not None and v > 0:
+            vals[i] = v
+            names[i] = pick_fund_name(row.get("issuer_name"), row.get("investment_description")) or ""
+            by_stem[str(row.get("pdf_stem", "") or "").strip()].append(i)
+
+    removed_idx = set()
+    for stem, idxs in by_stem.items():
+        m = len(idxs)
+        if m < 2:
+            continue
+        parent = list(range(m))
+
+        def find(x):
+            while parent[x] != x:
+                parent[x] = parent[parent[x]]
+                x = parent[x]
+            return x
+
+        for a in range(m):
+            for b in range(a + 1, m):
+                ia, ib = idxs[a], idxs[b]
+                if _dd_is_dupe(vals[ia], names[ia], vals[ib], names[ib]):
+                    ra, rb = find(a), find(b)
+                    if ra != rb:
+                        parent[ra] = rb
+        comp = defaultdict(list)
+        for a in range(m):
+            comp[find(a)].append(a)
+        for members in comp.values():
+            if len(members) < 2:
                 continue
-            seen.add(key)
-        out.append(row)
-    return out, removed
+            # keep the most informative: specific (non-generic), then longest name, then earliest
+            best = min(members, key=lambda a: (_dd_is_generic(names[idxs[a]]), -len(names[idxs[a]]), idxs[a]))
+            for a in members:
+                if a != best:
+                    removed_idx.add(idxs[a])
+
+    if not removed_idx:
+        return rows, 0
+    out = [row for i, row in enumerate(rows) if i not in removed_idx]
+    return out, len(removed_idx)
 
 
 def _write_junk_drop_log(drop_log):
