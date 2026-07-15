@@ -86,6 +86,21 @@ def extract_fund_names_from_descriptions(rows):
     return result
 
 
+# Canonicalize a type value captured VERBATIM from a document "type" column.
+# The section-heading / regex typers already emit canonical names; a raw table
+# column can carry non-canonical spellings that bypass them. Exact-match only,
+# extended deliberately as we approve each mapping (do NOT guess).
+_TYPE_CANON_ALIASES = {
+    "registered investment company": "Mutual Fund",
+    "registered investment companies": "Mutual Fund",
+    "mutual funds": "Mutual Fund",
+}
+
+
+def _canon_existing_type(t: str) -> str:
+    return _TYPE_CANON_ALIASES.get(str(t or "").strip().lower(), t)
+
+
 def parse_investment_row(row):
     """
     Parse investment row to properly separate issuer, asset type, and description
@@ -118,7 +133,7 @@ def parse_investment_row(row):
     elif row_type:
         asset_type = row_type
     elif existing_asset_type:
-        asset_type = existing_asset_type
+        asset_type = _canon_existing_type(existing_asset_type)
     else:
         asset_type = ''
     
