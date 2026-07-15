@@ -115,7 +115,12 @@ ROW_TYPE_PATTERNS = [
     (r'money\s+market',                                'Money Market Fund'),
     (r'employer\s+securit(?:y|ies)',                   'Employer Stock'),
     (r'(?:self[\-\s]?directed\s+)?brokerage\s+account', 'Self-Directed Brokerage Account'),
+    (r'money\s+mkt',                                   'Money Market Fund'),   # "MONEY MKT" abbrev
     (r'common\s+stock',                                'Common Stock'),
+    (r'common\s+shares',                               'Common Stock'),
+    # a directly-held company security: a corporate-entity name carrying a share COUNT and no
+    # fund/trust/account vehicle word -> common stock (a mutual fund is never named this way)
+    (r'(?:corporation|incorporated|\bcorp\b|\binc\b|\bplc\b|\bco\b|company)\b(?![^\d]*\b(fund|trust|account|portfolio|index)\b)[^\d]*\d[\d,]*\s*shares?', 'Common Stock'),
     (r'mutual\s+funds?',                               'Mutual Fund'),
 ]
 
