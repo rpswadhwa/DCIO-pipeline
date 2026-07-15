@@ -10,7 +10,6 @@ from rapidfuzz import process, fuzz
 
 import pandas as pd
 
-from . import asset_type_llm
 from .asset_type_patterns import ASSET_TYPE_PATTERNS, detect_asset_type
 from .data_cleaner import handle_split_rows, parse_investment_row
 from .utils import load_yaml, normalize_whitespace
@@ -269,13 +268,6 @@ def _detect_section_heading_text(text: str) -> Optional[str]:
         for pattern, canonical in ASSET_TYPE_PATTERNS:
             if re.search(pattern, candidate, re.IGNORECASE):
                 return canonical
-    # LLM fallback for the unknown tail: a heading-looking label the regex
-    # can't map. Dormant unless asset_type_llm.configure(use_llm=True). Gated
-    # to short, alphabetic, heading-like strings so we never send fund names.
-    if len(text_stripped.split()) <= 8 and re.search(r"[A-Za-z]", text_stripped):
-        llm_type = asset_type_llm.resolve(text_stripped, source="section_heading")
-        if llm_type:
-            return llm_type
     return None
 
 
@@ -1131,18 +1123,10 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
                     if not value_match:
                         # No value on this line — check if it is a section heading
                         line_lower_full = line.lower().strip()
-                        _matched = False
                         for key, val in SECTION_HEADING_MAP.items():
                             if key in line_lower_full:
                                 current_section_type = val
-                                _matched = True
                                 break
-                        if not _matched and len(line.split()) <= 8 and re.search(r'[A-Za-z]', line):
-                            # LLM fallback for an unrecognized heading (dormant
-                            # unless asset_type_llm is configured with use_llm).
-                            _llm_t = asset_type_llm.resolve(line, source="section_heading_text")
-                            if _llm_t:
-                                current_section_type = _llm_t
                         continue
                     current_value = value_match.group(1).replace(',', '')
                     issuer_description = line[:value_match.start()].strip()
