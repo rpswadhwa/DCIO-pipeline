@@ -14,6 +14,7 @@ from .llm_map import map_rows_with_llm
 from .load_db import load_cleaned_pipeline_results, reset_db
 from .normalize_images import normalize_pages
 from .ocr_passes import run_ocr
+from . import asset_type_llm
 from .text_extract import classify_pages_text, extract_tables_and_map, _has_see_attachment, find_attachment_pages, find_structural_investment_pages, _SEE_ATTACHMENT_RE, _DETAIL_REFERENCE_RE, expand_continuation_pages
 from .utils import ensure_dir, read_env
 from .validate import validate_pages
@@ -156,6 +157,12 @@ def main():
     dpi = int(read_env("DPI", "350"))
     model = read_env("OPENAI_MODEL", "gpt-4.1-mini")
     use_llm = read_env("USE_LLM", "1") != "0"
+    # Asset-type LLM fallback: independent flag, dormant by default. Maps
+    # type-position labels the regex can't resolve (cached, audited).
+    asset_type_llm.configure(
+        use_llm=read_env("ASSET_TYPE_LLM", "0") == "1",
+        model=read_env("ASSET_TYPE_LLM_MODEL", model),
+    )
     use_post_llm = read_env("USE_POST_LLM", "1") != "0"
     use_ocr = read_env("USE_OCR", "0") == "1"
     llm_batch_size = int(read_env("POST_LLM_BATCH_SIZE", "10"))

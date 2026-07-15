@@ -9,7 +9,6 @@ ASSET_TYPE_PATTERNS = [
     (r'Investments?\s+in\s+common\s+collective\s+trusts?',      'Common/Collective Trust Fund'),
     (r'Investments?\s+in\s+pooled\s+separate\s+accounts?',      'Commingled Fund'),
     (r'Investments?\s+in\s+investment\s+contracts?',            'Stable Value Fund'),
-    (r'Investments?\s+in\s+index\s+funds?',                     'Index Fund'),
     (r'Insurance\s+Company\s+General\s+Account\s+Contracts?',   'Insurance General Account'),
     (r'General\s+Account\s+Contracts?',                         'Insurance General Account'),
     (r'Group\s+Annuity\s+Contracts?',                           'Group Annuity Contract'),
@@ -48,9 +47,6 @@ ASSET_TYPE_PATTERNS = [
     (r'Registered\s+Investment\s+Compan(?:y|ies)',              'Mutual Fund'),
     (r'Registered\s+Investment\s+Funds?',                       'Mutual Fund'),
     (r'Institutional\s+Funds?',                                 'Mutual Fund'),
-    (r'Target[\-\s]Date\s+Funds?',                              'Target Date Fund'),
-    (r'Target\s+Retirement\s+Funds?',                           'Target Date Fund'),
-    (r'Index\s+Funds?',                                         'Index Fund'),
     (r'Mutual\s+Funds?',                                        'Mutual Fund'),
     (r'Employer\s+Stocks?',                                     'Employer Stock'),
     (r'Employer\s+Securities',                                  'Employer Stock'),
@@ -111,8 +107,6 @@ ROW_TYPE_PATTERNS = [
     (r'employer\s+securit(?:y|ies)',                   'Employer Stock'),
     (r'(?:self[\-\s]?directed\s+)?brokerage\s+account', 'Self-Directed Brokerage Account'),
     (r'common\s+stock',                                'Common Stock'),
-    (r'lifecycle\s+investment\s+option',               'Target Date Fund'),
-    (r'target[\-\s]date',                              'Target Date Fund'),
     (r'mutual\s+funds?',                               'Mutual Fund'),
 ]
 
