@@ -73,14 +73,26 @@ JUNK_EXACT = {
     # bookkeeping scraps
     "statements", "perthefinancialstatements", "ein", "seenotes", "notes",
     "various", "other", "miscellaneous", "misc", "cash",
+    # user-reviewed 2026-07-15
+    "commoninvestmenttrustfunds", "sharesofcommonstock", "shares",
+    "carriedforward", "emp", "investmentsperfinancialstatements",
 }
 
 # Participant loans / notes receivable -- never a fund. Matched as a normalized substring
 # because the phrasing is bounded and never occurs inside a real fund name.
 _LOAN_RE = re.compile(
     r"participantloan|loanstoparticipant|notesreceivablefromparticipant|"
-    r"participantnotesreceivable|loanreceivable"
+    r"participantnotesreceivable|loanreceivable|promissorynote"
 )
+
+# --- user-reviewed junk forms (2026-07-15) ---------------------------------------------
+_CID_RE = re.compile(r"cid\d+")                                    # OCR glyph artifact "cid98"
+_ENDS_TOTAL_RE = re.compile(r"(?i)\b(sub)?totals?\s*$")            # "... Total" (manager/section subtotal)
+_SUBTOTAL_NORM_RE = re.compile(r"^(sub)?total.*(investments|funds|assets)$")  # norm: "T otal ... funds"
+_SHARE_FRAG_RE = re.compile(r"(?i)^\s*[\d,]+\s+shares?\b")         # "9848 Shares", "99381 shares 1"
+_SHARE_DBL_RE = re.compile(r"(?i)\bshares?\s+[\d,]+\s+shares?\b")  # "Investor Shares 35532 shares a"
+_PARTY_RE = re.compile(r"partyininterest")                        # "* indicates party in interest"
+_YEAR_RANGE_RE = re.compile(r"(?i)^\s*(from\s+)?(19|20)\d\d\s+to\s+(19|20)\d\d\s*$")  # "from 2025 to 2038"
 
 # Mode A (accounting income / balance lines scraped as holdings). Bounded phrasings that
 # never occur inside a real fund name -> safe to match as a normalized substring. NOTE:
@@ -160,6 +172,17 @@ def is_junk_name(name: str) -> Tuple[bool, str, str]:
         return True, "date parsed as fund", "DELETE"
     if _BOND_FRAG_RE.match(raw) or _MATURING_RE.search(raw):
         return True, "bond/maturity fragment", "DELETE"
+    # user-reviewed junk forms (2026-07-15)
+    if _CID_RE.search(nn):
+        return True, "OCR glyph artifact (cidNN)", "DELETE"
+    if _SUBTOTAL_NORM_RE.match(nn) or _ENDS_TOTAL_RE.search(raw):
+        return True, "subtotal line ('... total' / 'total ... funds')", "DELETE"
+    if _SHARE_FRAG_RE.match(raw) or _SHARE_DBL_RE.search(raw):
+        return True, "share-count fragment (no fund name)", "DELETE"
+    if _PARTY_RE.search(nn):
+        return True, "party-in-interest footnote marker", "DELETE"
+    if _YEAR_RANGE_RE.match(raw):
+        return True, "date-range fragment", "DELETE"
     if nn in {norm(w) for w in _GENERIC_WORDS}:
         return True, "lone generic word", "DELETE"
     return False, "", ""
