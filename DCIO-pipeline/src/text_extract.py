@@ -1168,8 +1168,14 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
             # Determine asset type from section heading or embedded keyword
             asset_type = current_section_type
             asset_type_patterns = {
+                'COMMON/COLLECTIVE TRUST FUND': 'Common/Collective Trust Fund',
+                'COMMON COLLECTIVE TRUST FUND': 'Common/Collective Trust Fund',
                 'COLLECTIVE INVESTMENT TRUST': 'Common/Collective Trust Fund',
+                'COLLECTIVE INVESTMENT FUND': 'Common/Collective Trust Fund',
+                'COLLECTIVE TRUST FUND': 'Common/Collective Trust Fund',
                 'COMMON/COLLECTIVE TRUST': 'Common/Collective Trust Fund',
+                'COMMON COLLECTIVE TRUST': 'Common/Collective Trust Fund',
+                'COLLECTIVE TRUST': 'Common/Collective Trust Fund',
                 'SEPARATELY MANAGED ACCOUNT': 'Separately Managed Account',
                 'SELF DIRECTED BROKERAGE': 'Self-Directed Brokerage Account',
                 'REGISTERED INVESTMENT COMPANY': 'Mutual Fund',
@@ -1188,13 +1194,15 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
                 'INTEREST-BEARING CASH': 'Money Market Fund',
                 'MONEY MARKET': 'Money Market Fund',
             }
-            if not asset_type:
-                stripped_description, trailing_asset_type = _strip_trailing_asset_label(
-                    issuer_description, asset_type_patterns
-                )
-                if trailing_asset_type:
-                    asset_type = trailing_asset_type
-                    issuer_description = stripped_description
+            # A row's OWN explicit trailing type label (e.g. "... Collective Trust
+            # Fund") wins over a propagated section/inherited type — the section
+            # heading is only a fallback for rows that carry no type of their own.
+            stripped_description, trailing_asset_type = _strip_trailing_asset_label(
+                issuer_description, asset_type_patterns
+            )
+            if trailing_asset_type:
+                asset_type = trailing_asset_type
+                issuer_description = stripped_description
 
             if not asset_type and re.search(r'[\d,]+\s+(?:units|shares)\b', issuer_description, re.IGNORECASE):
                 _ud = issuer_description.upper()
