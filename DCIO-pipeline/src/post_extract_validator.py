@@ -1019,7 +1019,9 @@ def run_post_extract_validation(
             if not _ref:
                 continue
             for _r in _srows:
-                _r["_rem_name"] = pick_fund_name(_r.get("issuer_name"), _r.get("investment_description"))
+                # classify on the COMBINED issuer + description so a type word in EITHER
+                # column is seen (pick_fund_name would blank a bare 'Common Stock' desc).
+                _r["_rem_name"] = (str(_r.get("issuer_name") or "") + " " + str(_r.get("investment_description") or "")).strip()
             _, _ch = remediate_overcapture_plan(
                 _srows, float(_ref.get("amt_mutual_funds") or 0), tolerance=tolerance,
                 name_key="_rem_name", type_key="asset_type", value_key="current_value")
