@@ -1005,6 +1005,31 @@ def run_post_extract_validation(
         if stem:
             rows_by_stem[stem].append(row)
 
+    # NAME-BASED remediation (post-extraction): on OVER-CAPTURING plans only, re-type rows
+    # whose NAME identifies a non-MF vehicle (TIAA Traditional / stable value / annuity /
+    # limited partnership / directly-held stock) that inherited a "Mutual Funds" heading and
+    # is inflating the MF total. Recompute totals so validation_status AND routing both reflect
+    # it -- no separate re-band needed. Gate off with NAME_REMEDIATION=0.
+    import os as _os_rem
+    if _os_rem.getenv("NAME_REMEDIATION", "1") != "0":
+        from .name_asset_type import remediate_overcapture_plan
+        _remed = 0
+        for _stem, _srows in rows_by_stem.items():
+            _ref = reference.get(_stem)
+            if not _ref:
+                continue
+            for _r in _srows:
+                _r["_rem_name"] = pick_fund_name(_r.get("issuer_name"), _r.get("investment_description"))
+            _, _ch = remediate_overcapture_plan(
+                _srows, float(_ref.get("amt_mutual_funds") or 0), tolerance=tolerance,
+                name_key="_rem_name", type_key="asset_type", value_key="current_value")
+            for _r in _srows:
+                _r.pop("_rem_name", None)
+            _remed += len(_ch)
+        if _remed:
+            logger.info("Name-based remediation re-typed %d MF row(s) on over-capture plans", _remed)
+            extracted_totals = compute_extracted_mf_totals(rows)   # recompute with corrected types
+
     for pdf_stem in sorted(rows_by_stem):
         stem_rows = rows_by_stem[pdf_stem]
 

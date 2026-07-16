@@ -88,7 +88,7 @@ def remediate_overcapture_plan(rows, certified, tolerance=0.05,
     """
     def fval(x):
         try:
-            return float(x)
+            return float(str(x).replace('$', '').replace(',', '').strip() or 0)
         except (TypeError, ValueError):
             return 0.0
 
