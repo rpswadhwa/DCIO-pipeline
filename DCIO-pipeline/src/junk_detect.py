@@ -76,6 +76,11 @@ JUNK_EXACT = {
     # user-reviewed 2026-07-15
     "commoninvestmenttrustfunds", "sharesofcommonstock", "shares",
     "carriedforward", "emp", "investmentsperfinancialstatements",
+    # user-reviewed 2026-07-16 (bare labels / fragments)
+    "balances", "balancebroughtforward", "contracts", "companyshares",
+    "purchasedshare", "partygainor", "involvedloss", "loans",
+    "dividendsinterestreinvested", "tiaa", "charlesschwabtrustbank",
+    "greatgreytrust", "greatgraytrust",
 }
 
 # Participant loans / notes receivable -- never a fund. Matched as a normalized substring
@@ -93,6 +98,14 @@ _SHARE_FRAG_RE = re.compile(r"(?i)^\s*[\d,]+\s+shares?\b")         # "9848 Share
 _SHARE_DBL_RE = re.compile(r"(?i)\bshares?\s+[\d,]+\s+shares?\b")  # "Investor Shares 35532 shares a"
 _PARTY_RE = re.compile(r"partyininterest")                        # "* indicates party in interest"
 _YEAR_RANGE_RE = re.compile(r"(?i)^\s*(from\s+)?(19|20)\d\d\s+to\s+(19|20)\d\d\s*$")  # "from 2025 to 2038"
+# interest-rate range fragments: "325 to 950 maturing", "Rates from 425 to 1050", "rate 425 950"
+_RATE_RANGE_RE = re.compile(r"(?i)^\s*(?:rates?\s+)?(?:from\s+)?\d[\d.,]*\s+(?:to|through|-)\s+\d[\d.,]*\s*(?:percent|%|maturing)?\s*$")
+_RATE_WORDS_RE = re.compile(r"(?i)^\s*rates?\s+\d[\d.,]*\s+\d[\d.,]*\s*$")
+# "through October 2027", "dates through December 7, 2029"
+_THROUGH_DATE_RE = re.compile(r"(?i)^\s*(?:dates?\s+)?through\s+\S.*\d{4}\s*$")
+_PENSION_RE = re.compile(r"(?i)pension\s+identification\s+number")
+_AGG_ASSETS_RE = re.compile(r"(?i)^\s*aggregate\b.*\bassets?\s*$")   # "Aggregate SBDA Assets"
+_SUBACCT_RE = re.compile(r"(?i)^\s*sub\s?account\s+of\b")            # "SubAccount of John Hancock"
 
 # Mode A (accounting income / balance lines scraped as holdings). Bounded phrasings that
 # never occur inside a real fund name -> safe to match as a normalized substring. NOTE:
@@ -181,8 +194,12 @@ def is_junk_name(name: str) -> Tuple[bool, str, str]:
         return True, "share-count fragment (no fund name)", "DELETE"
     if _PARTY_RE.search(nn):
         return True, "party-in-interest footnote marker", "DELETE"
-    if _YEAR_RANGE_RE.match(raw):
-        return True, "date-range fragment", "DELETE"
+    if _YEAR_RANGE_RE.match(raw) or _RATE_RANGE_RE.match(raw) or _RATE_WORDS_RE.match(raw):
+        return True, "rate/date-range fragment", "DELETE"
+    if _THROUGH_DATE_RE.match(raw):
+        return True, "trailing date fragment ('through <date>')", "DELETE"
+    if _PENSION_RE.search(raw) or _AGG_ASSETS_RE.match(raw) or _SUBACCT_RE.match(raw):
+        return True, "metadata/subtotal/subaccount fragment", "DELETE"
     if nn in {norm(w) for w in _GENERIC_WORDS}:
         return True, "lone generic word", "DELETE"
     return False, "", ""

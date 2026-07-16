@@ -111,9 +111,9 @@ ROW_TYPE_PATTERNS = [
     (r'personal\s+choice\s+retirement\s+account',      'Self-Directed Brokerage Account'),
     (r'guaranteed\s+(?:investment\s+contract|income)', 'Stable Value Fund'),
     (r'stable\s+value',                                'Stable Value Fund'),
-    # variable annuities / CREF sub-accounts -- insurance separate accounts, NOT mutual funds
-    (r'variable\s+annuity',                            'Group Annuity Contract'),
-    (r'\bcref\b',                                      'Group Annuity Contract'),
+    # NOTE: variable annuities / CREF sub-accounts are deliberately NOT reclassified here --
+    # they wrap underlying mutual funds and the certified amt_mutual_funds INCLUDES them, so
+    # typing them non-MF causes under-capture (verified on the 2500 run: -45 PASS). Leave as MF.
     # fixed / guaranteed / GIC principal-preservation vehicles -> Stable Value (non-MF)
     (r'fixed\s+account',                               'Stable Value Fund'),
     (r'fixed\s+interest',                              'Stable Value Fund'),
