@@ -111,6 +111,17 @@ ROW_TYPE_PATTERNS = [
     (r'personal\s+choice\s+retirement\s+account',      'Self-Directed Brokerage Account'),
     (r'guaranteed\s+(?:investment\s+contract|income)', 'Stable Value Fund'),
     (r'stable\s+value',                                'Stable Value Fund'),
+    # variable annuities / CREF sub-accounts -- insurance separate accounts, NOT mutual funds
+    (r'variable\s+annuity',                            'Group Annuity Contract'),
+    (r'\bcref\b',                                      'Group Annuity Contract'),
+    # fixed / guaranteed / GIC principal-preservation vehicles -> Stable Value (non-MF)
+    (r'fixed\s+account',                               'Stable Value Fund'),
+    (r'fixed\s+interest',                              'Stable Value Fund'),
+    (r'stable\s+return',                               'Stable Value Fund'),
+    (r'\bgic\b',                                       'Stable Value Fund'),
+    (r'guarante(?:ed|y)',                              'Stable Value Fund'),
+    # limited partnership interests (non-MF)
+    (r'limited\s+partnership|partnership\s+interest|interest\s+in\s+limited\s+part', 'Partnership Interest'),
     (r'registered\s+investment\s+compan(?:y|ies)',     'Mutual Fund'),
     (r'money\s+market',                                'Money Market Fund'),
     (r'employer\s+securit(?:y|ies)',                   'Employer Stock'),
@@ -118,6 +129,9 @@ ROW_TYPE_PATTERNS = [
     (r'money\s+mkt',                                   'Money Market Fund'),   # "MONEY MKT" abbrev
     (r'common\s+stock',                                'Common Stock'),
     (r'common\s+shares',                               'Common Stock'),
+    (r'\ber\s+stock',                                  'Employer Stock'),   # "... ER Stock Fund" (employer)
+    # a corporate entity (Inc/Corp/PLC/Ltd) whose name ENDS in bare "stock" -> common stock
+    (r'(?:\binc\b|\bcorp\b|corporation|\bplc\b|\bltd\b)\b.*\bstock\s*$', 'Common Stock'),
     # a directly-held company security: a corporate-entity name carrying a share COUNT and no
     # fund/trust/account vehicle word -> common stock (a mutual fund is never named this way)
     (r'(?:corporation|incorporated|\bcorp\b|\binc\b|\bplc\b|\bco\b|company)\b(?![^\d]*\b(fund|trust|account|portfolio|index)\b)[^\d]*\d[\d,]*\s*shares?', 'Common Stock'),
