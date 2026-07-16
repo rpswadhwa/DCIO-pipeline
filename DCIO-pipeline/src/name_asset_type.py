@@ -32,7 +32,7 @@ _PATTERNS = [
                                                        'Stable Value Fund'),
     (r'\bguar\s+(?:option|opt|inc|income)',            'Stable Value Fund'),   # 'Guar Option'
     (r'guaranteed\s+(?:investment|interest)\s+contract', 'Stable Value Fund'),
-    (r'fixed\s+(?:account|income|interest)',           'Stable Value Fund'),
+    (r'fixed\s+(?:account|interest)',                  'Stable Value Fund'),   # NOT bare 'fixed income' (bond funds)
     (r'\bfxd\s+(?:sel|inc|acct|account)',              'Stable Value Fund'),   # 'NW FXD SEL OPTN'
     (r'stable\s+(?:value|return)',                     'Stable Value Fund'),
     (r'\bgic\b',                                       'Stable Value Fund'),
