@@ -594,7 +594,9 @@ def build_mf_rows_df(rows: List[Dict],
                "commingled fund","separately managed account","self-directed brokerage account",
                "participant loan","guaranteed insurance contract","guaranteed investment contract",
                "stable value fund","insurance general account","group annuity contract",
-               "partnership interest","currency"}
+               "partnership interest","currency",
+               "joint venture","real estate","hedge fund","bond","derivative",
+               "103-12 investment entity"}
     records = []
     for row in rows:
         asset_type = str(row.get("asset_type", "") or "").strip().lower()

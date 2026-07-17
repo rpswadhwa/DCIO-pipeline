@@ -53,6 +53,36 @@ ASSET_TYPE_PATTERNS = [
     (r'Preferred\s+Stocks?',                                    'Preferred Stock'),
     (r'Common\s+Stocks?',                                       'Common Stock'),
     (r'Publicly[\-\s]traded\s+Stocks?',                         'Common Stock'),
+    # --- additional non-MF vehicle categories (DOL Sch H taxonomy): partnerships/joint
+    # ventures, real estate, hedge funds, bonds/debt, derivatives, 103-12 IEs. These match
+    # SECTION HEADINGS and strict full-label descriptions only (both safe: _detect_section_heading
+    # fires on value-less lines, detect_asset_type_strict on whole labels). Row-level detection
+    # is kept conservative in ROW_TYPE_PATTERNS so a bond/real-estate MUTUAL FUND name is never
+    # mistyped as a direct holding. Ordered specific-first; combined partnership/JV precedes both.
+    (r'103[\-\s]?12\s+Investment\s+Entit(?:y|ies)',             '103-12 Investment Entity'),
+    (r'103[\-\s]?12\s+IEs?',                                    '103-12 Investment Entity'),
+    (r'Partnerships?\s*(?:/|&|and)\s*Joint\s+Ventures?',        'Partnership Interest'),
+    (r'Joint\s+Ventures?',                                      'Joint Venture'),
+    (r'Real\s+Estate\s+Investment\s+Trusts?',                   'Real Estate'),
+    (r'Real\s+Propert(?:y|ies)',                                'Real Estate'),
+    (r'Real\s+Estate(?!\s+(?:Funds?|Securit|Index|Mutual|Stock))', 'Real Estate'),
+    (r'Funds?\s+of\s+Hedge\s+Funds?',                           'Hedge Fund'),
+    (r'Hedge\s+Funds?',                                         'Hedge Fund'),
+    (r'Corporate\s+Debt\s+Instruments?',                        'Bond'),
+    (r'Corporate\s+Debt',                                       'Bond'),
+    (r'Corporate\s+Bonds?',                                     'Bond'),
+    (r'Government\s+Bonds?',                                     'Bond'),
+    (r'Municipal\s+Bonds?',                                      'Bond'),
+    (r'U\.?\s*S\.?\s+Government\s+Securities',                   'Bond'),
+    (r'U\.?\s*S\.?\s+Treasury\s+(?:Securities|Obligations|Notes?|Bonds?|Bills?)', 'Bond'),
+    (r'Government\s+Obligations',                               'Bond'),
+    (r'Debt\s+Securities',                                      'Bond'),
+    (r'Fixed\s+Income\s+Securities',                            'Bond'),
+    (r'Debentures?',                                            'Bond'),
+    (r'Derivatives?',                                           'Derivative'),
+    (r'(?:Call|Put)\s+Options?',                                'Derivative'),
+    (r'Futures\s+Contracts?',                                   'Derivative'),
+    (r'(?:Interest\s+Rate\s+)?Swaps?\s+Contracts?',             'Derivative'),
     (r'Partnership\s+Interests?',                               'Partnership Interest'),
     (r'Participant\s+Loans?',                                   'Participant Loan'),
     (r'ETFs?',                                                  'ETF'),
@@ -122,6 +152,19 @@ ROW_TYPE_PATTERNS = [
     (r'guarante(?:ed|y)',                              'Stable Value Fund'),
     # limited partnership interests (non-MF)
     (r'limited\s+partnership|partnership\s+interest|interest\s+in\s+limited\s+part', 'Partnership Interest'),
+    # additional non-MF DIRECT holdings -- ONLY phrases a mutual-fund NAME never carries.
+    # detect_asset_type_row is searched against the issuer NAME too, so NO bare 'bond' /
+    # 'real estate' / 'government' here (those live in fund names and would cause under-capture).
+    (r'joint\s+venture',                               'Joint Venture'),
+    (r'103[\-\s]?12\s+investment\s+entit',             '103-12 Investment Entity'),
+    (r'hedge\s+fund',                                  'Hedge Fund'),
+    (r'real\s+propert(?:y|ies)',                       'Real Estate'),
+    (r'\bdebentures?\b',                               'Bond'),
+    (r'corporate\s+debt\s+instrument',                 'Bond'),
+    (r'\d(?:\.\d+)?\s*%[^%]{0,40}\b(?:due|matur)',      'Bond'),   # coupon% + maturity => direct bond
+    (r'(?:call|put)\s+options?\b',                     'Derivative'),
+    (r'\bfutures\s+contracts?\b',                      'Derivative'),
+    (r'interest\s+rate\s+swaps?\b',                    'Derivative'),
     (r'registered\s+investment\s+compan(?:y|ies)',     'Mutual Fund'),
     (r'money\s+market',                                'Money Market Fund'),
     (r'employer\s+securit(?:y|ies)',                   'Employer Stock'),

@@ -1078,6 +1078,21 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
             'insurance company general account': 'Insurance General Account',
             'general account contract': 'Insurance General Account',
             'stable value': 'Stable Value Fund',
+            # additional non-MF categories (specific keys only -- substring-matched on
+            # value-less heading lines, so no bare 'bond'/'real estate'/'government').
+            'joint venture': 'Joint Venture',
+            'real property': 'Real Estate',
+            'real estate investment trust': 'Real Estate',
+            'hedge fund': 'Hedge Fund',
+            'corporate debt': 'Bond',
+            'corporate bond': 'Bond',
+            'government bond': 'Bond',
+            'municipal bond': 'Bond',
+            'u.s. government securities': 'Bond',
+            'government obligations': 'Bond',
+            'debenture': 'Bond',
+            '103-12': '103-12 Investment Entity',
+            'derivative': 'Derivative',
         }
         current_section_type = inherited_asset_type or ''
 
@@ -1193,6 +1208,15 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
                 'GUARANTEED INVESTMENT CONTRACT': 'Stable Value Fund',
                 'INTEREST-BEARING CASH': 'Money Market Fund',
                 'MONEY MARKET': 'Money Market Fund',
+                # additional non-MF categories -- SAFE trailing labels only (anchored to end of
+                # the description). Bond/corporate keys are deliberately OMITTED here: a bond
+                # MUTUAL FUND description can end in 'Corporate Bond', which must stay MF.
+                'JOINT VENTURE': 'Joint Venture',
+                'REAL PROPERTY': 'Real Estate',
+                'HEDGE FUND': 'Hedge Fund',
+                'DEBENTURE': 'Bond',
+                '103-12 INVESTMENT ENTITY': '103-12 Investment Entity',
+                'DERIVATIVE': 'Derivative',
             }
             # A row's OWN explicit trailing type label (e.g. "... Collective Trust
             # Fund") wins over a propagated section/inherited type — the section
