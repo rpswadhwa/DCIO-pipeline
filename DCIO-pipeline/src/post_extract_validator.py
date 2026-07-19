@@ -190,13 +190,15 @@ def load_reference(glue_db: str, table: str, workgroup: str,
     """
     import awswrangler as wr
 
-    sql = f"SELECT ack_id, plan_id, amt_mutual_funds FROM {glue_db}.{table}"
-    df = wr.athena.read_sql_query(
-        sql=sql,
-        database=glue_db,
-        workgroup=workgroup,
-        s3_output=s3_staging,
-    )
+    # amt_cit is used by the MF reconciliation (stage 4); tolerate tables that lack it.
+    try:
+        sql = f"SELECT ack_id, plan_id, amt_mutual_funds, amt_cit FROM {glue_db}.{table}"
+        df = wr.athena.read_sql_query(sql=sql, database=glue_db, workgroup=workgroup, s3_output=s3_staging)
+        _has_cit = True
+    except Exception:
+        sql = f"SELECT ack_id, plan_id, amt_mutual_funds FROM {glue_db}.{table}"
+        df = wr.athena.read_sql_query(sql=sql, database=glue_db, workgroup=workgroup, s3_output=s3_staging)
+        _has_cit = False
 
     reference: Dict[str, Dict[str, object]] = {}
     for _, row in df.iterrows():
@@ -208,6 +210,7 @@ def load_reference(glue_db: str, table: str, workgroup: str,
             reference[ack_id] = {
                 "plan_id": str(row.get("plan_id", "") or "").strip(),
                 "amt_mutual_funds": val,
+                "amt_cit": (parse_currency_value(str(row.get("amt_cit"))) or 0.0) if _has_cit else 0.0,
             }
         else:
             logger.debug("Skipping reference row ack_id=%s: amt_mutual_funds=%s", ack_id, row["amt_mutual_funds"])
@@ -1007,31 +1010,35 @@ def run_post_extract_validation(
         if stem:
             rows_by_stem[stem].append(row)
 
-    # NAME-BASED remediation (post-extraction): on OVER-CAPTURING plans only, re-type rows
-    # whose NAME identifies a non-MF vehicle (TIAA Traditional / stable value / annuity /
-    # limited partnership / directly-held stock) that inherited a "Mutual Funds" heading and
-    # is inflating the MF total. Recompute totals so validation_status AND routing both reflect
-    # it -- no separate re-band needed. Gate off with NAME_REMEDIATION=0.
+    # MF RECONCILIATION (post-extraction): reconcile each plan's extracted MF total to the
+    # certified amt_mutual_funds. OVER plans: cascade removals (money-market -> other non-MF ->
+    # CIT-by-name -> amt_cit reconciliation); UNDER plans: recover blank rows that read as MFs.
+    # Recompute totals so validation_status AND routing both reflect it. Gate off with
+    # NAME_REMEDIATION=0. Stage-4 (amount-based) changes are flagged needs_review in the returned
+    # change list; they are still applied here (no separate review store yet).
     import os as _os_rem
     if _os_rem.getenv("NAME_REMEDIATION", "1") != "0":
-        from .name_asset_type import remediate_overcapture_plan
+        from .mf_reconcile import reconcile_plan
         _remed = 0
         for _stem, _srows in rows_by_stem.items():
             _ref = reference.get(_stem)
             if not _ref:
                 continue
             for _r in _srows:
-                # classify on the COMBINED issuer + description so a type word in EITHER
+                # reconcile on the COMBINED issuer + description so a type word in EITHER
                 # column is seen (pick_fund_name would blank a bare 'Common Stock' desc).
                 _r["_rem_name"] = (str(_r.get("issuer_name") or "") + " " + str(_r.get("investment_description") or "")).strip()
-            _, _ch = remediate_overcapture_plan(
-                _srows, float(_ref.get("amt_mutual_funds") or 0), tolerance=tolerance,
+            _ch = reconcile_plan(
+                _srows,
+                certified_mf=float(_ref.get("amt_mutual_funds") or 0),
+                certified_cit=float(_ref.get("amt_cit") or 0),
+                tolerance=tolerance,
                 name_key="_rem_name", type_key="asset_type", value_key="current_value")
             for _r in _srows:
                 _r.pop("_rem_name", None)
             _remed += len(_ch)
         if _remed:
-            logger.info("Name-based remediation re-typed %d MF row(s) on over-capture plans", _remed)
+            logger.info("MF reconciliation re-typed %d row(s) across over/under-capture plans", _remed)
             extracted_totals = compute_extracted_mf_totals(rows)   # recompute with corrected types
 
     for pdf_stem in sorted(rows_by_stem):
