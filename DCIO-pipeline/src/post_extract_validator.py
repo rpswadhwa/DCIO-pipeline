@@ -153,7 +153,7 @@ def pick_fund_name(issuer_name, investment_description):
 
 logger = logging.getLogger(__name__)
 
-MF_ASSET_TYPES = frozenset({"mutual fund", "index fund", "money market fund", "etf", "target date fund"})
+MF_ASSET_TYPES = frozenset({"mutual fund", "index fund", "etf", "target date fund"})
 BAD_REFERENCE_COMPARISON_OVERRIDES = frozenset({
     ("20251010135251NAL0018754754001", "202777218-002"),
 })
