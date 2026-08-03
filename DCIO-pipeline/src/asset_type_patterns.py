@@ -7,7 +7,7 @@ ASSET_TYPE_PATTERNS = [
     (r'Investments?\s+in\s+mutual\s+funds?',                    'Mutual Fund'),
     (r'Investments?\s+in\s+money\s+markets?',                   'Money Market Fund'),
     (r'Investments?\s+in\s+common\s+collective\s+trusts?',      'Common/Collective Trust Fund'),
-    (r'Investments?\s+in\s+pooled\s+separate\s+accounts?',      'Commingled Fund'),
+    (r'Investments?\s+in\s+pooled\s+separate\s+(?:investment\s+)?accounts?', 'Separate Account'),
     (r'Investments?\s+in\s+investment\s+contracts?',            'Stable Value Fund'),
     (r'Insurance\s+Company\s+General\s+Account\s+Contracts?',   'Insurance General Account'),
     (r'General\s+Account\s+Contracts?',                         'Insurance General Account'),
@@ -32,7 +32,7 @@ ASSET_TYPE_PATTERNS = [
     (r'Collective\s+Trusts?',                                   'Common/Collective Trust Fund'),
     (r'Common\s+Collective\s+Trusts?',                          'Common/Collective Trust Fund'),
     (r'Collecti\w{0,3}e\s+Trusts?',                             'Common/Collective Trust Fund'),  # OCR-tolerant: "Collecti11e Trusts"
-    (r'Pooled\s+Separate\s+Accounts?',                          'Commingled Fund'),
+    (r'Pooled\s+Separate\s+(?:Investment\s+)?Accounts?',        'Separate Account'),
     (r'Pooled\s+Funds?',                                        'Commingled Fund'),
     (r'Separately\s+Managed\s+Accounts?',                       'Separately Managed Account'),
     (r'Self[\-\s]Directed\s+Brokerage\s+Accounts?',             'Self-Directed Brokerage Account'),
@@ -44,6 +44,8 @@ ASSET_TYPE_PATTERNS = [
     (r'Collective\s+Funds?',                                    'Commingled Fund'),
     (r'Stable\s+Value\s+Funds?',                                'Stable Value Fund'),
     (r'Money\s+Market\s+Funds?',                                'Money Market Fund'),
+    (r'\bMMRK\b',                                                'Money Market Fund'),
+    (r'Variable\s+Annuit(?:y|ies)(?:\s+(?:Contracts?|Accounts?))?', 'Variable Annuity Contract'),
     (r'Registered\s+Investment\s+Compan(?:y|ies)',              'Mutual Fund'),
     (r'Registered\s+Investment\s+Funds?',                       'Mutual Fund'),
     (r'Institutional\s+Funds?',                                 'Mutual Fund'),
@@ -51,7 +53,7 @@ ASSET_TYPE_PATTERNS = [
     (r'Employer\s+Stocks?',                                     'Employer Stock'),
     (r'Employer\s+Securities',                                  'Employer Stock'),
     (r'Preferred\s+Stocks?',                                    'Preferred Stock'),
-    (r'Common\s+Stocks?',                                       'Common Stock'),
+    (r'Common\s+Stocks?',                                       'Employer Stock'),
     (r'Publicly[\-\s]traded\s+Stocks?',                         'Common Stock'),
     # --- additional non-MF vehicle categories (DOL Sch H taxonomy): partnerships/joint
     # ventures, real estate, hedge funds, bonds/debt, derivatives, 103-12 IEs. These match
@@ -121,7 +123,7 @@ def detect_asset_type_strict(text: str) -> str:
 # incidental trailing "fund" token in the same string.
 ROW_TYPE_PATTERNS = [
     (r'insurance\s+company\s+separate\s+accounts?',    'Separately Managed Account'),
-    (r'pooled\s+separate\s+accounts?',                 'Commingled Fund'),
+    (r'pooled\s+separate\s+(?:investment\s+)?accounts?', 'Separate Account'),
     (r'separate(?:ly)?\s+managed\s+accounts?',         'Separately Managed Account'),
     (r'common\s*/?\s*collective\s+trusts?',            'Common/Collective Trust Fund'),
     (r'collective\s+investment\s+trusts?',             'Common/Collective Trust Fund'),
@@ -141,9 +143,11 @@ ROW_TYPE_PATTERNS = [
     (r'personal\s+choice\s+retirement\s+account',      'Self-Directed Brokerage Account'),
     (r'guaranteed\s+(?:investment\s+contract|income)', 'Stable Value Fund'),
     (r'stable\s+value',                                'Stable Value Fund'),
-    # NOTE: variable annuities / CREF sub-accounts are deliberately NOT reclassified here --
-    # they wrap underlying mutual funds and the certified amt_mutual_funds INCLUDES them, so
-    # typing them non-MF causes under-capture (verified on the 2500 run: -45 PASS). Leave as MF.
+    # Variable annuities are now typed as their own non-MF vehicle (Variable Annuity Contract)
+    # per direct PDF review -- these ARE their own asset-type heading in the filing, not a
+    # mutual fund. A prior 2500-plan run flagged -45 PASS when this was excluded; that was
+    # accepted as a known tradeoff rather than reverting the classification.
+    (r'variable\s+annuit(?:y|ies)',                    'Variable Annuity Contract'),
     # fixed / guaranteed / GIC principal-preservation vehicles -> Stable Value (non-MF)
     (r'fixed\s+account',                               'Stable Value Fund'),
     (r'fixed\s+interest',                              'Stable Value Fund'),
@@ -170,14 +174,15 @@ ROW_TYPE_PATTERNS = [
     (r'employer\s+securit(?:y|ies)',                   'Employer Stock'),
     (r'(?:self[\-\s]?directed\s+)?brokerage\s+account', 'Self-Directed Brokerage Account'),
     (r'money\s+mkt',                                   'Money Market Fund'),   # "MONEY MKT" abbrev
-    (r'common\s+stock',                                'Common Stock'),
-    (r'common\s+shares',                               'Common Stock'),
+    (r'\bmmrk\b',                                      'Money Market Fund'),   # "MMRK" abbrev
+    (r'common\s+stock',                                'Employer Stock'),
+    (r'common\s+shares',                               'Employer Stock'),
     (r'\ber\s+stock',                                  'Employer Stock'),   # "... ER Stock Fund" (employer)
     # a corporate entity (Inc/Corp/PLC/Ltd) whose name ENDS in bare "stock" -> common stock
-    (r'(?:\binc\b|\bcorp\b|corporation|\bplc\b|\bltd\b)\b.*\bstock\s*$', 'Common Stock'),
+    (r'(?:\binc\b|\bcorp\b|corporation|\bplc\b|\bltd\b)\b.*\bstock\s*$', 'Employer Stock'),
     # a directly-held company security: a corporate-entity name carrying a share COUNT and no
-    # fund/trust/account vehicle word -> common stock (a mutual fund is never named this way)
-    (r'(?:corporation|incorporated|\bcorp\b|\binc\b|\bplc\b|\bco\b|company)\b(?![^\d]*\b(fund|trust|account|portfolio|index)\b)[^\d]*\d[\d,]*\s*shares?', 'Common Stock'),
+    # fund/trust/account vehicle word -> employer stock (a mutual fund is never named this way)
+    (r'(?:corporation|incorporated|\bcorp\b|\binc\b|\bplc\b|\bco\b|company)\b(?![^\d]*\b(fund|trust|account|portfolio|index)\b)[^\d]*\d[\d,]*\s*shares?', 'Employer Stock'),
     (r'mutual\s+funds?',                               'Mutual Fund'),
 ]
 
