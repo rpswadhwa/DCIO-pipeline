@@ -1329,8 +1329,11 @@ def _infer_first_section_asset_type(text: str) -> str:
         (r'\bcommon/?collective\s+trusts?\b|\bcollective\s+investment\s+funds?\b', 'Common/Collective Trust Fund'),
         (r'\bguaranteed\s+investment\s+contracts?\b', 'Guaranteed Investment Contract'),
         (r'\bself[- ]directed\s+brokerage\s+accounts?\b', 'Self-Directed Brokerage Account'),
-        (r'\bpooled\s+separate\s+accounts?\b', 'Commingled Fund'),
+        (r'\bpooled\s+separate\s+(?:investment\s+)?accounts?\b', 'Separate Account'),
         (r'\bcollective\s+funds?\b', 'Commingled Fund'),
+        (r'\bmoney\s+market\s+funds?\b|\bmmrk\b', 'Money Market Fund'),
+        (r'\bvariable\s+annuit(?:y|ies)\b', 'Variable Annuity Contract'),
+        (r'\bcommon\s+stocks?\b', 'Employer Stock'),
     ]
     for line in (text or '').splitlines()[:40]:
         clean = normalize_whitespace(line)
