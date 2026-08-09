@@ -303,14 +303,28 @@ def _find_section_table_areas(page) -> List[Tuple[str, str]]:
         keep_blank_chars=False,
         use_text_flow=True,
     )
-    lines_by_top: Dict[int, List[Dict]] = {}
-    for word in words:
-        top_key = round(float(word["top"]))
-        lines_by_top.setdefault(top_key, []).append(word)
+    # Cluster words into visual lines by proximity, not by rounding each word's
+    # "top" to the nearest integer pixel independently. Words in the same table
+    # row can differ by a fraction of a pixel across columns (font metrics,
+    # baseline offsets), and a hard round() can land them on opposite sides of
+    # an integer boundary (e.g. 235.45 -> 235 vs 235.69 -> 236), silently
+    # splitting one row into two "lines." When that isolates a row's type-label
+    # text (e.g. "Common/Collective Trust") away from its own numeric value,
+    # the value-guard in _detect_section_heading_text no longer sees the value
+    # and misclassifies an ordinary data row as a section heading.
+    line_tolerance = 3.0
+    sorted_words = sorted(words, key=lambda w: float(w["top"]))
+    line_clusters: List[List[Dict]] = []
+    for word in sorted_words:
+        word_top = float(word["top"])
+        if line_clusters and word_top - line_clusters[-1][-1]["_top"] <= line_tolerance:
+            line_clusters[-1].append({**word, "_top": word_top})
+        else:
+            line_clusters.append([{**word, "_top": word_top}])
 
     headings = []
     header_bottom = None
-    for top_key, line_words in sorted(lines_by_top.items()):
+    for line_words in line_clusters:
         line_words = sorted(line_words, key=lambda w: float(w["x0"]))
         line_text = normalize_whitespace(" ".join(w["text"] for w in line_words))
         if re.search(
@@ -1732,6 +1746,47 @@ def extract_tables_and_map(
             if re.search(r'collateral.*par.*matur(?:ing|ity)\s+value', h, re.IGNORECASE):
                 column_map[idx] = 'investment_description'
 
+    def _verify_or_remap_value_column(df, data_start_row: int, column_map: Dict[int, str]) -> Dict[int, str]:
+        """A reused column map assumes the same column layout as the table it
+        was captured from. Camelot's stream flavor infers columns
+        independently per extraction, so a section-area-restricted
+        re-extraction (see _find_section_table_areas) can land on a
+        different column count than the original table -- e.g. a wrapped
+        fund name spills into its own near-empty column, shifting the real
+        value column one to the right. Reusing the old map then silently
+        points current_value at a blank column while the real values sit
+        unread. Verify the mapped value column actually looks like values
+        here; if not, retarget it to whichever column (preferring the
+        rightmost, since the value column is always last) is mostly numeric.
+        """
+        value_col = next((idx for idx, f in column_map.items() if f == 'current_value'), None)
+        if value_col is None or df.shape[0] <= data_start_row:
+            return column_map
+        sample = df.iloc[data_start_row:data_start_row + 15]
+
+        def _numeric_ratio(col_idx):
+            if col_idx >= df.shape[1]:
+                return 0.0
+            cells = [normalize_whitespace(str(v)) for v in sample.iloc[:, col_idx].tolist()]
+            non_empty = [c for c in cells if c]
+            if not non_empty:
+                return 0.0
+            matches = sum(1 for c in non_empty if re.fullmatch(r"\$?\s*\(?\s*[0-9][0-9,]*(?:\.[0-9]+)?\)?", c))
+            return matches / len(non_empty)
+
+        if _numeric_ratio(value_col) >= 0.5:
+            return column_map
+        best_col, best_ratio = None, 0.0
+        for col_idx in range(df.shape[1] - 1, -1, -1):
+            ratio = _numeric_ratio(col_idx)
+            if ratio > best_ratio:
+                best_col, best_ratio = col_idx, ratio
+        if best_col is not None and best_ratio >= 0.5:
+            column_map = {idx: f for idx, f in column_map.items() if f != 'current_value'}
+            column_map[best_col] = 'current_value'
+            print(f"    Remapped current_value column {value_col} -> {best_col} (reused map didn't match this table's layout)")
+        return column_map
+
     # Persists across pages: once a section heading is seen, all following rows
     # inherit its type until a new heading overrides it
     current_section_type = ""
@@ -1825,12 +1880,12 @@ def extract_tables_and_map(
                 previous_column_map = dict(column_map)
                 previous_column_map_page = page_num
         elif table_section_asset_type and previous_column_map_page == page_num and previous_column_map:
-            column_map = dict(previous_column_map)
+            column_map = _verify_or_remap_value_column(df, 0, dict(previous_column_map))
             data_start_row = 0
             reused_previous_column_map = True
             print(f"    Reusing same-page column map for section table on page {page_num}")
         elif _looks_like_headerless_continuation(df, previous_column_map):
-            column_map = dict(previous_column_map)
+            column_map = _verify_or_remap_value_column(df, 0, dict(previous_column_map))
             data_start_row = 0
             reused_previous_column_map = True
             print(f"    Reusing previous column map for headerless continuation page {page_num}")
