@@ -31,7 +31,7 @@ def _page_values_are_in_thousands(text: str) -> bool:
     """Return True when page text declares dollar amounts in thousands."""
     return bool(re.search(
         r'\b(?:in\s+thousands|amounts?\s+(?:are\s+)?in\s+thousands|'
-        r'dollars?\s+in\s+thousands|\$\s*000s?)\b',
+        r'dollars?\s+in\s+thousands|thousands\s+of\s+dollars|\$\s*000s?)\b',
         text or '',
         re.IGNORECASE,
     ))
@@ -41,7 +41,7 @@ def _page_values_are_in_millions(text: str) -> bool:
     """Return True when page text declares dollar amounts in millions."""
     return bool(re.search(
         r'\b(?:in\s+millions|amounts?\s+(?:are\s+)?in\s+millions|'
-        r'dollars?\s+in\s+millions)\b',
+        r'dollars?\s+in\s+millions|millions\s+of\s+dollars)\b',
         text or '',
         re.IGNORECASE,
     ))
