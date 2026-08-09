@@ -227,7 +227,7 @@ def remove_total_rows(rows, verbose=True):
     total_indicators = {
         "total investments", "total assets", "total plan", "grand total",
         "subtotal", "sub-total", "sum of",
-        "total synthetic", "synthetic investment contracts"
+        "total synthetic"
     }
     
     # Specific fund name patterns that indicate a legitimate investment

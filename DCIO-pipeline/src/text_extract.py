@@ -1715,6 +1715,17 @@ def extract_tables_and_map(
                 tables.append(section_table)
                 section_asset_type_by_table[id(section_table)] = section_asset_type
 
+    # Process tables in page order (not "default-pages batch, then split-section
+    # batch"). The per-row loop below tracks current_section_type/table_section_type
+    # as a running state that persists across tables so continuation pages with no
+    # heading of their own can inherit the type from the page before them. Since
+    # split-section tables (pages with 2+ headings) are appended after the default
+    # batch above, an out-of-page-order list would process a continuation page's
+    # default table BEFORE the heading-bearing page's split tables ever run,
+    # leaving the continuation page's rows with a blank asset_type. Sort is stable,
+    # so same-page tables (e.g. multiple section areas) keep their relative order.
+    tables = sorted(tables, key=lambda t: int(t.page))
+
     if use_llm:
         api_key = os.getenv("OPENAI_API_KEY")
         client = OpenAI(api_key=api_key) if api_key else None
