@@ -8,8 +8,9 @@ lose -- so we do it independently of the certified anchor, and then use certifie
 to VALIDATE (did junk removal get us to the audited MF total?).
 
 IDENTIFICATION (three tiers)
-  Tier 1 structural (name-independent): exact duplicate rows; grand-total row
-       (value ~= sum of all other rows in the plan).
+  Tier 1 structural (name-independent): exact duplicate rows; near-duplicate rows
+       (same fund once share-class/boilerplate wording is stripped, value within 0.5%);
+       grand-total row (value ~= sum of all other rows in the plan).
   Tier 2 lexicon (bounded accounting vocabulary, matched on the NORMALIZED whole
        string -- never a loose substring): totals, balances, section headers,
        bookkeeping scraps.
@@ -37,6 +38,28 @@ _NONALNUM = re.compile(r"[^a-z0-9]")
 
 def norm(s: str) -> str:
     return _NONALNUM.sub("", (s or "").lower())
+
+
+# Share-class / boilerplate words stripped before the NEAR-duplicate name comparison
+# (Tier 1a2). These are the words that vary between two extractions of the SAME fund
+# ("... Admiral Shares" vs "... Institutional Shares", "... Fund" vs "... Fund Class R6")
+# without changing what the fund actually is.
+_SHARE_CLASS_WORDS = re.compile(
+    r'\b(class\s*[a-z0-9]{1,3}|institutional|inst|admiral|investor|retirement|'
+    r'advisor|adv|retail|premier|select|r[1-6]|shares?|units?|fund|series)\b',
+    re.IGNORECASE,
+)
+
+
+def fuzzy_norm(s: str) -> str:
+    """Aggressive normalization for near-duplicate detection: strips share-class /
+    boilerplate words on top of norm()'s case/punctuation collapse, so 'Vanguard 500
+    Index Fund Admiral Shares' and 'Vanguard 500 Index Fund Institutional Shares'
+    both reduce to the same key. Intentionally more aggressive than norm() -- only
+    ever used PAIRED with a value-closeness check (see Tier 1a2), never alone, so it
+    can't merge two genuinely different funds that happen to share a family name.
+    """
+    return norm(_SHARE_CLASS_WORDS.sub(' ', s or ''))
 
 
 # --- Tier 2 lexicon: NORMALIZED whole-string labels that are never a security --------
@@ -220,7 +243,7 @@ def _val(row: Dict) -> float:
 
 def clean_plan(rows: List[Dict], grand_total_tol: float = 0.02) -> Dict:
     """Remove junk from one plan's rows. Structural + lexicon + shape.
-    Returns dict(keep, removed_junk, prefix_contaminated, dedup_removed)."""
+    Returns dict(keep, removed_junk, prefix_contaminated, dedup_removed, near_dup_removed)."""
     n = len(rows)
     vals = [_val(r) for r in rows]
     total = sum(vals)
@@ -237,6 +260,36 @@ def clean_plan(rows: List[Dict], grand_total_tol: float = 0.02) -> Dict:
             dedup_removed.append(r)
         else:
             seen.add(key)
+
+    # Tier 1a2: NEAR-duplicate (same fund, share-class/boilerplate wording differs, value
+    # within a tight tolerance) -> keep the larger-value row, drop the other. Requires BOTH
+    # signals (fuzzy name match AND close value) so two genuinely distinct real positions in
+    # the same fund family (e.g. participant deferral vs employer match, legitimately
+    # different dollar amounts) are never merged -- only a near-identical value alongside a
+    # near-identical name indicates the same holding got captured twice.
+    _NEAR_DUP_VALUE_TOL = 0.005  # 0.5% relative difference
+    fuzzy_removed = []
+    fuzzy_mask = [False] * n
+    _fuzzy_groups: Dict[str, List[int]] = {}
+    for i, r in enumerate(rows):
+        if dedup_mask[i] or vals[i] <= 0:
+            continue
+        key = fuzzy_norm(_name(r))
+        if not key:
+            continue
+        _fuzzy_groups.setdefault(key, []).append(i)
+    for idxs in _fuzzy_groups.values():
+        if len(idxs) < 2:
+            continue
+        idxs_sorted = sorted(idxs, key=lambda i: -vals[i])
+        kept_idx = idxs_sorted[0]
+        for j in idxs_sorted[1:]:
+            if fuzzy_mask[j]:
+                continue
+            denom = max(vals[kept_idx], vals[j])
+            if denom > 0 and abs(vals[kept_idx] - vals[j]) <= _NEAR_DUP_VALUE_TOL * denom:
+                fuzzy_mask[j] = True
+                fuzzy_removed.append(rows[j])
 
     # Tier 1b: grand-total row -> value ~= sum of all OTHER rows
     gt_mask = [False] * n
@@ -272,7 +325,7 @@ def clean_plan(rows: List[Dict], grand_total_tol: float = 0.02) -> Dict:
     #             break
 
     for i, r in enumerate(rows):
-        if dedup_mask[i]:
+        if dedup_mask[i] or fuzzy_mask[i]:
             continue
         if gt_mask[i]:
             removed.append((r, "grand-total (== sum of other rows)"))
@@ -293,8 +346,10 @@ def clean_plan(rows: List[Dict], grand_total_tol: float = 0.02) -> Dict:
         "removed_junk": removed,
         "prefix_contaminated": prefix_bad,
         "dedup_removed": dedup_removed,
+        "near_dup_removed": fuzzy_removed,
         "keep_sum": sum(_val(r) for r in keep),
-        "removed_sum": sum(_val(r) for r, _ in removed) + sum(_val(r) for r in dedup_removed),
+        "removed_sum": (sum(_val(r) for r, _ in removed) + sum(_val(r) for r in dedup_removed)
+                        + sum(_val(r) for r in fuzzy_removed)),
     }
 
 
@@ -317,6 +372,7 @@ def apply_junk_stage(records: List[Dict]) -> Tuple[List[Dict], Dict[str, int]]:
     stats = {
         "removed_junk": len(res["removed_junk"]),
         "dedup_removed": len(res["dedup_removed"]),
+        "near_dup_removed": len(res["near_dup_removed"]),
         "prefix_contaminated": len(res["prefix_contaminated"]),
         "removed_amt": int(res["removed_sum"]),
     }

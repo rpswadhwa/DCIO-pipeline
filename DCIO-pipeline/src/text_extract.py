@@ -14,9 +14,14 @@ from .asset_type_patterns import ASSET_TYPE_PATTERNS, detect_asset_type
 from .data_cleaner import handle_split_rows, parse_investment_row
 from .utils import load_yaml, normalize_whitespace
 
-# Strips leading or trailing total/subtotal words before section-heading pattern matching
+# Strips leading total/subtotal words, or trailing total/subtotal/(Continued) words,
+# before section-heading pattern matching -- e.g. "MUTUAL FUNDS (Continued)" on a
+# multi-page Schedule H section must still match the "MUTUAL FUNDS" heading pattern.
 _TOTAL_AFFIX_RE = re.compile(
-    r'^(?:total|subtotal|grand\s+total)\s+|\s+(?:total|subtotal|grand\s+total)$',
+    r'^(?:total|subtotal|grand\s+total)\s+'
+    r'|\s+(?:total|subtotal|grand\s+total)$'
+    r'|\s*\(\s*continued\s*\)\s*$'
+    r'|\s+continued$',
     re.IGNORECASE,
 )
 
@@ -30,6 +35,25 @@ def _page_values_are_in_thousands(text: str) -> bool:
         text or '',
         re.IGNORECASE,
     ))
+
+
+def _page_values_are_in_millions(text: str) -> bool:
+    """Return True when page text declares dollar amounts in millions."""
+    return bool(re.search(
+        r'\b(?:in\s+millions|amounts?\s+(?:are\s+)?in\s+millions|'
+        r'dollars?\s+in\s+millions)\b',
+        text or '',
+        re.IGNORECASE,
+    ))
+
+
+def _page_value_scale_factor(text: str) -> int:
+    """Return the dollar-value scale factor (1, 1_000, or 1_000_000) declared by page text."""
+    if _page_values_are_in_millions(text):
+        return 1_000_000
+    if _page_values_are_in_thousands(text):
+        return 1_000
+    return 1
 
 
 def _scale_currency_string(raw: str, factor: int) -> str:
@@ -250,7 +274,7 @@ def _detect_section_heading(row_data: Dict, fields: List[str]) -> Optional[str]:
     return None
 
 
-_VALUE_LIKE_RE = re.compile(r"\$?\(?[0-9][0-9,]*(?:\.[0-9]+)?\)?")
+_VALUE_LIKE_RE = re.compile(r"\$?\s*\(?\s*[0-9][0-9,]*(?:\.[0-9]+)?\)?")
 
 
 def _detect_section_heading_text(text: str) -> Optional[str]:
@@ -363,7 +387,7 @@ def _is_total_summary_label(text: str) -> bool:
 
 
 def _is_blank_asset_type(value: str) -> bool:
-    return not value or str(value).strip().lower() in ('', 'nan', '-', '**')
+    return not value or str(value).strip().lower() in ('', 'nan', '-', '*', '**')
 
 
 def _looks_like_headerless_continuation(df, previous_column_map: Dict[int, str]) -> bool:
@@ -375,7 +399,7 @@ def _looks_like_headerless_continuation(df, previous_column_map: Dict[int, str])
 
     numeric_like_rows = 0
     rows_to_check = min(df.shape[0], 8)
-    money_re = re.compile(r"^\$?\(?[0-9][0-9,]*(?:\.[0-9]+)?\)?$")
+    money_re = re.compile(r"^\$?\s*\(?\s*[0-9][0-9,]*(?:\.[0-9]+)?\)?$")
     for idx in range(rows_to_check):
         row = [normalize_whitespace(str(c)) for c in df.iloc[idx].tolist()]
         non_empty = [c for c in row if c]
@@ -1042,7 +1066,7 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
                 data_start_idx = i + 1
                 break
 
-        multiply_by_1000 = _page_values_are_in_thousands(text)
+        page_scale_factor = _page_value_scale_factor(text)
 
         # Two value patterns:
         # 1. "** $VALUE" or "** VALUE"  (classic Form 5500 format)
@@ -1155,8 +1179,8 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
                     current_value = value_match.group(1).replace(',', '')
                     issuer_description = line[:value_match.start()].strip()
 
-            if multiply_by_1000:
-                current_value = _scale_currency_string(current_value, 1000)
+            if page_scale_factor != 1:
+                current_value = _scale_currency_string(current_value, page_scale_factor)
 
             # Skip actual total/summary labels, while preserving fund names such as
             # "PIMCO Total Return" or "Vanguard Total Bond Market". Also skip note
@@ -1427,6 +1451,78 @@ def find_structural_investment_pages(pdf_path: str, max_pages: int = 1000) -> Li
     return pages
 
 
+def _looks_like_simple_investment_schedule(text: str) -> bool:
+    """Last-resort, looser detector for simplified 2-column Schedule-of-Assets formats
+    (e.g. a bare "INVESTMENT" / "CURRENT VALUE" header) that lack the "identity of issue" /
+    "description of investments" column headers required by
+    _looks_like_structural_investment_schedule. Only ever called from
+    find_simple_investment_pages, which the pipeline invokes as a third-tier fallback after
+    both the keyword classifier and the structural fallback have already found nothing for a
+    given PDF -- so the looser match here only ever fires on documents already confirmed to be
+    total extraction failures, not on the general population.
+    """
+    text = text or ''
+    header_text = " ".join(text.splitlines()[:15]).lower()
+    has_schedule_title = bool(re.search(r'schedule\s+of\s+assets|statement\s+of\s+assets', header_text))
+    has_current_value = 'current' in header_text and 'value' in header_text
+    if not (has_schedule_title or has_current_value):
+        return False
+    # Broad negative keywords only rule out the page by its own header/title -- checking them
+    # against the full page text caused false negatives on legitimate schedule pages that
+    # happen to also mention e.g. "independent auditor" elsewhere in dense page text.
+    if re.search(
+        r'SIGNATURE|INDEPENDENT\s+AUDITOR|ACCOUNTANT|SUMMARY|INCOME\s+STATEMENT|BALANCE\s+SHEET|'
+        r'NET\s+ASSETS\s+AVAILABLE\s+FOR\s+BENEFITS|STATEMENT\s+OF\s+CHANGES',
+        header_text,
+        re.IGNORECASE,
+    ):
+        return False
+    # These are specific enough multi-word phrases that a match anywhere on the page reliably
+    # signals a different schedule type, so they're still checked against the full text.
+    if re.search(
+        r'SCHEDULE\s+C\s+SUPPLEMENTAL\s+REPORT|INFORMATION\s+ON\s+SERVICE\s+PROVIDERS|'
+        r'INDIRECT\s+COMPENSATION|REPORTABLE\s+TRANSACTIONS',
+        text,
+        re.IGNORECASE,
+    ):
+        return False
+    return len(re.findall(r'\$?\s*\d{1,3}(?:,\d{3})+(?:\.\d+)?', text)) >= 3
+
+
+def find_simple_investment_pages(pdf_path: str, max_pages: int = 1000) -> List[int]:
+    """Third-tier fallback page finder, only ever invoked when a PDF has already produced zero
+    usable rows through both the keyword classifier and find_structural_investment_pages. Catches
+    simplified Schedule-of-Assets formats (bare "INVESTMENT" / "CURRENT VALUE" columns) that the
+    stricter tiers miss.
+    """
+    pages: List[int] = []
+    consumed = set()
+    try:
+        with pdfplumber.open(pdf_path) as pdf:
+            for idx, page in enumerate(pdf.pages[:max_pages], start=1):
+                if idx in consumed:
+                    continue
+                text = page.extract_text() or ''
+                if _looks_like_simple_investment_schedule(text):
+                    pages.append(idx)
+                    consumed.add(idx)
+                    profile = _infer_structural_row_profile(text)
+                    next_idx = idx + 1
+                    while next_idx <= min(len(pdf.pages), max_pages):
+                        next_text = pdf.pages[next_idx - 1].extract_text() or ''
+                        if not (
+                            _looks_like_simple_investment_schedule(next_text)
+                            or _matches_structural_row_profile(next_text, profile)
+                        ):
+                            break
+                        pages.append(next_idx)
+                        consumed.add(next_idx)
+                        next_idx += 1
+    except Exception as exc:
+        print(f"    [fallback] Error scanning simple investment pages: {exc}")
+    return pages
+
+
 _SCHEDULE_OF_TITLE_TYPE_MAP = [
     (r'REGISTERED\s+INVESTMENT\s+COMPAN', 'Mutual Fund'),
     (r'MUTUAL\s+FUND', 'Mutual Fund'),
@@ -1567,7 +1663,7 @@ def extract_tables_and_map(
                     continuation_parser_profiles[p] = active_parser_profile
                 if is_profile_continuation and active_structural_asset_type:
                     continuation_asset_types[p] = active_structural_asset_type
-                page_value_scale[p] = 1000 if _page_values_are_in_thousands(page_text) else 1
+                page_value_scale[p] = _page_value_scale_factor(page_text)
         supplemental_pages = filtered_pages
     if not supplemental_pages:
         return plan_info, []
@@ -1666,6 +1762,16 @@ def extract_tables_and_map(
                     for kw in ['description of investment', 'maturity date', 'rate of interest']
                 ):
                     continue
+            # A real header row never carries an actual dollar figure. Short fund-name
+            # cells like "Mid Cap Value Fund" can fuzzy-match header synonyms (e.g.
+            # "current_value") at very high scores, which was misclassifying the first
+            # DATA row as a header row and dropping both it and the preceding section
+            # heading. A value-bearing cell is decisive proof this is a data row.
+            if any(
+                re.fullmatch(r"\$?\s*\(?\s*[0-9][0-9,]*(?:\.[0-9]+)?\)?", h)
+                for h in non_empty_header_cells
+            ):
+                continue
             match_count = 0
             partial_match = False
             for h in potential_header:
@@ -1788,7 +1894,7 @@ def extract_tables_and_map(
                     current_section_type = matched
                     pending_single_cell_fragments.clear()
                     print(f"    Section heading: '{matched}' (row {row_idx})")
-                elif re.fullmatch(r"\$?\(?[0-9][0-9,]*(?:\.[0-9]+)?\)?", candidate_text):
+                elif re.fullmatch(r"\$?\s*\(?\s*[0-9][0-9,]*(?:\.[0-9]+)?\)?", candidate_text):
                     # A one-cell numeric row is usually a subtotal/duplicate value line,
                     # not a split name. Do not attach it to the next investment row.
                     pending_single_cell_fragments.clear()
@@ -1802,7 +1908,7 @@ def extract_tables_and_map(
                 continue
 
             has_value_like_cell = any(
-                re.fullmatch(r"\$?\(?[0-9][0-9,]*(?:\.[0-9]+)?\)?", text)
+                re.fullmatch(r"\$?\s*\(?\s*[0-9][0-9,]*(?:\.[0-9]+)?\)?", text)
                 for _, text in non_empty_cells
             )
             if pending_single_cell_fragments and has_value_like_cell:

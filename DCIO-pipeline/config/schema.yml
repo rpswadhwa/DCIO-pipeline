@@ -27,6 +27,8 @@ schema:
       - "issuer or obligor"
       - "identity of issue"
       - "identity of investment"
+      - "borrower, lessor, or similar party"
+      - "identity of issue, borrower, lessor, or similar party"
       - "fund name"
       - "investment name"
       - "security name"

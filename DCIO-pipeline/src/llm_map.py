@@ -54,7 +54,10 @@ def _llm_normalize_headers(client: OpenAI, model: str, headers: List[str], schem
     text = response.choices[0].message.content
     try:
         data = json.loads(text)
-        return {int(k): v for k, v in data.items() if v}
+        return {
+            int(k): v for k, v in data.items()
+            if v and v in schema_fields
+        }
     except Exception:
         return {}
 

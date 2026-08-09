@@ -639,8 +639,13 @@ def build_mf_rows_df(rows: List[Dict],
         if _CUSIP_ARTIFACT_RE.search(_name):
             continue
         # Scope: annuity / insurance vehicles (CREF, TIAA Traditional, Voya/Empower
-        # Retirement Insurance & Annuity, variable annuity accounts) are not mutual funds.
-        if mf_only and _ANNUITY_VEHICLE_RE.search(_name):
+        # Retirement Insurance & Annuity, variable annuity accounts) are not mutual funds --
+        # UNLESS the filing itself already tags/describes the row as a mutual fund (e.g. some
+        # plans' Sch H tables list CREF accounts under a "Mutual fund" asset type/description;
+        # certified totals for those filings include them, so excluding them undercaptures).
+        _desc = str(row.get("investment_description", "") or "")
+        _explicit_mf = asset_type == "mutual fund" or bool(_re.search(r"\bmutual\s+funds?\b", _desc, _re.IGNORECASE))
+        if mf_only and not _explicit_mf and _ANNUITY_VEHICLE_RE.search(_name):
             continue
         records.append({
             "ack_id": str(row.get("pdf_stem", "") or "").strip(),
@@ -995,6 +1000,8 @@ def run_post_extract_validation(
             _drops.append((_stem, _r.get("fund_name", ""), _r.get("plan_investment_amt"), _reason))
         for _r in _res.get("dedup_removed", []):
             _drops.append((_stem, _r.get("fund_name", ""), _r.get("plan_investment_amt"), "exact duplicate"))
+        for _r in _res.get("near_dup_removed", []):
+            _drops.append((_stem, _r.get("fund_name", ""), _r.get("plan_investment_amt"), "near-duplicate (share-class variant, value match)"))
     rows = _kept
     if _drops:
         logger.info("junk filter removed %d row(s) across %d plan(s)", len(_drops), len(_by_stem))

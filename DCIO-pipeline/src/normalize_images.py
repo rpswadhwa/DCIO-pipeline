@@ -15,6 +15,12 @@ def deskew_image(img):
         angle = -(90 + angle)
     else:
         angle = -angle
+    # minAreaRect's angle estimate is unreliable on sparse full-page text (as opposed
+    # to a single connected block), and can flip to a spurious ~90 degree result.
+    # Real scanner skew is at most a few degrees, so anything larger is treated as a
+    # bad estimate and left unrotated rather than risk flipping the page sideways.
+    if abs(angle) > 15:
+        return img
     (h, w) = img.shape[:2]
     center = (w // 2, h // 2)
     M = cv2.getRotationMatrix2D(center, angle, 1.0)

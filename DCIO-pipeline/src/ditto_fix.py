@@ -17,6 +17,25 @@ _DITTO_RE = re.compile(
 _STRIP_CHARS = ' "\'`*.“”″-'
 _STRIP_RE = re.compile('[' + re.escape(_STRIP_CHARS) + ']')
 
+# A ditto mark glued onto the END of an otherwise-real name -- e.g. a name column that
+# reads 'Vertex Pharmaceuticals "' where the ditto was meant to carry the row's TYPE/
+# section forward but the OCR/table split stuck it onto the name cell instead. Distinct
+# from _DITTO_RE (whole-cell ditto): this only strips a trailing mark when real text
+# precedes it, so a lone ditto mark still falls through to the whole-cell path untouched.
+_TRAILING_DITTO_RE = re.compile(
+    r'(?<=\S)[\s*]*[' + re.escape(_DITTO_CHARS) + r']+\s*$'
+)
+
+
+def strip_trailing_ditto(value):
+    """Strip a ditto mark glued onto the end of a real name, e.g. 'Vertex Pharmaceuticals ″'
+    -> 'Vertex Pharmaceuticals'. A no-op for a cell that is ONLY a ditto mark (no
+    preceding text for the lookbehind to match) -- that case stays for is_ditto/_DITTO_RE.
+    """
+    s = str(value or "")
+    stripped = _TRAILING_DITTO_RE.sub('', s).rstrip()
+    return stripped if stripped else s
+
 # A description that is just a generic asset-TYPE word may be propagated across
 # ditto rows. A real fund name must NOT be (it would mislabel the rows below).
 _TYPE_WORD_RE = re.compile(
@@ -68,7 +87,20 @@ def fill_ditto_marks(rows):
             prev_desc = ""
             prev_type = ""
             prev_stem = _stem
+        # Strip a ditto mark glued onto the end of the issuer/description name BEFORE
+        # the whole-cell ditto check below, so a name like 'Vertex Pharmaceuticals "'
+        # survives as 'Vertex Pharmaceuticals' instead of being kept junk or dropped.
+        _issuer_raw = str(row.get("issuer_name", "") or "")
+        _issuer_stripped = strip_trailing_ditto(_issuer_raw)
+        if _issuer_stripped != _issuer_raw.rstrip():
+            row["issuer_name"] = _issuer_stripped
+
         desc = str(row.get("investment_description", "") or "").strip()
+        _desc_stripped = strip_trailing_ditto(desc)
+        if _desc_stripped != desc and not _DITTO_RE.match(desc):
+            desc = _desc_stripped
+            row["investment_description"] = desc
+
         atype = str(row.get("asset_type", "") or "").strip()
         if _DITTO_RE.match(desc):
             # Always inherit the type so the row isn't dropped...

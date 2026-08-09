@@ -14,7 +14,7 @@ from .llm_map import map_rows_with_llm
 from .load_db import load_cleaned_pipeline_results, reset_db
 from .normalize_images import normalize_pages
 from .ocr_passes import run_ocr
-from .text_extract import classify_pages_text, extract_tables_and_map, _has_see_attachment, find_attachment_pages, find_structural_investment_pages, _SEE_ATTACHMENT_RE, _DETAIL_REFERENCE_RE, expand_continuation_pages
+from .text_extract import classify_pages_text, extract_tables_and_map, _has_see_attachment, find_attachment_pages, find_structural_investment_pages, find_simple_investment_pages, _SEE_ATTACHMENT_RE, _DETAIL_REFERENCE_RE, expand_continuation_pages
 from .utils import ensure_dir, read_env
 from .validate import validate_pages
 
@@ -249,6 +249,29 @@ def main():
                     if _has_useful_extracted_rows(fallback_data):
                         page_data = fallback_data
                         supp_nums = structural_nums
+
+            # Third-tier fallback: only runs if the keyword classifier AND the structural
+            # fallback above have BOTH already found zero usable rows for this PDF. Catches
+            # simplified 2-column Schedule-of-Assets formats without loosening the primary
+            # detection logic used on every filing.
+            if not _has_useful_extracted_rows(page_data):
+                simple_nums = find_simple_investment_pages(pdf_path)
+                simple_nums = [p for p in simple_nums if p not in supp_nums]
+                if simple_nums:
+                    print(f"    Simple-format fallback pages found: {simple_nums}")
+                    fallback_plan_info, fallback_data = extract_tables_and_map(
+                        pdf_path,
+                        simple_nums,
+                        schema_yml,
+                        model,
+                        use_llm=use_llm,
+                    )
+                    if fallback_plan_info and not plan_info:
+                        plan_info = fallback_plan_info
+                        plan_info_map[pdf_stem] = fallback_plan_info
+                    if _has_useful_extracted_rows(fallback_data):
+                        page_data = fallback_data
+                        supp_nums = simple_nums
 
             # Attachment page handling: if any row says "see attachment",
             # scan pages after the last supplemental page for the actual data
