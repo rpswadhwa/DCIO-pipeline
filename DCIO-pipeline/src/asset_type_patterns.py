@@ -21,6 +21,16 @@ ASSET_TYPE_PATTERNS = [
     # MF-vs-CIT apportionment step. MUST precede the Collective Trust patterns below.
     (r'Mutual\s+Funds?\s+and\s+Common\s*/?\s*Collective\s+Trusts?', 'Mutual Fund/Collective Trust'),
     (r'Mutual\s+Funds?\s+and\s+Collective\s+Trusts?',              'Mutual Fund/Collective Trust'),
+    # "Mutual and Money Market Funds" -- a combined heading (e.g. Parkview Health System)
+    # over a block that is overwhelmingly individual mutual funds, with the odd literal
+    # money-market-fund row mixed in by name only. Without this, no ASSET_TYPE_PATTERNS
+    # entry fullmatches the heading, so the one-cell heading detector misses it, the
+    # heading text gets merged onto the next row's name as a stray fragment, and the
+    # embedded "Money Market Fund" substring then gets picked up by detect_asset_type()
+    # -- mistyping the whole section as Money Market Fund, which is excluded from the MF
+    # total (zeroing the entire section). Typed as Mutual Fund since that's the dominant
+    # holding type here; the rare true-MMF-named row is immaterial by dollar value.
+    (r'Mutual\s+(?:and|&)\s+Money\s+Market\s+Funds?',              'Mutual Fund'),
     (r'Short[\-\s]Term\s+Investment\s+Funds?',                     'Short-Term Investment Fund'),
     (r'Common\s*/\s*Collective\s+Trust\s+Funds?',               'Common/Collective Trust Fund'),
     (r'Common\s*/\s*Collective\s+Trusts?',                      'Common/Collective Trust Fund'),
