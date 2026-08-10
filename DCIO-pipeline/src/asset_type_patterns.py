@@ -49,6 +49,7 @@ ASSET_TYPE_PATTERNS = [
     (r'Registered\s+Investment\s+Compan(?:y|ies)',              'Mutual Fund'),
     (r'Registered\s+Investment\s+Funds?',                       'Mutual Fund'),
     (r'Institutional\s+Funds?',                                 'Mutual Fund'),
+    (r'Funds?\s+of\s+Funds?',                                   'Mutual Fund'),
     (r'Mutual\s+Funds?',                                        'Mutual Fund'),
     (r'Employer\s+Stocks?',                                     'Employer Stock'),
     (r'Employer\s+Securities',                                  'Employer Stock'),
