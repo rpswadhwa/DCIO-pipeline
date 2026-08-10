@@ -1763,7 +1763,7 @@ def extract_tables_and_map(
         for idx, h in enumerate(header):
             if idx in current_value_cols and len(current_value_cols) == 1:
                 continue
-            if re.search(r'collateral.*par.*matur(?:ing|ity)\s+value', h, re.IGNORECASE):
+            if re.search(r'(?:collateral.*)?par.*matur(?:ing|ity)\s+value', h, re.IGNORECASE):
                 column_map[idx] = 'investment_description'
 
     def _verify_or_remap_value_column(df, data_start_row: int, column_map: Dict[int, str]) -> Dict[int, str]:
