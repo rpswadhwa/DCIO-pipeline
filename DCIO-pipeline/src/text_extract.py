@@ -427,6 +427,15 @@ def _looks_like_headerless_continuation(df, previous_column_map: Dict[int, str])
 
 def _best_header_match(header: str, synonyms: Dict[str, List[str]]) -> Tuple[str, int]:
     header = header.lower()
+    # An exact synonym match (e.g. a bare "value" header cell) is unambiguous
+    # and must win outright. Without this, fuzz.partial_ratio scores "value"
+    # as a 100% substring match against BOTH "par value" and the literal
+    # "value" synonym under current_value, and since ties keep the
+    # first-seen field (strict `>`), whichever field is iterated first in
+    # schema.yml wins even when a later field has the true exact match.
+    for field, terms in synonyms.items():
+        if header in (t.lower() for t in terms):
+            return field, 100
     best_field = ""
     best_score = 0
     for field, terms in synonyms.items():
@@ -1825,7 +1834,7 @@ def extract_tables_and_map(
                 one_cell_header = non_empty_header_cells[0].lower()
                 if not any(
                     kw in one_cell_header
-                    for kw in ['description of investment', 'maturity date', 'rate of interest']
+                    for kw in ['description of investment', 'maturity date', 'rate of interest', 'current']
                 ):
                     continue
             # A real header row never carries an actual dollar figure. Short fund-name
