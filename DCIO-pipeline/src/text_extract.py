@@ -1766,6 +1766,54 @@ def extract_tables_and_map(
             if re.search(r'(?:collateral.*)?par.*matur(?:ing|ity)\s+value', h, re.IGNORECASE):
                 column_map[idx] = 'investment_description'
 
+    # Plan-specific column-mapping fix, scoped by plan name (not ack_id, since the
+    # ack_id changes every filing year but this filer's PDF layout persists across
+    # years) -- not a general rule. On this filer's Schedule H, line 4i pages,
+    # Camelot's stream parser detects the "Identity of issuer, borrower, lessor, or
+    # similar party" header text one column to the right of where the real issuer
+    # data (e.g. "Fidelity", "TIAA Trust, N.A.") actually sits. issuer_name then
+    # gets bound to the boilerplate category text ("Registered Investment Company")
+    # instead, and the true issuer column is left unmapped and silently dropped --
+    # which then trips the "issuer is a pure category label" heuristic in
+    # remove_total_rows and deletes the row entirely. Shifts issuer_name one column
+    # left only when the plan name is detected on a supplemental page; every other
+    # plan's column_map is untouched.
+    _PLAN_SPECIFIC_ISSUER_COLUMN_SHIFT_BY_NAME = {
+        re.compile(r'SAINT\s+LOUIS\s+UNIVERSITY\s+403\(B\)\s+ANNUITY\s+PLAN', re.IGNORECASE): -1,
+    }
+
+    def _detect_plan_specific_column_shift(pdf_path: str, pages: List[int]) -> int:
+        try:
+            with pdfplumber.open(pdf_path) as _doc:
+                for p in pages:
+                    page_text = _doc.pages[p - 1].extract_text() or ''
+                    for name_re, shift in _PLAN_SPECIFIC_ISSUER_COLUMN_SHIFT_BY_NAME.items():
+                        if name_re.search(page_text):
+                            return shift
+        except Exception:
+            return 0
+        return 0
+
+    def _apply_plan_specific_column_overrides(shift: int, column_map: Dict[int, str]) -> None:
+        if not shift:
+            return
+        for idx, field in list(column_map.items()):
+            if field == 'issuer_name':
+                new_idx = idx + shift
+                if new_idx >= 0 and new_idx not in column_map:
+                    del column_map[idx]
+                    column_map[new_idx] = 'issuer_name'
+                    # The vacated column held the boilerplate asset-category text
+                    # (e.g. "Registered Investment Company") that the mis-detected
+                    # issuer_name header had been bound to. Fold it into
+                    # investment_description (it will concatenate with the real
+                    # fund-name column already mapped there) instead of dropping
+                    # it, so asset-type detection still has the category keyword.
+                    column_map[idx] = 'investment_description'
+                break
+
+    _plan_specific_column_shift = _detect_plan_specific_column_shift(pdf_path, supplemental_pages)
+
     def _verify_or_remap_value_column(df, data_start_row: int, column_map: Dict[int, str]) -> Dict[int, str]:
         """A reused column map assumes the same column layout as the table it
         was captured from. Camelot's stream flavor infers columns
@@ -1895,6 +1943,7 @@ def extract_tables_and_map(
                     column_map[k] = v
 
             _correct_maturing_value_description_column(header, column_map)
+            _apply_plan_specific_column_overrides(_plan_specific_column_shift, column_map)
 
             if column_map:
                 previous_column_map = dict(column_map)
@@ -1933,6 +1982,7 @@ def extract_tables_and_map(
                     column_map[k] = v
 
             _correct_maturing_value_description_column(header, column_map)
+            _apply_plan_specific_column_overrides(_plan_specific_column_shift, column_map)
 
             if column_map:
                 previous_column_map = dict(column_map)
