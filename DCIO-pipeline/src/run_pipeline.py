@@ -4,6 +4,7 @@ import os
 import subprocess
 from typing import Dict, List
 
+import pytesseract
 from dotenv import load_dotenv
 
 from .classify_pages import classify_pages
@@ -188,6 +189,13 @@ def main():
 
     if use_ocr:
         print("\n[STEP 1] OCR extraction")
+        tesseract_cmd = read_env("TESSERACT_CMD", "")
+        if tesseract_cmd:
+            pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
+        tessdata_prefix = read_env("TESSDATA_PREFIX", "")
+        if tessdata_prefix:
+            os.environ["TESSDATA_PREFIX"] = tessdata_prefix
+        os.environ["OMP_THREAD_LIMIT"] = read_env("OMP_THREAD_LIMIT", "1")
         pages = ingest_pdfs(input_dir, images_dir, dpi=dpi)
         pages = classify_pages(pages, keywords_yml)
         supplemental_pages = [p for p in pages if p.get("is_supplemental") == 1]

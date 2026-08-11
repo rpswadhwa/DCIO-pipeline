@@ -59,7 +59,7 @@ The DCIO Pipeline extracts investment holdings information from Form 5500 Schedu
 │  STAGE 2: TABLE DETECTION & EXTRACTION                                      │
 │  ────────────────────────────────────────────                               │
 │  • Image normalization (contrast enhancement, deskewing)                    │
-│  • Table region detection (PaddleOCR Structure)                             │
+│  • Table region detection (full-page, OpenCV morphology for cells)          │
 │  • Cell boundary detection (OpenCV morphological operations)                │
 │  • Table structure extraction (Camelot-py)                                  │
 │                                                                              │
@@ -70,7 +70,7 @@ The DCIO Pipeline extracts investment holdings information from Form 5500 Schedu
 ┌─────────────────────────────────────────────────────────────────────────────┐
 │  STAGE 3: OCR & TEXT RECOGNITION                                            │
 │  ──────────────────────────────────                                         │
-│  • Cell-level OCR (PaddleOCR)                                               │
+│  • Cell-level OCR (Tesseract via pytesseract)                               │
 │  • Confidence scoring                                                       │
 │  • Text normalization (whitespace, encoding)                                │
 │  • Row sorting and alignment                                                │
@@ -201,7 +201,7 @@ The DCIO Pipeline extracts investment holdings information from Form 5500 Schedu
 - **numpy** (1.26.4) - Numerical operations
 
 ### OCR & Computer Vision
-- **PaddleOCR** - Text detection and recognition (imported dynamically)
+- **pytesseract** - Text detection and recognition (wraps the `tesseract` system binary)
 - **pdf2image** (1.16.3) - PDF to image conversion
 - **Pillow** (>=11.0.0) - Image processing
 - **OpenCV** (cv2) - Computer vision operations for table detection
@@ -263,8 +263,7 @@ pip install -r requirements.txt
    - Border detection and cropping
 
 2. **Table Region Detection**:
-   - Use PaddleOCR PPStructure for table localization
-   - Fallback to full page if no tables detected
+   - Treat the full page as the table region (cell detection below finds the actual structure)
 
 3. **Cell Detection**:
    - Apply adaptive thresholding
@@ -286,11 +285,9 @@ pip install -r requirements.txt
 **Purpose**: Extract text content from detected table cells.
 
 **Process**:
-1. Run PaddleOCR on each detected cell region
-2. Execute two OCR passes:
-   - Table-optimized OCR
-   - Text-optimized OCR
-3. Select result with higher confidence and length
+1. Run Tesseract (`pytesseract.image_to_data`) on each detected cell region
+2. Join recognized words back into a single normalized string
+3. Average per-word confidence into a single cell-level confidence score
 4. Normalize whitespace and special characters
 5. Store text with confidence scores
 
@@ -1167,7 +1164,7 @@ To support new form variations:
 ### Library Documentation
 - [pdfplumber](https://github.com/jsvine/pdfplumber)
 - [Camelot](https://camelot-py.readthedocs.io/)
-- [PaddleOCR](https://github.com/PaddlePaddle/PaddleOCR)
+- [pytesseract](https://github.com/madmaze/pytesseract)
 - [OpenAI API](https://platform.openai.com/docs)
 
 ---

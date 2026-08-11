@@ -10,6 +10,12 @@ export $(grep -v ^# .env | xargs)
 export AWS_DEFAULT_REGION="${AWS_DEFAULT_REGION:-us-east-1}"
 export AWS_REGION="${AWS_REGION:-$AWS_DEFAULT_REGION}"
 
+# Only consumed by run_pipeline.py's USE_OCR=1 branch (ocr_passes.py / classify_pages.py);
+# has no effect on the default pdfplumber/camelot text-extraction path.
+export TESSERACT_CMD="${TESSERACT_CMD:-/home/ec2-user/micromamba/envs/ocr/bin/tesseract}"
+export TESSDATA_PREFIX="${TESSDATA_PREFIX:-/home/ec2-user/micromamba/envs/ocr/share/tessdata}"
+export OMP_THREAD_LIMIT="${OMP_THREAD_LIMIT:-1}"
+
 # Input follows the download job's run-dated layout:
 #   filings_5500_pdf/year=<run_year>/batch_date=<YYYY-MM-DD>/
 # BATCH_DATE defaults to today; override to target a specific batch:
