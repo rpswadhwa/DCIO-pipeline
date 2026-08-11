@@ -186,6 +186,13 @@ ROW_TYPE_PATTERNS = [
     (r'\bfutures\s+contracts?\b',                      'Derivative'),
     (r'interest\s+rate\s+swaps?\b',                    'Derivative'),
     (r'registered\s+investment\s+compan(?:y|ies)',     'Mutual Fund'),
+    # combined "Mutual and Money Market Funds" heading, merged onto a data row's own
+    # description (e.g. "Mutual and Money Market Funds: Mid-Cap Growth Fund") -- MUST
+    # precede the bare 'money market' pattern below, or that generic substring match
+    # wins and mistypes the whole section (real mutual funds) as Money Market Fund.
+    # See Arcadis U.S.: this zeroed out $475.4M of real MF holdings (T. Rowe Price,
+    # Vanguard, PIMCO, American Funds, etc.) from the MF total.
+    (r'mutual\s+(?:and|&)\s+money\s+market',            'Mutual Fund'),
     (r'money\s+market',                                'Money Market Fund'),
     (r'employer\s+securit(?:y|ies)',                   'Employer Stock'),
     (r'(?:self[\-\s]?directed\s+)?brokerage\s+account', 'Self-Directed Brokerage Account'),
