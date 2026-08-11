@@ -378,11 +378,20 @@ def remove_metadata_rows(rows, preserve_loans=True, verbose=True):
         if not issuer and not description:
             continue
         
-        combined = (issuer + " " + description).lower()
-        
+        # Continuation-page header boilerplate ("...collateral, par, or maturity
+        # value.") sometimes bleeds into a legitimate row's description column
+        # instead of a genuine metadata/header row. Strip that specific known
+        # phrase before running the keyword check so a real data row doesn't lose
+        # its value to the filter -- this narrowly targets the bleed-through
+        # phrase itself, not a general exemption from the metadata filter.
+        description_for_check = re.sub(
+            r'collateral,?\s*par,?\s*or\s*maturity\s*value\.?', '', description, flags=re.IGNORECASE
+        ).strip()
+        combined = (issuer + " " + description_for_check).lower()
+
         # Check if this is a participant loan entry
         is_loan = ('loan' in combined and 'participant' in combined) if preserve_loans else False
-        
+
         # Skip metadata rows (unless it's a loan)
         if any(keyword in combined for keyword in excluded_keywords):
             if is_loan:
@@ -479,20 +488,38 @@ _KNOWN_MANAGERS_LOWER = frozenset({
 
 
 def _fund_specificity_score(row):
-    """Higher score = more specific fund name (prefer over generic manager name)."""
+    """Higher score = more complete record. Prefer the duplicate that carries the
+    most usable data (a real fund name, a resolved asset_type, a value) over one
+    that's missing fields -- e.g. a Schedule H summary-page row with dot-leader
+    padding ("Northern Trust S&P 500 Tier 3 . . . . . . . . .") but no asset_type,
+    versus the Schedule of Assets Held detail-page row for the same holding that
+    has a clean description AND a resolved asset_type. Dot-leader padding used to
+    inflate the summary row's raw string length past the detail row's, causing the
+    less-complete row to win; stripping it before scoring and counting field
+    presence instead of length fixes that.
+    """
     desc = str(row.get('investment_description', '') or '').strip()
     issuer = str(row.get('issuer_name', '') or '').strip()
+    asset_type = str(row.get('asset_type', '') or '').strip()
+    value = row.get('current_value')
+    value_present = str(value).strip() not in ('', 'None', 'nan', '0', '0.0')
+
     best = desc if desc else issuer
-    if not best:
-        return 0
-    best_lower = best.lower()
-    if best_lower in _KNOWN_MANAGERS_LOWER:
-        return 0
-    if re.search(r'20[2-9]\d', best):
-        return 200 + len(best)
-    if re.search(r'(fund|index|etf|trust|portfolio|class|shares?)', best_lower):
-        return 100 + len(best)
-    return len(best)
+    cleaned = re.sub(r'(?:\s*\.){3,}\s*$', '', best).strip()
+    cleaned_lower = cleaned.lower()
+    name_present = bool(cleaned) and cleaned_lower not in _KNOWN_MANAGERS_LOWER
+
+    score = 0
+    if name_present:
+        score += 1
+    if asset_type:
+        score += 1
+    if value_present:
+        score += 1
+    # Tie-break among equally-complete rows: prefer the more descriptive name,
+    # using the dot-leader-stripped length so padding can't skew this either.
+    score += min(len(cleaned), 80) / 1000.0
+    return score
 
 
 def remove_cross_page_duplicates(rows, value_threshold=10000, verbose=True):
