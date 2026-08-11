@@ -58,6 +58,11 @@ ASSET_TYPE_PATTERNS = [
     (r'Variable\s+Annuit(?:y|ies)(?:\s+(?:Contracts?|Accounts?))?', 'Variable Annuity Contract'),
     (r'Registered\s+Investment\s+Compan(?:y|ies)',              'Mutual Fund'),
     (r'Registered\s+Investment\s+Funds?',                       'Mutual Fund'),
+    # ETFs organized/reported under this SEC structural label (e.g. iShares) -- DOL
+    # certified MF totals for these filers roll them into mutual funds. See LMC DC
+    # Master Trust: certified MF included these, causing a 26%-of-certified regression
+    # until this was added.
+    (r'Unit\s+Investment\s+Trusts?',                            'Mutual Fund'),
     (r'Institutional\s+Funds?',                                 'Mutual Fund'),
     (r'Funds?\s+of\s+Funds?',                                   'Mutual Fund'),
     (r'Mutual\s+Funds?',                                        'Mutual Fund'),

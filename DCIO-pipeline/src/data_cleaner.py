@@ -95,6 +95,8 @@ _TYPE_CANON_ALIASES = {
     "registered investment companies": "Mutual Fund",
     "mutual funds": "Mutual Fund",
     "common/collective trust": "Common/Collective Trust Fund",
+    "unit investment trust": "Mutual Fund",
+    "unit investment trusts": "Mutual Fund",
 }
 
 
