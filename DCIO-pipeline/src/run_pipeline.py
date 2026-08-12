@@ -1,19 +1,29 @@
 import csv
+import gc
 import json
+import multiprocessing
 import os
+import pickle
+import resource
+import subprocess
 from typing import Dict, List
 
+
+def _rss_mb() -> float:
+    return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
+
+import pytesseract
 from dotenv import load_dotenv
 
 from .classify_pages import classify_pages
 from .data_cleaner import clean_investment_data
 from .detect_tables import detect_tables
-from .ingest import ingest_pdfs
+from .ingest import ingest_pdfs, pdf_to_images
 from .llm_map import map_rows_with_llm
 from .load_db import load_cleaned_pipeline_results, reset_db
 from .normalize_images import normalize_pages
 from .ocr_passes import run_ocr
-from .text_extract import classify_pages_text, extract_tables_and_map
+from .text_extract import classify_pages_text, extract_tables_and_map, _has_see_attachment, find_attachment_pages, find_structural_investment_pages, find_simple_investment_pages, _SEE_ATTACHMENT_RE, _DETAIL_REFERENCE_RE, expand_continuation_pages
 from .utils import ensure_dir, read_env
 from .validate import validate_pages
 
@@ -24,10 +34,6 @@ from llm_enhance_investments import (
     llm_enhance_investments,
 )
 from .mf_mapping_enrichment import enrich_mf_classes
-
-_VALIDATION_ENABLED = os.getenv("VALIDATION_ENABLED", "0") == "1"
-if _VALIDATION_ENABLED:
-    from .post_extract_validator import run_post_extract_validation
 
 
 def upload_to_s3(file_path: str, s3_path: str):
@@ -61,6 +67,37 @@ def upload_to_s3(file_path: str, s3_path: str):
         return False
 
 
+def sync_s3_inputs(s3_input_path: str, input_dir: str) -> None:
+    """Sync PDF inputs from S3 into the local input folder when configured."""
+    if not s3_input_path:
+        return
+    if not s3_input_path.startswith("s3://"):
+        print(f"  Invalid S3 input path, skipping sync: {s3_input_path}")
+        return
+
+    ensure_dir(input_dir)
+    print(f"  Syncing PDF inputs from {s3_input_path} to {input_dir}")
+    cmd = [
+        "aws",
+        "s3",
+        "sync",
+        s3_input_path,
+        input_dir,
+        "--exclude",
+        "*",
+        "--include",
+        "*.pdf",
+        "--region",
+        read_env("AWS_REGION", "us-east-1"),
+    ]
+    subprocess.run(cmd, check=True)
+    pdf_count = sum(
+        1 for name in os.listdir(input_dir)
+        if name.lower().endswith(".pdf")
+    )
+    print(f"  Local PDF inputs ready: {pdf_count}")
+
+
 def _write_csv(path: str, rows: List[Dict], preferred_fields: List[str] = None) -> None:
     if not rows:
         return
@@ -79,6 +116,69 @@ def _write_csv(path: str, rows: List[Dict], preferred_fields: List[str] = None) 
         writer = csv.DictWriter(handle, fieldnames=fieldnames)
         writer.writeheader()
         writer.writerows(rows)
+
+
+
+def _ocr_pdf_worker(
+    pdf_path: str,
+    pdf_stem: str,
+    pdf_images_dir: str,
+    dpi: int,
+    keywords_yml: str,
+    schema_yml: str,
+    model: str,
+    use_llm: bool,
+    result_path: str,
+) -> None:
+    """Runs one PDF through the OCR branch in a child process.
+
+    Isolated in its own process so a runaway PDF (the kind that spiked RSS
+    from 1.6GB to 31.8GB inside a single 30-minute window and OOM-killed the
+    whole 500-PDF batch) can be killed by the parent's watchdog without
+    losing progress on every other PDF already processed -- terminating the
+    process is also what actually reclaims the OS memory a spike grabbed,
+    which an in-process exception/timeout would not do.
+    """
+    try:
+        image_paths = pdf_to_images(pdf_path, pdf_images_dir, dpi=dpi)
+    except Exception as exc:
+        with open(result_path, "wb") as fh:
+            pickle.dump({"error": f"render failed: {exc}"}, fh)
+        return
+
+    pdf_pages = [
+        {"pdf": pdf_path, "pdf_stem": pdf_stem, "page_number": i, "image_path": img}
+        for i, img in enumerate(image_paths, start=1)
+    ]
+    pdf_pages = classify_pages(pdf_pages, keywords_yml)
+
+    pdf_supp = [p for p in pdf_pages if p.get("is_supplemental") == 1]
+    if pdf_supp:
+        pdf_supp = normalize_pages(pdf_supp)
+        pdf_supp = detect_tables(pdf_supp)
+        pdf_supp = run_ocr(pdf_supp)
+        pdf_supp = map_rows_with_llm(pdf_supp, schema_yml, model, use_llm=use_llm)
+
+    for img_path in image_paths:
+        for path in (img_path, img_path.replace(".png", "_norm.png")):
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+
+    with open(result_path, "wb") as fh:
+        pickle.dump({"pdf_pages": pdf_pages, "pdf_supp": pdf_supp}, fh)
+
+
+def _has_useful_extracted_rows(page_data: List[Dict]) -> bool:
+    for page in page_data:
+        for row in page.get("mapped_rows", []):
+            issuer = str(row.get("issuer_name", "") or "").strip()
+            desc = str(row.get("investment_description", "") or "").strip()
+            value = str(row.get("current_value", "") or "").strip()
+            if (issuer or desc) and value and value not in {"**", "-", "nan"}:
+                return True
+    return False
 
 
 def _collect_extracted_rows(pages: List[Dict], plan_info_map: Dict[str, Dict], plan_year: int) -> List[Dict]:
@@ -104,10 +204,12 @@ def _collect_extracted_rows(pages: List[Dict], plan_info_map: Dict[str, Dict], p
 
 def main():
     load_dotenv()
+    validation_enabled = read_env("VALIDATION_ENABLED", "0") == "1"
 
     input_dir = read_env("INPUT_DIR", "data/inputs")
     output_dir = read_env("OUTPUT_DIR", "data/outputs")
     images_dir = os.path.join(output_dir, "images")
+    ensure_dir(input_dir)
     ensure_dir(output_dir)
     ensure_dir(images_dir)
 
@@ -119,7 +221,7 @@ def main():
     llm_batch_size = int(read_env("POST_LLM_BATCH_SIZE", "10"))
     llm_max_batches_raw = read_env("POST_LLM_MAX_BATCHES", "")
     llm_max_batches = int(llm_max_batches_raw) if llm_max_batches_raw else None
-    plan_year = int(read_env("PLAN_YEAR", "2024"))
+    plan_year = int(read_env("PLAN_YEAR", "2025"))
 
     keywords_yml = read_env("KEYWORDS_YML", "config/keywords.yml")
     schema_yml = read_env("SCHEMA_YML", "config/schema.yml")
@@ -137,16 +239,116 @@ def main():
     print("FORM 5500 PIPELINE")
     print("=" * 60)
 
+    s3_input_path = read_env(
+        "S3_INPUT_PATH",
+        "s3://retirementinsights-bronze/filings_5500_pdf/year=2025/raw/",
+    )
+    if read_env("SYNC_S3_INPUTS", "1") != "0":
+        sync_s3_inputs(s3_input_path, input_dir)
+
     if use_ocr:
         print("\n[STEP 1] OCR extraction")
-        pages = ingest_pdfs(input_dir, images_dir, dpi=dpi)
-        pages = classify_pages(pages, keywords_yml)
-        supplemental_pages = [p for p in pages if p.get("is_supplemental") == 1]
-        supplemental_pages = normalize_pages(supplemental_pages)
-        supplemental_pages = detect_tables(supplemental_pages)
-        supplemental_pages = run_ocr(supplemental_pages)
-        supplemental_pages = map_rows_with_llm(supplemental_pages, schema_yml, model, use_llm=use_llm)
+        tesseract_cmd = read_env("TESSERACT_CMD", "")
+        if tesseract_cmd:
+            pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
+        tessdata_prefix = read_env("TESSDATA_PREFIX", "")
+        if tessdata_prefix:
+            os.environ["TESSDATA_PREFIX"] = tessdata_prefix
+        os.environ["OMP_THREAD_LIMIT"] = read_env("OMP_THREAD_LIMIT", "1")
+
+        pages = []
+        supplemental_pages = []
         plan_info_map = {}
+        per_pdf_timeout_sec = int(read_env("PER_PDF_TIMEOUT_SEC", "300"))
+
+        for fname in sorted(os.listdir(input_dir)):
+            if not fname.lower().endswith(".pdf"):
+                continue
+
+            pdf_path = os.path.join(input_dir, fname)
+            pdf_stem = fname.rsplit(".", 1)[0]
+            print(f"  Processing {fname}", flush=True)
+
+            pdf_images_dir = os.path.join(images_dir, pdf_stem)
+            result_path = os.path.join(output_dir, f"_ocr_result_{pdf_stem}.pkl")
+            try:
+                os.remove(result_path)
+            except OSError:
+                pass
+
+            # Each PDF runs in its own subprocess so a runaway page (the kind
+            # that spiked RSS from 1.6GB to 31.8GB inside 30 minutes and
+            # OOM-killed the whole 500-PDF batch) can be killed on its own
+            # without losing progress on every PDF already processed --
+            # terminating the process also reclaims the memory the spike
+            # grabbed, which an in-process timeout could not do.
+            proc = multiprocessing.Process(
+                target=_ocr_pdf_worker,
+                args=(
+                    pdf_path,
+                    pdf_stem,
+                    pdf_images_dir,
+                    dpi,
+                    keywords_yml,
+                    schema_yml,
+                    model,
+                    use_llm,
+                    result_path,
+                ),
+            )
+            proc.start()
+            proc.join(per_pdf_timeout_sec)
+
+            if proc.is_alive():
+                print(
+                    f"    TIMEOUT after {per_pdf_timeout_sec}s -- killing and "
+                    f"skipping {fname}",
+                    flush=True,
+                )
+                proc.terminate()
+                proc.join(10)
+                if proc.is_alive():
+                    proc.kill()
+                    proc.join()
+                try:
+                    os.remove(result_path)
+                except OSError:
+                    pass
+                continue
+
+            if proc.exitcode != 0:
+                print(
+                    f"    ERROR: worker exited with code {proc.exitcode} for "
+                    f"{fname} -- skipping",
+                    flush=True,
+                )
+                try:
+                    os.remove(result_path)
+                except OSError:
+                    pass
+                continue
+
+            if not os.path.exists(result_path):
+                print(f"    ERROR: no result produced for {fname} -- skipping", flush=True)
+                continue
+
+            with open(result_path, "rb") as fh:
+                result = pickle.load(fh)
+            os.remove(result_path)
+
+            if "error" in result:
+                print(f"    ERROR processing {fname}: {result['error']}", flush=True)
+                continue
+
+            pages.extend(result["pdf_pages"])
+            supplemental_pages.extend(result["pdf_supp"])
+
+            gc.collect()
+            print(
+                f"    RSS={_rss_mb():.0f}MB pages={len(pages)} "
+                f"supplemental_pages={len(supplemental_pages)}",
+                flush=True,
+            )
     else:
         print("\n[STEP 1] Text/table extraction")
         pages = []
@@ -165,6 +367,11 @@ def main():
             pages.extend(classified)
 
             supp_nums = [p["page_number"] for p in classified if p.get("is_supplemental") == 1]
+            expanded_supp_nums = expand_continuation_pages(pdf_path, supp_nums)
+            if expanded_supp_nums != supp_nums:
+                added_pages = [p for p in expanded_supp_nums if p not in supp_nums]
+                print(f"    Continuation pages added: {added_pages}")
+            supp_nums = expanded_supp_nums
             print(f"    Supplemental pages: {supp_nums}")
 
             plan_info, page_data = extract_tables_and_map(
@@ -176,6 +383,108 @@ def main():
             )
             if plan_info:
                 plan_info_map[pdf_stem] = plan_info
+
+            if not _has_useful_extracted_rows(page_data):
+                structural_nums = find_structural_investment_pages(pdf_path)
+                structural_nums = [p for p in structural_nums if p not in supp_nums]
+                if structural_nums:
+                    print(f"    Structural fallback pages found: {structural_nums}")
+                    fallback_plan_info, fallback_data = extract_tables_and_map(
+                        pdf_path,
+                        structural_nums,
+                        schema_yml,
+                        model,
+                        use_llm=use_llm,
+                    )
+                    if fallback_plan_info and not plan_info:
+                        plan_info = fallback_plan_info
+                        plan_info_map[pdf_stem] = fallback_plan_info
+                    if _has_useful_extracted_rows(fallback_data):
+                        page_data = fallback_data
+                        supp_nums = structural_nums
+
+            # Third-tier fallback: only runs if the keyword classifier AND the structural
+            # fallback above have BOTH already found zero usable rows for this PDF. Catches
+            # simplified 2-column Schedule-of-Assets formats without loosening the primary
+            # detection logic used on every filing.
+            if not _has_useful_extracted_rows(page_data):
+                simple_nums = find_simple_investment_pages(pdf_path)
+                simple_nums = [p for p in simple_nums if p not in supp_nums]
+                if simple_nums:
+                    print(f"    Simple-format fallback pages found: {simple_nums}")
+                    fallback_plan_info, fallback_data = extract_tables_and_map(
+                        pdf_path,
+                        simple_nums,
+                        schema_yml,
+                        model,
+                        use_llm=use_llm,
+                    )
+                    if fallback_plan_info and not plan_info:
+                        plan_info = fallback_plan_info
+                        plan_info_map[pdf_stem] = fallback_plan_info
+                    if _has_useful_extracted_rows(fallback_data):
+                        page_data = fallback_data
+                        supp_nums = simple_nums
+
+            # Attachment page handling: if any row says "see attachment",
+            # scan pages after the last supplemental page for the actual data
+            if supp_nums and _has_see_attachment(page_data):
+                # Use the earliest page where "see attachment" was found as the
+                # starting point — attachment data follows immediately after that page
+                see_attach_page_nums = [
+                    page["page_number"] for page in page_data
+                    if any(
+                        _SEE_ATTACHMENT_RE.search(str(row.get("issuer_name", "") or ""))
+                        or _SEE_ATTACHMENT_RE.search(str(row.get("investment_description", "") or ""))
+                        for row in page.get("mapped_rows", [])
+                    )
+                ]
+                last_sup = min(see_attach_page_nums) if see_attach_page_nums else max(supp_nums)
+                attachment_nums = find_attachment_pages(pdf_path, last_sup, keywords_yml, ignore_negatives=True)
+                if attachment_nums:
+                    print(f"    Attachment pages found: {attachment_nums}")
+                    _, attach_data = extract_tables_and_map(
+                        pdf_path, attachment_nums, schema_yml, model, use_llm=use_llm,
+                    )
+                    # Drop the summary "see attachment" rows — detail is now in attach_data
+                    for page in page_data:
+                        page["mapped_rows"] = [
+                            r for r in page.get("mapped_rows", [])
+                            if not _SEE_ATTACHMENT_RE.search(str(r.get("issuer_name", "") or ""))
+                        ]
+                    supplemental_pages.extend(attach_data)
+
+            # Drop rollup rows that point to detail exhibits already selected for extraction,
+            # such as "refer to Exhibit A - investments". This mirrors see-attachment
+            # behavior without triggering a broad forward scan.
+            for page in page_data:
+                page["mapped_rows"] = [
+                    r for r in page.get("mapped_rows", [])
+                    if not _DETAIL_REFERENCE_RE.search(
+                        " ".join(
+                            str(r.get(field, "") or "")
+                            for field in ("issuer_name", "investment_description", "asset_type", "current_value")
+                        )
+                    )
+                ]
+
+            # Section-typing correction stage (src/section_typing.py): re-type rows by
+            # their PDF section and drop CIT / subtotal / duplicate junk -- AFTER
+            # extraction, BEFORE the final validator -- so non-MF holdings (bonds,
+            # stocks, treasuries, collective trusts) are excluded from plan_mf_history_v3.
+            # EXCEPTION PATH ONLY: DEFAULT OFF. The normal full run does NOT touch the
+            # ~44K good plans with this. It is enabled (SECTION_TYPING=1) only for the
+            # targeted re-run over flagged over-capture / quarantine plans, then swapped
+            # in per-ACK. Conservative (only downgrades non-MF).
+            if read_env("SECTION_TYPING", "0") == "1":
+                try:
+                    from .section_typing import apply_section_typing_stage
+                    _st_stats = apply_section_typing_stage(page_data, pdf_path)
+                    if any(_st_stats.values()):
+                        print(f"    Section-typing: {_st_stats}")
+                except Exception as _st_exc:
+                    print(f"    [section-typing] stage skipped: {_st_exc}")
+
             supplemental_pages.extend(page_data)
 
     print("\n[STEP 2] QA report")
@@ -258,7 +567,8 @@ def main():
     else:
         print("\n[STEP 9] S3 upload skipped (S3_BUCKET_PATH not set)")
 
-    if _VALIDATION_ENABLED:
+    if validation_enabled:
+        from .post_extract_validator import run_post_extract_validation
         print("\n[STEP 10] Post-extraction validation")
         counts = run_post_extract_validation(
             db_path=db_path,
@@ -274,6 +584,10 @@ def main():
             validated_glue_db=read_env("VALIDATED_GLUE_DB", "default"),
             validated_table=read_env("VALIDATED_TABLE", "plan_mf_history_v3"),
             error_table=read_env("VALIDATION_ERROR_TABLE", "plan_mf_history_validation_errors"),
+            summary_table=read_env("VALIDATION_SUMMARY_TABLE", "plan_mf_history_validation_summary"),
+            summary_glue_db=read_env("VALIDATION_SUMMARY_GLUE_DB",
+                read_env("VALIDATED_GLUE_DB", "default")),
+            manual_review_tolerance=float(read_env("MANUAL_REVIEW_TOLERANCE", "0.10")),
         )
         print(f"  {counts['passed']} passed, {counts['failed']} failed, {counts['skipped']} skipped")
 
@@ -304,6 +618,24 @@ def main():
             print("\n[STEP 11] MF enrichment skipped (ENRICH_MF_ENABLED=0)")
     else:
         print("\n[STEP 10] Validation skipped (VALIDATION_ENABLED not set)")
+
+
+    if read_env("STAGE_REPORT_ENABLED", "0") == "1":
+        print("\n[STEP 12] Stage comparison reports")
+        try:
+            from .stage_report import generate_stage_compare, generate_stage_pivot
+
+            data_dir = os.path.join(os.path.dirname(__file__), "..", "data", "outputs")
+            compare_path = generate_stage_compare(data_dir, "/tmp")
+            pivot_path = generate_stage_pivot(data_dir, "/tmp")
+            print(f"  stage_compare -> {compare_path}")
+            print(f"  stage_pivot   -> {pivot_path}")
+        except ImportError:
+            print("  stage report skipped: stage_report module not available")
+        except Exception as exc:
+            print(f"  stage report failed: {exc}")
+    else:
+        print("\n[STEP 12] Stage comparison reports skipped (STAGE_REPORT_ENABLED=0)")
 
     print("\n" + "=" * 60)
     print("PIPELINE COMPLETE")

@@ -63,7 +63,7 @@ def parse_issuer_and_investment(issuer_name, investment_desc, asset_type):
     # When col B is just an asset type category label (e.g. "Mutual Fund",
     # "Collective Investment Fund", "Target Date Fund"), the real fund name
     # lives in col A — use it before we standardize the issuer below.
-    if _is_asset_type_label(desc):
+    if (not desc.strip(' "\'`*.-:;,')) or _is_asset_type_label(desc):
         desc = issuer_name
 
     if issuer_name.upper().startswith('VANGUARD') or issuer_name.upper().startswith('VANG'):

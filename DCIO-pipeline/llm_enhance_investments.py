@@ -200,6 +200,7 @@ Review these investment records and improve the data quality by:
    - Common abbreviations: "VG"/"VANG" → "Vanguard", "AF" → "American Funds", "FID" → "Fidelity", "BLK" → "BlackRock"
    - For individual stocks (INC, CORP, LLC, CO, PLC, LTD), keep the full company name unchanged
    - Always return a value — never leave blank
+   - MFO PREFIX: "MFO" is a Northern Trust fund wrapper prefix — always strip it, never use "MFO" as the manager name. Identify the manager from what follows. If no recognisable manager name follows (e.g. "MFO EQUITY INDEX FUND F"), use "Northern Trust"
 
 2. **Investment Description**: Expand abbreviations ONLY — never shorten
    - Keep the full text exactly as-is, only expanding clear abbreviations in-place
@@ -210,7 +211,9 @@ Review these investment records and improve the data quality by:
    - Do NOT remove anything — manager name, asset type words, years, share classes
    - Do NOT reorder or restructure
    - CRITICAL: if the description contains a fund name (even if it also appears in the issuer field), preserve the FULL fund name — never reduce it to just the manager name
-   - If description is blank, a pure asset type label ("Mutual Fund"), or financial details ("4.25% due 2027") — leave it exactly as-is, do not change it
+   - CRITICAL: if issuer contains a full fund name (manager + fund name together) and description is blank or mirrors issuer, populate description with the full fund name (abbreviations expanded, MFO prefix stripped). Only leave description blank if issuer itself contains nothing beyond a plain manager name (e.g. issuer="Vanguard", desc="" — nothing to move)
+   - If description is a pure asset type label ("Mutual Fund") or financial details only ("4.25% due 2027") — leave it exactly as-is
+   - Always preserve CUSIP and SEDOL identifiers in the description — never strip them
 
 3. **Asset Type**: Only change if clearly wrong or blank
    - Valid values: Common Stock, Preferred Stock, Mutual Fund, Common/Collective Trust Fund, Index Fund, Money Market Fund, Self-Directed Brokerage Account, Corporate Bond, Government Bond, Partnership Interest, Real Estate, Currency, ETF, Target Date Fund, Participant Loan, Other
@@ -219,13 +222,16 @@ Review these investment records and improve the data quality by:
 
 EXAMPLES:
 - issuer="VG", desc="VG IS TL INTL STK MK IDX FD" → Issuer: "Vanguard", Desc: "Vanguard Institutional Total International Stock Market Index Fund"
-- issuer="Vanguard Total Bond Market Index Fund", desc="" → Issuer: "Vanguard", Desc: "" (leave blank)
+- issuer="Vanguard", desc="" → Issuer: "Vanguard", Desc: "" (issuer is manager name only — nothing to move, leave blank)
 - issuer="Fidelity Management Trust Company", desc="Freedom Blend 2035 Mutual Fund" → Issuer: "Fidelity", Desc: "Freedom Blend 2035 Mutual Fund"
 - issuer="ALPHABET INC CL A", desc="ALPHABET INC CL A" → Issuer: "ALPHABET INC CL A", Desc: "ALPHABET INC CL A" (stock — unchanged)
 - issuer="Northern Trust", desc="Mutual Fund" → Issuer: "Northern Trust", Desc: "Mutual Fund" (leave as-is)
 - issuer="American Funds TRGTDT 2010 R6", desc="American Funds TRGTDT 2010 R6" → Issuer: "American Funds", Desc: "American Funds Target Date 2010 R6" (expand abbr in desc, keep full name — do NOT reduce to just "American Funds")
 - issuer="AF TRGTDT 2025 R6", desc="AF TRGTDT 2025 R6" → Issuer: "American Funds", Desc: "American Funds Target Date 2025 R6"
 - issuer="Vanguard Cash Reserves Federal MM Fund Admiral Shares", desc="Vanguard Cash Reserves Federal MM Fund Admiral Shares" → Issuer: "Vanguard", Desc: "Vanguard Cash Reserves Federal Money Market Fund Admiral Shares"
+- issuer="MFO DODGE COX FDS INTERNATIONAL STOCK FUND CLASS X CUSIP 256206707", desc="MFO DODGE COX FDS INTERNATIONAL STOCK FUND CLASS X CUSIP 256206707" → Issuer: "Dodge Cox", Desc: "Dodge & Cox International Stock Fund Class X CUSIP 256206707"
+- issuer="MFO BLACKROCK US DEBT INDEX F CUSIP 06739Q651", desc="MFO BLACKROCK US DEBT INDEX F CUSIP 06739Q651" → Issuer: "BlackRock", Desc: "BlackRock US Debt Index Fund F CUSIP 06739Q651"
+- issuer="MFO EQUITY INDEX FUND F CUSIP 06739T663", desc="MFO EQUITY INDEX FUND F CUSIP 06739T663" → Issuer: "Northern Trust", Desc: "Equity Index Fund F CUSIP 06739T663"
 
 Here are the investments to review:
 
@@ -302,6 +308,103 @@ Respond ONLY with the JSON array, no additional text."""
         return []
 
 
+def _has_ocr_spacing(text: str) -> bool:
+    """Detect OCR character-spacing artifact: 3+ consecutive alpha tokens of 1-4 chars."""
+    if not text:
+        return False
+    tokens = text.split()
+    run = 0
+    for t in tokens:
+        if 1 <= len(t) <= 4 and t.isalpha():
+            run += 1
+            if run >= 3:
+                return True
+        else:
+            run = 0
+    return False
+
+
+def fix_ocr_spacing_with_llm(db_path: str, verbose: bool = True) -> int:
+    """Detect rows with OCR character-spacing artifacts and fix them with LLM."""
+    conn = sqlite3.connect(db_path)
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT rowid, issuer_name, investment_description FROM investments")
+    rows = cursor.fetchall()
+
+    to_fix = [
+        (rowid, issuer, desc)
+        for rowid, issuer, desc in rows
+        if _has_ocr_spacing(issuer or '') or _has_ocr_spacing(desc or '')
+    ]
+
+    if not to_fix:
+        if verbose:
+            print("  No OCR spacing issues detected")
+        conn.close()
+        return 0
+
+    if verbose:
+        print(f"  {len(to_fix)} rows with OCR spacing detected — sending to LLM")
+
+    BATCH_SIZE = 20
+    fixed = 0
+
+    for i in range(0, len(to_fix), BATCH_SIZE):
+        batch = to_fix[i:i + BATCH_SIZE]
+        items = [
+            {"id": r, "issuer_name": iss or "", "investment_description": desc or ""}
+            for r, iss, desc in batch
+        ]
+
+        prompt = f"""These text strings were extracted from a PDF with OCR character-spacing issues — spaces were incorrectly inserted between characters mid-word. Fix only the spacing to produce readable text. Do not change actual words, add content, or reorder anything.
+
+Examples:
+- "TIAA Tra di ti ona l Annui ty Contra ct" → "TIAA Traditional Annuity Contract"
+- "Regi s tered Inves tment Compa ny" → "Registered Investment Company"
+- "Pool ed Sepa ra te Account" → "Pooled Separate Account"
+- "Non-Benefi t Res pons i ve" → "Non-Benefit Responsive"
+- "CREF Gl oba l Equi ti es R3" → "CREF Global Equities R3"
+
+Records to fix:
+{json.dumps(items, indent=2)}
+
+Respond with a JSON array containing only records where you made changes:
+[{{"id": <id>, "issuer_name": "<fixed>", "investment_description": "<fixed>"}}]
+Respond ONLY with the JSON array."""
+
+        try:
+            response = client.chat.completions.create(
+                model=MODEL,
+                messages=[
+                    {"role": "system", "content": "You are a data cleanup specialist. Respond only with valid JSON."},
+                    {"role": "user", "content": prompt},
+                ],
+                temperature=0.0,
+            )
+            text = response.choices[0].message.content.strip()
+            if text.startswith('```json'):
+                text = text.split('```json')[1].split('```')[0].strip()
+            elif text.startswith('```'):
+                text = text.split('```')[1].split('```')[0].strip()
+            results = json.loads(text)
+            for rec in results:
+                cursor.execute(
+                    "UPDATE investments SET issuer_name = ?, investment_description = ? WHERE rowid = ?",
+                    (rec.get('issuer_name', ''), rec.get('investment_description', ''), rec['id']),
+                )
+                fixed += 1
+        except Exception as exc:
+            if verbose:
+                print(f"  OCR fix batch error: {exc}")
+
+    conn.commit()
+    conn.close()
+    if verbose:
+        print(f"  OCR spacing fixed in {fixed} rows")
+    return fixed
+
+
 def llm_enhance_investments(db_path, batch_size=10, max_batches=None, verbose=True):
     """
     Use LLM to enhance investment data quality
@@ -312,9 +415,13 @@ def llm_enhance_investments(db_path, batch_size=10, max_batches=None, verbose=Tr
         max_batches: Maximum number of batches to process (None = all)
         verbose: Print progress
     """
+    if verbose:
+        print("\n[STEP 0] OCR spacing fix pass...")
+    fix_ocr_spacing_with_llm(db_path, verbose=verbose)
+
     conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
-    
+
     if verbose:
         print("\n[STEP 1] Fetching investments for LLM review...")
     

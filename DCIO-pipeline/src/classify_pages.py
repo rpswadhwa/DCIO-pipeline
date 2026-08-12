@@ -1,21 +1,28 @@
 from typing import Dict, List
 
 import cv2
-from paddleocr import PaddleOCR
+import pytesseract
 
 from .utils import load_yaml, normalize_whitespace
 
 
-def _ocr_lines(ocr: PaddleOCR, image_path: str) -> List[str]:
+_OCR_TIMEOUT_S = 30
+_HEADER_CROP_FRACTION = 0.3  # classification only needs the page's title/header region
+
+
+def _ocr_lines(image_path: str) -> List[str]:
     img = cv2.imread(image_path)
     if img is None:
         return []
-    result = ocr.ocr(img, cls=True)
-    lines = []
-    for line in result or []:
-        text = line[1][0] if line and len(line) > 1 else ""
-        if text:
-            lines.append(normalize_whitespace(text))
+    header_h = max(1, int(img.shape[0] * _HEADER_CROP_FRACTION))
+    header_img = img[:header_h, :]
+    try:
+        text = pytesseract.image_to_string(header_img, timeout=_OCR_TIMEOUT_S)
+    except RuntimeError:
+        # Tesseract hung/timed out on a pathological page image -- treat as blank
+        # rather than blocking the whole pipeline run on one bad page.
+        return []
+    lines = [normalize_whitespace(line) for line in text.splitlines() if line.strip()]
     return lines
 
 
@@ -26,11 +33,9 @@ def classify_pages(pages: List[Dict[str, str]], keywords_yml: str) -> List[Dict[
     min_hits = int(cfg.get("min_keyword_hits", 1))
     max_lines = int(cfg.get("header_scan_max_lines", 12))
 
-    ocr = PaddleOCR(use_angle_cls=True, lang="en")
-
     out = []
     for page in pages:
-        lines = _ocr_lines(ocr, page["image_path"])
+        lines = _ocr_lines(page["image_path"])
         header_lines = lines[:max_lines]
         header_text = " ".join(header_lines).upper()
         hits = sum(1 for k in keywords if k in header_text)

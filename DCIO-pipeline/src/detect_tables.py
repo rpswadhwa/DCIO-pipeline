@@ -2,21 +2,18 @@ from typing import Dict, List
 
 import cv2
 import numpy as np
-from paddleocr import PPStructureV3
+
+# A real ruled table on one page never has more cells than this. Text-dense,
+# non-scanned Schedule H pages with no ruled grid can otherwise produce
+# thousands of spurious "cells" from individual glyphs/words, each of which
+# ocr_passes.py OCRs separately -- ballooning per-page memory/CPU and leaking
+# across the whole run since every page dict is kept in memory until the end.
+_MAX_PLAUSIBLE_CELLS = 150
 
 
 def _detect_table_regions(img):
-    pp = PPStructureV3(layout=False, table=True, ocr=False)
-    result = pp(img)
-    regions = []
-    for block in result:
-        if block.get("type") == "table" and "bbox" in block:
-            x1, y1, x2, y2 = block["bbox"]
-            regions.append([x1, y1, x2, y2])
-    if not regions:
-        h, w = img.shape[:2]
-        regions = [[0, 0, w, h]]
-    return regions
+    h, w = img.shape[:2]
+    return [[0, 0, w, h]]
 
 
 def _find_cells(crop):
@@ -61,6 +58,10 @@ def detect_tables(pages: List[Dict[str, str]]) -> List[Dict[str, str]]:
                 all_cells.append({
                     "bbox": [c[0] + x1, c[1] + y1, c[2] + x1, c[3] + y1]
                 })
+        if len(all_cells) > _MAX_PLAUSIBLE_CELLS:
+            # No real ruled grid on this page -- fall back to ocr_passes.py's
+            # existing word-clustering path (same as the zero-cells case).
+            all_cells = []
         page["cells"] = all_cells
         out.append(page)
     return out

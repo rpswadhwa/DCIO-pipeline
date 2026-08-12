@@ -1,6 +1,7 @@
 import pandas as pd
 import re
-from .asset_type_patterns import ASSET_TYPE_PATTERNS, detect_asset_type, detect_asset_type_strict
+from .asset_type_patterns import ASSET_TYPE_PATTERNS, detect_asset_type, detect_asset_type_strict, detect_asset_type_row
+from .ditto_fix import fill_ditto_marks
 
 _SHARES_OF_RE = re.compile(
     r'^\s*[\d,]+(?:\.\d+)?\s+shares?\s+of\s+(.+)$',
@@ -12,6 +13,19 @@ _FINANCIAL_JUNK_RE = re.compile(
     r'|(\b\d{1,2}/\d{1,2}/\d{2,4}\b)'    # date: 03/15/2027
     r'|(\b(?=[A-Z0-9]*[0-9])[A-Z0-9]{9}\b)'  # CUSIP: 912828YK0 (must contain digit)
     r'|\b(due|maturing|coupon|collateral|maturity|interest|rate|dated)\b',
+    re.IGNORECASE,
+)
+_IDENTIFIER_TOKEN_RE = re.compile(
+    r'\b(?:CUSIP|SEDOL)\s*:?\s*[A-Z0-9]+\b'
+    r'|\b(?=[A-Z0-9]*[0-9])[A-Z0-9]{9}\b',
+    re.IGNORECASE,
+)
+_VALUE_TOKEN_RE = re.compile(
+    r'\$?\(?\d{1,3}(?:,\d{3})+(?:\.\d+)?\)?'
+    r'|\$?\(?\d+\.\d+\)?'
+)
+_JUNK_WORD_RE = re.compile(
+    r'\b(due|maturing|coupon|collateral|maturity|interest|rate|dated)\b',
     re.IGNORECASE,
 )
 
@@ -45,7 +59,12 @@ def is_meaningful_description(text: str) -> bool:
             return False
 
     # Financial junk — rates, dates, CUSIPs, bond terminology
-    if _FINANCIAL_JUNK_RE.search(text):
+    name_candidate = _IDENTIFIER_TOKEN_RE.sub(' ', stripped)
+    name_candidate = _VALUE_TOKEN_RE.sub(' ', name_candidate)
+    name_candidate = _JUNK_WORD_RE.sub(' ', name_candidate)
+    name_candidate = re.sub(r'\b\d{1,2}/\d{1,2}/\d{2,4}\b', ' ', name_candidate)
+    name_candidate = re.sub(r'\s+', ' ', name_candidate).strip(' *:;.,-')
+    if not name_candidate:
         return False
 
     return True
@@ -67,6 +86,24 @@ def extract_fund_names_from_descriptions(rows):
     return result
 
 
+# Canonicalize a type value captured VERBATIM from a document "type" column.
+# The section-heading / regex typers already emit canonical names; a raw table
+# column can carry non-canonical spellings that bypass them. Exact-match only,
+# extended deliberately as we approve each mapping (do NOT guess).
+_TYPE_CANON_ALIASES = {
+    "registered investment company": "Mutual Fund",
+    "registered investment companies": "Mutual Fund",
+    "mutual funds": "Mutual Fund",
+    "common/collective trust": "Common/Collective Trust Fund",
+    "unit investment trust": "Mutual Fund",
+    "unit investment trusts": "Mutual Fund",
+}
+
+
+def _canon_existing_type(t: str) -> str:
+    return _TYPE_CANON_ALIASES.get(str(t or "").strip().lower(), t)
+
+
 def parse_investment_row(row):
     """
     Parse investment row to properly separate issuer, asset type, and description
@@ -78,13 +115,30 @@ def parse_investment_row(row):
     # Description-level type is more specific than a propagated section type.
     # Use fullmatch so fund names containing type keywords (e.g. 'BlackRock Index Fund')
     # don't override a correct section type.
+    # Asset type is taken ONLY from the file, in this order of authority:
+    #   1. desc_type  -- the row's own description IS an exact type label (fullmatch)
+    #   2. row_type   -- an EXPLICIT per-row vehicle declaration: a dedicated "Type:" column
+    #      value or a type phrase in the description ("Common/Collective Trust", "Insurance
+    #      Company Separate Account", "mutual fund,", "Collective investment in ..."). This
+    #      OVERRIDES a propagated section heading (Fix 2): a row that says it's a CIT/separate
+    #      account is not a mutual fund just because it sits under a "Mutual Funds" block.
+    #   3. existing_asset_type -- the propagated section heading.
+    #   4. blank -- the file gave no type. NEVER guess from the fund NAME (Fix 1): a substring
+    #      match on the name over-typed impostors ("...Index Fund" that is really a CIT) as MF.
+    # detect_asset_type_row is non-name-based (only explicit vehicle phrases), so a fund name
+    # never triggers a type here.
     desc_type = detect_asset_type_strict(description) if description else ''
+    if not desc_type and description and ',' in description:
+        desc_type = detect_asset_type_strict(description.split(',', 1)[0])
+    row_type = detect_asset_type_row(description) or detect_asset_type_row(issuer)
     if desc_type:
         asset_type = desc_type
-    elif not existing_asset_type:
-        asset_type = detect_asset_type(issuer)
+    elif row_type:
+        asset_type = row_type
+    elif existing_asset_type:
+        asset_type = _canon_existing_type(existing_asset_type)
     else:
-        asset_type = existing_asset_type
+        asset_type = ''
     
     return {
         'issuer_name': issuer,
@@ -175,7 +229,7 @@ def remove_total_rows(rows, verbose=True):
     total_indicators = {
         "total investments", "total assets", "total plan", "grand total",
         "subtotal", "sub-total", "sum of",
-        "total synthetic", "synthetic investment contracts"
+        "total synthetic"
     }
     
     # Specific fund name patterns that indicate a legitimate investment
@@ -272,7 +326,16 @@ def remove_total_rows(rows, verbose=True):
         # Also remove if both issuer and description are empty (blank row)
         if not issuer and not description:
             is_total = True
-        
+
+        # NEW: issuer is a pure asset-type/category label (e.g. "Registered Investment Companies",
+        # "Mutual Fund"), description is not a real fund/manager name, and has a current_value.
+        # These are subtotal rows that don't use the word "Total".
+        if not is_total and issuer:
+            value_str = str(row.get('current_value', '')).strip()
+            has_value = bool(value_str) and value_str not in ('0', 'nan', '')
+            if has_value and not is_meaningful_description(issuer):
+                is_total = True
+
         if is_total:
             if verbose:
                 print(f"  Removing Total row: {issuer[:40]} | {description[:40]}")
@@ -317,11 +380,20 @@ def remove_metadata_rows(rows, preserve_loans=True, verbose=True):
         if not issuer and not description:
             continue
         
-        combined = (issuer + " " + description).lower()
-        
+        # Continuation-page header boilerplate ("...collateral, par, or maturity
+        # value.") sometimes bleeds into a legitimate row's description column
+        # instead of a genuine metadata/header row. Strip that specific known
+        # phrase before running the keyword check so a real data row doesn't lose
+        # its value to the filter -- this narrowly targets the bleed-through
+        # phrase itself, not a general exemption from the metadata filter.
+        description_for_check = re.sub(
+            r'collateral,?\s*par,?\s*or\s*maturity\s*value\.?', '', description, flags=re.IGNORECASE
+        ).strip()
+        combined = (issuer + " " + description_for_check).lower()
+
         # Check if this is a participant loan entry
         is_loan = ('loan' in combined and 'participant' in combined) if preserve_loans else False
-        
+
         # Skip metadata rows (unless it's a loan)
         if any(keyword in combined for keyword in excluded_keywords):
             if is_loan:
@@ -418,20 +490,38 @@ _KNOWN_MANAGERS_LOWER = frozenset({
 
 
 def _fund_specificity_score(row):
-    """Higher score = more specific fund name (prefer over generic manager name)."""
+    """Higher score = more complete record. Prefer the duplicate that carries the
+    most usable data (a real fund name, a resolved asset_type, a value) over one
+    that's missing fields -- e.g. a Schedule H summary-page row with dot-leader
+    padding ("Northern Trust S&P 500 Tier 3 . . . . . . . . .") but no asset_type,
+    versus the Schedule of Assets Held detail-page row for the same holding that
+    has a clean description AND a resolved asset_type. Dot-leader padding used to
+    inflate the summary row's raw string length past the detail row's, causing the
+    less-complete row to win; stripping it before scoring and counting field
+    presence instead of length fixes that.
+    """
     desc = str(row.get('investment_description', '') or '').strip()
     issuer = str(row.get('issuer_name', '') or '').strip()
+    asset_type = str(row.get('asset_type', '') or '').strip()
+    value = row.get('current_value')
+    value_present = str(value).strip() not in ('', 'None', 'nan', '0', '0.0')
+
     best = desc if desc else issuer
-    if not best:
-        return 0
-    best_lower = best.lower()
-    if best_lower in _KNOWN_MANAGERS_LOWER:
-        return 0
-    if re.search(r'20[2-9]\d', best):
-        return 200 + len(best)
-    if re.search(r'(fund|index|etf|trust|portfolio|class|shares?)', best_lower):
-        return 100 + len(best)
-    return len(best)
+    cleaned = re.sub(r'(?:\s*\.){3,}\s*$', '', best).strip()
+    cleaned_lower = cleaned.lower()
+    name_present = bool(cleaned) and cleaned_lower not in _KNOWN_MANAGERS_LOWER
+
+    score = 0
+    if name_present:
+        score += 1
+    if asset_type:
+        score += 1
+    if value_present:
+        score += 1
+    # Tie-break among equally-complete rows: prefer the more descriptive name,
+    # using the dot-leader-stripped length so padding can't skew this either.
+    score += min(len(cleaned), 80) / 1000.0
+    return score
 
 
 def remove_cross_page_duplicates(rows, value_threshold=10000, verbose=True):
@@ -570,6 +660,7 @@ def clean_investment_data(rows, preserve_loans=True, remove_dupes=True, verbose=
         print(f"Starting with: {len(rows)} records")
     
     # Step 0: Extract fund names from "X shares of Fund Name" descriptions
+    rows = fill_ditto_marks(rows)
     rows = extract_fund_names_from_descriptions(rows)
 
     # Step 1: Remove total/summary rows

@@ -53,8 +53,7 @@ def load_to_db(db_path: str, pages: List[Dict], pdfs: List[Dict], plan_info_map:
             sponsor = plan_info.get('sponsor')
             
             if not sponsor_ein:
-                print(f"  ⚠ Warning: No EIN found for {pdf_stem}, skipping plan creation")
-                continue
+                sponsor_ein = _fallback_sponsor_ein(pdf_stem)
             
             try:
                 cur.execute(
@@ -165,9 +164,7 @@ def load_cleaned_pipeline_results(
 
         for pdf_stem in sorted(all_pdf_stems):
             info = plan_info_map.get(pdf_stem, {})
-            sponsor_ein = info.get("ein") or _fallback_sponsor_ein(pdf_stem)
-            if sponsor_ein.startswith(MISSING_EIN_PREFIX):
-                print(f"  ⚠ Warning: No EIN found for {pdf_stem}, using fallback plan key")
+            sponsor_ein = _fallback_sponsor_ein(pdf_stem)
 
             cur.execute(
                 """
