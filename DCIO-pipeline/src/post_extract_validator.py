@@ -644,7 +644,7 @@ def build_mf_rows_df(rows: List[Dict],
         # plans' Sch H tables list CREF accounts under a "Mutual fund" asset type/description;
         # certified totals for those filings include them, so excluding them undercaptures).
         _desc = str(row.get("investment_description", "") or "")
-        _explicit_mf = asset_type == "mutual fund" or bool(_re.search(r"\bmutual\s+funds?\b", _desc, _re.IGNORECASE))
+        _explicit_mf = asset_type == "mutual fund" or bool(_re.search(r"mutual\s+funds?", _desc, _re.IGNORECASE))
         if mf_only and not _explicit_mf and _ANNUITY_VEHICLE_RE.search(_name):
             continue
         records.append({

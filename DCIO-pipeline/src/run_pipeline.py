@@ -1,8 +1,16 @@
 import csv
+import gc
 import json
+import multiprocessing
 import os
+import pickle
+import resource
 import subprocess
 from typing import Dict, List
+
+
+def _rss_mb() -> float:
+    return resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024
 
 import pytesseract
 from dotenv import load_dotenv
@@ -10,7 +18,7 @@ from dotenv import load_dotenv
 from .classify_pages import classify_pages
 from .data_cleaner import clean_investment_data
 from .detect_tables import detect_tables
-from .ingest import ingest_pdfs
+from .ingest import ingest_pdfs, pdf_to_images
 from .llm_map import map_rows_with_llm
 from .load_db import load_cleaned_pipeline_results, reset_db
 from .normalize_images import normalize_pages
@@ -111,6 +119,57 @@ def _write_csv(path: str, rows: List[Dict], preferred_fields: List[str] = None) 
 
 
 
+def _ocr_pdf_worker(
+    pdf_path: str,
+    pdf_stem: str,
+    pdf_images_dir: str,
+    dpi: int,
+    keywords_yml: str,
+    schema_yml: str,
+    model: str,
+    use_llm: bool,
+    result_path: str,
+) -> None:
+    """Runs one PDF through the OCR branch in a child process.
+
+    Isolated in its own process so a runaway PDF (the kind that spiked RSS
+    from 1.6GB to 31.8GB inside a single 30-minute window and OOM-killed the
+    whole 500-PDF batch) can be killed by the parent's watchdog without
+    losing progress on every other PDF already processed -- terminating the
+    process is also what actually reclaims the OS memory a spike grabbed,
+    which an in-process exception/timeout would not do.
+    """
+    try:
+        image_paths = pdf_to_images(pdf_path, pdf_images_dir, dpi=dpi)
+    except Exception as exc:
+        with open(result_path, "wb") as fh:
+            pickle.dump({"error": f"render failed: {exc}"}, fh)
+        return
+
+    pdf_pages = [
+        {"pdf": pdf_path, "pdf_stem": pdf_stem, "page_number": i, "image_path": img}
+        for i, img in enumerate(image_paths, start=1)
+    ]
+    pdf_pages = classify_pages(pdf_pages, keywords_yml)
+
+    pdf_supp = [p for p in pdf_pages if p.get("is_supplemental") == 1]
+    if pdf_supp:
+        pdf_supp = normalize_pages(pdf_supp)
+        pdf_supp = detect_tables(pdf_supp)
+        pdf_supp = run_ocr(pdf_supp)
+        pdf_supp = map_rows_with_llm(pdf_supp, schema_yml, model, use_llm=use_llm)
+
+    for img_path in image_paths:
+        for path in (img_path, img_path.replace(".png", "_norm.png")):
+            try:
+                os.remove(path)
+            except OSError:
+                pass
+
+    with open(result_path, "wb") as fh:
+        pickle.dump({"pdf_pages": pdf_pages, "pdf_supp": pdf_supp}, fh)
+
+
 def _has_useful_extracted_rows(page_data: List[Dict]) -> bool:
     for page in page_data:
         for row in page.get("mapped_rows", []):
@@ -196,14 +255,100 @@ def main():
         if tessdata_prefix:
             os.environ["TESSDATA_PREFIX"] = tessdata_prefix
         os.environ["OMP_THREAD_LIMIT"] = read_env("OMP_THREAD_LIMIT", "1")
-        pages = ingest_pdfs(input_dir, images_dir, dpi=dpi)
-        pages = classify_pages(pages, keywords_yml)
-        supplemental_pages = [p for p in pages if p.get("is_supplemental") == 1]
-        supplemental_pages = normalize_pages(supplemental_pages)
-        supplemental_pages = detect_tables(supplemental_pages)
-        supplemental_pages = run_ocr(supplemental_pages)
-        supplemental_pages = map_rows_with_llm(supplemental_pages, schema_yml, model, use_llm=use_llm)
+
+        pages = []
+        supplemental_pages = []
         plan_info_map = {}
+        per_pdf_timeout_sec = int(read_env("PER_PDF_TIMEOUT_SEC", "300"))
+
+        for fname in sorted(os.listdir(input_dir)):
+            if not fname.lower().endswith(".pdf"):
+                continue
+
+            pdf_path = os.path.join(input_dir, fname)
+            pdf_stem = fname.rsplit(".", 1)[0]
+            print(f"  Processing {fname}", flush=True)
+
+            pdf_images_dir = os.path.join(images_dir, pdf_stem)
+            result_path = os.path.join(output_dir, f"_ocr_result_{pdf_stem}.pkl")
+            try:
+                os.remove(result_path)
+            except OSError:
+                pass
+
+            # Each PDF runs in its own subprocess so a runaway page (the kind
+            # that spiked RSS from 1.6GB to 31.8GB inside 30 minutes and
+            # OOM-killed the whole 500-PDF batch) can be killed on its own
+            # without losing progress on every PDF already processed --
+            # terminating the process also reclaims the memory the spike
+            # grabbed, which an in-process timeout could not do.
+            proc = multiprocessing.Process(
+                target=_ocr_pdf_worker,
+                args=(
+                    pdf_path,
+                    pdf_stem,
+                    pdf_images_dir,
+                    dpi,
+                    keywords_yml,
+                    schema_yml,
+                    model,
+                    use_llm,
+                    result_path,
+                ),
+            )
+            proc.start()
+            proc.join(per_pdf_timeout_sec)
+
+            if proc.is_alive():
+                print(
+                    f"    TIMEOUT after {per_pdf_timeout_sec}s -- killing and "
+                    f"skipping {fname}",
+                    flush=True,
+                )
+                proc.terminate()
+                proc.join(10)
+                if proc.is_alive():
+                    proc.kill()
+                    proc.join()
+                try:
+                    os.remove(result_path)
+                except OSError:
+                    pass
+                continue
+
+            if proc.exitcode != 0:
+                print(
+                    f"    ERROR: worker exited with code {proc.exitcode} for "
+                    f"{fname} -- skipping",
+                    flush=True,
+                )
+                try:
+                    os.remove(result_path)
+                except OSError:
+                    pass
+                continue
+
+            if not os.path.exists(result_path):
+                print(f"    ERROR: no result produced for {fname} -- skipping", flush=True)
+                continue
+
+            with open(result_path, "rb") as fh:
+                result = pickle.load(fh)
+            os.remove(result_path)
+
+            if "error" in result:
+                print(f"    ERROR processing {fname}: {result['error']}", flush=True)
+                continue
+
+            pages.extend(result["pdf_pages"])
+            supplemental_pages.extend(result["pdf_supp"])
+
+            gc.collect()
+            print(
+                f"    RSS={_rss_mb():.0f}MB pages={len(pages)} "
+                f"supplemental_pages={len(supplemental_pages)}",
+                flush=True,
+            )
     else:
         print("\n[STEP 1] Text/table extraction")
         pages = []
