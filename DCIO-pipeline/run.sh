@@ -3,6 +3,18 @@ set -e
 cd /home/ec2-user/DCIO-pipeline/DCIO-pipeline
 source /home/ec2-user/DCIO-pipeline/venv/bin/activate
 
+echo "=== DEPLOY PROVENANCE ==="
+if [ -f .deployed_commit ]; then
+  echo "Code deployed via deploy_to_ec2.sh from local commit:"
+  cat .deployed_commit
+else
+  echo "!!! WARNING: no .deployed_commit marker found."
+  echo "!!! This tree was not deployed via deploy_to_ec2.sh (hand-edited on EC2,"
+  echo "!!! or deployed the old ad hoc way). Do not trust results until this is"
+  echo "!!! reconciled back into the local git repo and redeployed properly."
+fi
+echo "=========================="
+
 export $(grep -v ^# .env | xargs)
 
 # boto3 clients in STEP 10 (Athena/Glue) need an explicit region; the shell
