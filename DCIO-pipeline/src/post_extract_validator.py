@@ -1002,8 +1002,6 @@ def run_post_extract_validation(
             _drops.append((_stem, _r.get("fund_name", ""), _r.get("plan_investment_amt"), "exact duplicate"))
         for _r in _res.get("near_dup_removed", []):
             _drops.append((_stem, _r.get("fund_name", ""), _r.get("plan_investment_amt"), "near-duplicate (share-class variant, value match)"))
-        for _r in _res.get("near_dup_removed", []):
-            _drops.append((_stem, _r.get("fund_name", ""), _r.get("plan_investment_amt"), "near-duplicate (share-class variant, value match)"))
     rows = _kept
     if _drops:
         logger.info("junk filter removed %d row(s) across %d plan(s)", len(_drops), len(_by_stem))
