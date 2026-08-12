@@ -57,6 +57,7 @@ ASSET_TYPE_PATTERNS = [
     (r'\bMMRK\b',                                                'Money Market Fund'),
     (r'Variable\s+Annuit(?:y|ies)(?:\s+(?:Contracts?|Accounts?))?', 'Variable Annuity Contract'),
     (r'Registered\s+Investment\s+Compan(?:y|ies)',              'Mutual Fund'),
+    (r'Registered\s+Investment\s+Compan(?:y|ies)\s*\(\s*Mutual\s+Funds?\s*\)', 'Mutual Fund'),
     (r'Registered\s+Investment\s+Funds?',                       'Mutual Fund'),
     # ETFs organized/reported under this SEC structural label (e.g. iShares) -- DOL
     # certified MF totals for these filers roll them into mutual funds. See LMC DC

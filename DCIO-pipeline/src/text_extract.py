@@ -2039,11 +2039,24 @@ def extract_tables_and_map(
             if pending_single_cell_fragments and has_value_like_cell:
                 row = list(row)
                 for pending_col_idx, fragment in list(pending_single_cell_fragments.items()):
-                    if pending_col_idx < len(row):
-                        current_text = normalize_whitespace(str(row[pending_col_idx]))
-                        row[pending_col_idx] = normalize_whitespace(
-                            f"{fragment} {current_text}" if current_text else fragment
-                        )
+                    if pending_col_idx >= len(row):
+                        continue
+                    current_text = normalize_whitespace(str(row[pending_col_idx]))
+                    if current_text:
+                        row[pending_col_idx] = normalize_whitespace(f"{fragment} {current_text}")
+                        continue
+                    shifted_col = pending_col_idx + 1
+                    shifted_text = (
+                        normalize_whitespace(str(row[shifted_col])) if shifted_col < len(row) else ""
+                    )
+                    if shifted_text and column_map.get(shifted_col) is None:
+                        # Camelot shifted this row's data one column right of where the
+                        # fragment's own column sits (e.g. individual fund names indented
+                        # under a manager sub-heading like "TIAA-CREF:"). The stale label
+                        # doesn't belong here -- drop it and let the shifted-column
+                        # recovery below pick up the real value instead of overwriting it.
+                        continue
+                    row[pending_col_idx] = fragment
                 pending_single_cell_fragments.clear()
 
             for col_idx, cell in enumerate(row):
@@ -2056,6 +2069,23 @@ def extract_tables_and_map(
                         row_data[field] = normalize_whitespace(str(row_data[field]) + " " + text)
                     else:
                         row_data[field] = text
+
+            # Recover a fund name Camelot shifted one column right of where the header
+            # says issuer_name lives -- happens when a row is visually indented under a
+            # manager sub-heading (e.g. individual funds listed under "TIAA-CREF:"), so
+            # its column boundaries don't line up with the header row's. Only fires when
+            # the mapped column truly has nothing AND the very next column is completely
+            # unmapped, so this never overwrites or steals a value from another field.
+            if not row_data.get('issuer_name'):
+                issuer_col = next((c for c, f in column_map.items() if f == 'issuer_name'), None)
+                if issuer_col is not None:
+                    shifted_col = issuer_col + 1
+                    if shifted_col < len(row) and column_map.get(shifted_col) is None:
+                        shifted_text = normalize_whitespace(str(row[shifted_col]))
+                        if shifted_text and not re.fullmatch(
+                            r"\$?\s*\(?\s*[0-9][0-9,]*(?:\.[0-9]+)?\)?", shifted_text
+                        ):
+                            row_data['issuer_name'] = shifted_text
 
             # Strip party-in-interest marker (*) from issuer name — column (a) in Form 5500
             if row_data.get('issuer_name'):
