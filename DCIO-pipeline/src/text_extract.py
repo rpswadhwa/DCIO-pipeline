@@ -246,6 +246,22 @@ def expand_continuation_pages(pdf_path: str, supplemental_pages: List[int], max_
         return supplemental_pages
     return sorted(expanded)
 
+def _page_has_ruling_lines(pdf_path: str, page_num: int, min_edges: int = 50) -> bool:
+    """Check whether a page has real vector table gridlines (rects/lines/edges).
+
+    Camelot's stream flavor infers columns from whitespace gaps, which breaks
+    on pages with wrapped multi-line cells. lattice locks onto ruling lines
+    instead and is far more reliable when a page actually has them.
+    """
+    try:
+        with pdfplumber.open(pdf_path) as pdf:
+            if page_num - 1 >= len(pdf.pages):
+                return False
+            page = pdf.pages[page_num - 1]
+            return len(page.edges) >= min_edges
+    except Exception:
+        return False
+
 def _detect_section_heading(row_data: Dict, fields: List[str]) -> Optional[str]:
     """
     Returns canonical asset type string if this row is a section heading,
@@ -1695,31 +1711,65 @@ def extract_tables_and_map(
     default_pages = [p for p in supplemental_pages if p not in section_table_areas_by_page]
     tables = []
     if default_pages:
-        try:
-            tables.extend(camelot.read_pdf(
-                pdf_path,
-                pages=",".join(str(p) for p in default_pages),
-                flavor="stream",
-            ))
-        except Exception as _exc:
-            print(f"    Camelot failed on default pages {default_pages}: {_exc}")
+        # Stream mode infers columns from whitespace gaps, which breaks on pages
+        # that have a wrapped multi-line cell (e.g. a long "Description of
+        # investment" column): each wrapped line gets read as its own stray row
+        # and columns can merge. Pages with real vector table lines (rects/edges
+        # from ruled Schedule H layouts) parse far more reliably with lattice
+        # mode, which locks onto those lines instead of guessing from
+        # whitespace. Route each page to whichever flavor its own structure
+        # supports; unruled pages keep using stream exactly as before.
+        lattice_pages = [p for p in default_pages if _page_has_ruling_lines(pdf_path, p)]
+        stream_pages = [p for p in default_pages if p not in lattice_pages]
+        if lattice_pages:
+            try:
+                tables.extend(camelot.read_pdf(
+                    pdf_path,
+                    pages=",".join(str(p) for p in lattice_pages),
+                    flavor="lattice",
+                ))
+            except Exception as _exc:
+                print(f"    Camelot lattice failed on pages {lattice_pages}: {_exc}")
+                stream_pages = stream_pages + lattice_pages
+        if stream_pages:
+            try:
+                tables.extend(camelot.read_pdf(
+                    pdf_path,
+                    pages=",".join(str(p) for p in stream_pages),
+                    flavor="stream",
+                ))
+            except Exception as _exc:
+                print(f"    Camelot failed on default pages {stream_pages}: {_exc}")
     section_asset_type_by_table: Dict[int, str] = {}
     for page_num in supplemental_pages:
         section_table_areas = section_table_areas_by_page.get(page_num, [])
         if not section_table_areas:
             continue
         print(f"    Splitting page {page_num} into {len(section_table_areas)} section table areas")
+        section_flavor = "lattice" if _page_has_ruling_lines(pdf_path, page_num) else "stream"
         for table_area, section_asset_type in section_table_areas:
             try:
                 section_tables = list(camelot.read_pdf(
                     pdf_path,
                     pages=str(page_num),
-                    flavor="stream",
+                    flavor=section_flavor,
                     table_areas=[table_area],
                 ))
             except Exception as _exc:
-                print(f"    Skipping section area on page {page_num}: {_exc}")
-                section_tables = []
+                if section_flavor == "lattice":
+                    try:
+                        section_tables = list(camelot.read_pdf(
+                            pdf_path,
+                            pages=str(page_num),
+                            flavor="stream",
+                            table_areas=[table_area],
+                        ))
+                    except Exception as _exc2:
+                        print(f"    Skipping section area on page {page_num}: {_exc2}")
+                        section_tables = []
+                else:
+                    print(f"    Skipping section area on page {page_num}: {_exc}")
+                    section_tables = []
             for section_table in section_tables:
                 tables.append(section_table)
                 section_asset_type_by_table[id(section_table)] = section_asset_type
