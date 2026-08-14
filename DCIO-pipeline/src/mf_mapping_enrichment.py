@@ -71,13 +71,34 @@ def enrich_mf_classes(
     to_update = int(df_elig.iloc[0]["cnt"]) if not df_elig.empty else 0
 
     # 2) MERGE to copy classes into MF table
+    # The mapping table can carry more than one row for the same fund (e.g.
+    # case/whitespace variants of raw_entity_name that collapse to the same
+    # normalized key). A MERGE whose USING side has duplicate keys errors
+    # with MERGE_TARGET_ROW_MULTIPLE_MATCHES, so pick a single row per
+    # normalized key here, preferring an already-classified row over a
+    # PENDING_AI placeholder.
+    dedup_source = f"""
+        SELECT k, asset_class, asset_sub_class
+        FROM (
+          SELECT
+            lower(trim(raw_entity_name)) AS k,
+            asset_class,
+            asset_sub_class,
+            row_number() OVER (
+              PARTITION BY lower(trim(raw_entity_name))
+              ORDER BY
+                CASE WHEN asset_class <> 'PENDING_AI' THEN 0 ELSE 1 END,
+                asset_class,
+                asset_sub_class
+            ) AS rn
+          FROM {mapping_db}.{mapping_table}
+        )
+        WHERE rn = 1
+    """
     if overwrite_existing:
         merge_sql = f"""
         MERGE INTO {mf_db}.{mf_table} AS m
-        USING (
-          SELECT lower(trim(raw_entity_name)) AS k, asset_class, asset_sub_class
-          FROM {mapping_db}.{mapping_table}
-        ) f
+        USING ({dedup_source}) f
         ON lower(trim(m.raw_entity_name)) = f.k
         WHEN MATCHED THEN UPDATE SET
           asset_class = f.asset_class,
@@ -86,10 +107,7 @@ def enrich_mf_classes(
     else:
         merge_sql = f"""
         MERGE INTO {mf_db}.{mf_table} AS m
-        USING (
-          SELECT lower(trim(raw_entity_name)) AS k, asset_class, asset_sub_class
-          FROM {mapping_db}.{mapping_table}
-        ) f
+        USING ({dedup_source}) f
         ON lower(trim(m.raw_entity_name)) = f.k
         WHEN MATCHED AND (
           coalesce(m.asset_class, '') = '' OR coalesce(m.asset_sub_class, '') = ''
