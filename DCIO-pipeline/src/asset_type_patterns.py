@@ -50,6 +50,7 @@ ASSET_TYPE_PATTERNS = [
     (r'Commingled\s+Pools?',                                    'Commingled Fund'),
     (r'Commingled',                                             'Commingled Fund'),
     (r'Company\s+Stocks?',                                      'Employer Stock'),
+    (r'Unallocated\s+Insurance\s+Contracts?',                   'Insurance General Account'),
     (r'Self[\-\s]?Directed\s+Brokerage',                       'Self-Directed Brokerage Account'),
     (r'Collective\s+Funds?',                                    'Commingled Fund'),
     (r'Stable\s+Value\s+Funds?',                                'Stable Value Fund'),

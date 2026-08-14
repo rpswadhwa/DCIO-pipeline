@@ -95,8 +95,17 @@ cat > "$PARAMS_FILE" <<JSON
 {"commands": ["export HOME=/root", "echo $B64 | base64 -d > /home/ec2-user/_deploy_${HEAD_SHA}.sh", "bash /home/ec2-user/_deploy_${HEAD_SHA}.sh"]}
 JSON
 
+# aws.exe is a native Windows binary; a bare "/c/..." MSYS path inside a
+# file:// URI isn't auto-converted (only bare path args are), so resolve to
+# a Windows-style path when cygpath is available (Git Bash on Windows).
+if command -v cygpath >/dev/null 2>&1; then
+  AWS_PARAMS_FILE="$(cygpath -w "$PARAMS_FILE")"
+else
+  AWS_PARAMS_FILE="$PARAMS_FILE"
+fi
+
 CMD_ID=$(aws ssm send-command --instance-ids "$INSTANCE_ID" --document-name "AWS-RunShellScript" \
-  --parameters file://"$PARAMS_FILE" --output text --query "Command.CommandId" --region "$REGION")
+  --parameters file://"$AWS_PARAMS_FILE" --output text --query "Command.CommandId" --region "$REGION")
 
 for i in $(seq 1 30); do
   STATUS=$(aws ssm get-command-invocation --command-id "$CMD_ID" --instance-id "$INSTANCE_ID" \

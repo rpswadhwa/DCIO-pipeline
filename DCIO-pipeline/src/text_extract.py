@@ -997,6 +997,211 @@ def _extract_gm_column_format_for_pdf(pdf_path: str) -> List[Dict]:
     return all_rows
 
 
+_NUMERIC_TOKEN_RE = re.compile(r'^\(?-?\$?[0-9][0-9,]*\.[0-9]+\)?$')
+_NUMERIC_TAIL_RE = re.compile(r'\(?-?\$?\s*[0-9][0-9,]*(?:\.[0-9]+)?\)?')
+_ID_TOKEN_RE = re.compile(r'^(?=[A-Z0-9]{5,}$)(?=.*[0-9])[A-Z0-9]+$')
+
+_COLUMN_SEMANTIC_PATTERNS = [
+    (re.compile(r'shares?\s*/?\s*par|shares?\b|par\s+value', re.IGNORECASE), 'shares'),
+    (re.compile(r'\bcost\b', re.IGNORECASE), 'cost'),
+    (re.compile(r'market\s+value|current\s+value|fair\s+value', re.IGNORECASE), 'value'),
+    (re.compile(r'unrealized\s+gain|gain\s*/\s*loss', re.IGNORECASE), 'gain_loss'),
+]
+
+
+def _match_asset_category_text(text: str) -> Optional[str]:
+    """Match a heading OR a 'TOTAL <category>' subtotal line's text against the
+    canonical ASSET_TYPE_PATTERNS vocabulary, regardless of whether the line
+    also carries trailing dollar values (unlike _detect_section_heading_text,
+    which requires a value-free line)."""
+    text_clean = normalize_whitespace(text or "").rstrip(":").strip()
+    if not text_clean:
+        return None
+    text_no_values = _NUMERIC_TAIL_RE.sub('', text_clean).strip()
+    text_stripped = _TOTAL_AFFIX_RE.sub('', text_no_values).strip()
+    for candidate in {text_no_values, text_stripped}:
+        if not candidate:
+            continue
+        for pattern, canonical in ASSET_TYPE_PATTERNS:
+            if re.search(pattern, candidate, re.IGNORECASE):
+                return canonical
+    return None
+
+
+def _split_trailing_numeric_tokens(line: str) -> Tuple[str, List[str]]:
+    """Split a text line into (leading description, [trailing numeric tokens]),
+    walking back from the end and stopping at the first whitespace-delimited
+    token that isn't purely numeric. This tolerates embedded dates/rates in
+    the description (e.g. '01/01/2049 DD 03/01/24') because a token with
+    slashes never matches the numeric pattern."""
+    tokens = line.split()
+    idx = len(tokens)
+    tail: List[str] = []
+    while idx > 0 and _NUMERIC_TOKEN_RE.match(tokens[idx - 1]):
+        tail.insert(0, tokens[idx - 1])
+        idx -= 1
+    return ' '.join(tokens[:idx]), tail
+
+
+def _infer_participation_column_order(header_line: str) -> List[str]:
+    """Infer the left-to-right semantic order of numeric columns from a
+    schedule's own header wording, tolerant of vendor-specific phrasing
+    (e.g. 'Market Value' vs 'Current Value' vs 'Fair Value')."""
+    matches = []
+    for pattern, semantic in _COLUMN_SEMANTIC_PATTERNS:
+        m = pattern.search(header_line)
+        if m:
+            matches.append((m.start(), semantic))
+    matches.sort(key=lambda x: x[0])
+    order: List[str] = []
+    seen = set()
+    for _, semantic in matches:
+        if semantic not in seen:
+            order.append(semantic)
+            seen.add(semantic)
+    return order
+
+
+def _composite_participation_schedule_pages(pdf_path: str, pages: Optional[List[int]] = None) -> List[int]:
+    """Return the page numbers that individually match the composite
+    Master-Trust-style participation schedule signature -- not any
+    filer-specific wording: a flat, unruled text page carrying (a) at least
+    one recognized bare section-heading line, (b) at least two recognized
+    'TOTAL <category>' subtotal lines, and (c) a meaningful density of
+    holding rows ending in multiple comma-formatted numeric values.
+    Deliberately filer-agnostic so the same check applies to Howmet, J&J, or
+    any future composite participation report. Scoped per-page (rather than
+    per-PDF) so unrelated pages elsewhere in the same filing -- e.g. Form
+    5500 or a transactions schedule -- are never swept in as data rows.
+    """
+    matched: List[int] = []
+    try:
+        with pdfplumber.open(pdf_path) as pdf:
+            page_range = pages if pages else range(1, len(pdf.pages) + 1)
+            for page_num in page_range:
+                if not (1 <= page_num <= len(pdf.pages)):
+                    continue
+                if _page_has_ruling_lines(pdf_path, page_num):
+                    continue
+                text = pdf.pages[page_num - 1].extract_text() or ""
+                if not text.strip():
+                    continue
+                lines = [normalize_whitespace(l) for l in text.split("\n") if l.strip()]
+                heading_categories = set()
+                subtotal_categories = set()
+                numeric_row_count = 0
+                for line in lines:
+                    if re.match(r'^(?:total|grand\s+total)\b', line, re.IGNORECASE):
+                        cat = _match_asset_category_text(line)
+                        if cat:
+                            subtotal_categories.add(cat)
+                        continue
+                    if not _VALUE_LIKE_RE.search(line):
+                        cat = _detect_section_heading_text(line)
+                        if cat:
+                            heading_categories.add(cat)
+                        continue
+                    if len(re.findall(r'\b\d{1,3}(?:,\d{3})+(?:\.\d+)?\b', line)) >= 2:
+                        numeric_row_count += 1
+                if heading_categories and len(subtotal_categories) >= 2 and numeric_row_count >= 5:
+                    matched.append(page_num)
+    except Exception:
+        return []
+    return matched
+
+
+def _pdf_has_composite_participation_schedule(pdf_path: str, pages: Optional[List[int]] = None) -> bool:
+    return bool(_composite_participation_schedule_pages(pdf_path, pages))
+
+
+def _parse_composite_participation_row(lead_text: str, tail_tokens: List[str], column_order: List[str]) -> Optional[Dict]:
+    if not tail_tokens or not lead_text:
+        return None
+    if re.match(r'^(?:total|grand\s+total)\b', lead_text, re.IGNORECASE):
+        return None
+
+    order = column_order[-len(tail_tokens):] if len(column_order) >= len(tail_tokens) else []
+    semantics = dict(zip(order, tail_tokens)) if len(order) == len(tail_tokens) else {}
+    if not semantics:
+        if len(tail_tokens) == 4:
+            semantics = dict(zip(['shares', 'cost', 'value', 'gain_loss'], tail_tokens))
+        elif len(tail_tokens) == 3:
+            semantics = dict(zip(['cost', 'value', 'gain_loss'], tail_tokens))
+        elif len(tail_tokens) == 1:
+            semantics = {'value': tail_tokens[0]}
+        else:
+            return None
+
+    current_value = semantics.get('value')
+    if not current_value:
+        return None
+
+    # Strip leading security/fund-code tokens (mixed letters+digits, no
+    # vowel-only words) so the human-readable description remains.
+    lead_tokens = lead_text.split()
+    desc_start = 0
+    for tok in lead_tokens[:3]:
+        if _ID_TOKEN_RE.match(tok):
+            desc_start += 1
+        else:
+            break
+    description = ' '.join(lead_tokens[desc_start:]).strip() or lead_text
+
+    return {
+        'issuer_name': description,
+        'investment_description': description,
+        'par_value': (semantics.get('shares', '') or '').replace(',', ''),
+        'cost': (semantics.get('cost', '') or '').replace(',', '').strip('()'),
+        'current_value': current_value.replace(',', '').strip('()'),
+        'units_or_shares': (semantics.get('shares', '') or '').replace(',', ''),
+    }
+
+
+def _extract_composite_participation_rows_for_pdf(pdf_path: str, pages: List[int]) -> List[Dict]:
+    """Generic parser for composite Master-Trust-style participation schedules:
+    flat, unruled text pages with recognized section headings, 'TOTAL <category>'
+    subtotals, and ID-code-prefixed holding rows ending in several numeric
+    columns. Column semantics (shares/cost/value/gain-loss) are inferred per
+    page from the header row's own wording rather than a fixed assumed order,
+    so this generalizes across filers with different column layouts. Only
+    processes the given page numbers -- callers should scope this to the
+    pages that actually matched the composite-schedule signature, since a
+    single filing can also contain unrelated pages (Form 5500, transaction
+    schedules) that would otherwise be swept in as noise rows."""
+    all_rows: List[Dict] = []
+    page_set = set(pages)
+    with pdfplumber.open(pdf_path) as pdf:
+        for page_idx, page in enumerate(pdf.pages, start=1):
+            if page_idx not in page_set:
+                continue
+            text = page.extract_text() or ''
+            if not text.strip():
+                continue
+            lines = [normalize_whitespace(l) for l in text.split('\n') if l.strip()]
+            column_order: List[str] = []
+            current_asset_type = ''
+            row_num = 0
+            for line in lines:
+                lead, tail = _split_trailing_numeric_tokens(line)
+
+                if not tail:
+                    inferred = _infer_participation_column_order(line)
+                    if len(inferred) >= 3:
+                        column_order = inferred
+                    heading = _detect_section_heading_text(line)
+                    if heading:
+                        current_asset_type = heading
+                    continue
+
+                row = _parse_composite_participation_row(lead, tail, column_order)
+                if not row:
+                    continue
+                row_num += 1
+                row['asset_type'] = current_asset_type
+                row['page_number'] = page_idx
+                row['row_id'] = row_num
+                all_rows.append(row)
+    return all_rows
 
 
 
@@ -1633,6 +1838,16 @@ def extract_tables_and_map(
         if gm_rows:
             print(f"    GM/HH1C Schedule 4i parser extracted {len(gm_rows)} investments")
             return plan_info, _build_text_result(pdf_path, gm_rows)
+
+    # Composite Master-Trust-style participation schedules: flat, unruled text
+    # reports with recognized section headings + 'TOTAL <category>' subtotals.
+    # Filer-agnostic detector (e.g. covers Howmet's Master Trust report).
+    composite_pages = _composite_participation_schedule_pages(pdf_path, supplemental_pages)
+    if composite_pages:
+        participation_rows = _extract_composite_participation_rows_for_pdf(pdf_path, composite_pages)
+        if participation_rows:
+            print(f"    Composite participation schedule parser extracted {len(participation_rows)} investments")
+            return plan_info, _build_text_result(pdf_path, participation_rows)
 
     # Pre-filter: prefer the actual Schedule H/I Line 4i/4j asset table.
     # Generic mentions like "Schedule I" or "Schedule of Assets" can appear in audit
