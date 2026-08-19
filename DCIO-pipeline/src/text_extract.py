@@ -520,27 +520,30 @@ def _is_total_labeled_subtotal(text: str) -> bool:
 
 
 # BASF's actual corruption mechanism (confirmed against the raw Camelot cell
-# dump): a section's "Total <name>: <amount>" subtotal line isn't a separate
-# one-cell ROW at all -- it's a second physical line INSIDE the same Camelot
-# cell as the real value on the row immediately below it (no ruling line
-# between them), e.g. one cell containing "644,262,835\nTotal BASF Stable
-# Value Fund: 916,262,534". normalize_whitespace() collapses that newline to
-# a space before the cell text is assigned to row_data['current_value'], so
-# the genuine value and the next section's subtotal end up concatenated in a
-# single string that then fails parse_currency_value() and drops the row's
-# real value entirely. Strip a trailing "Total ...: amount" fragment off the
-# END of an already-assembled value string, keeping the leading real number.
-_EMBEDDED_TOTAL_SUFFIX_RE = re.compile(
-    r'\s+(?:total|subtotal|sub-total|grand\s+total)\b.*:\s*\$?\s*\(?[\d,]+(?:\.\d+)?\)?\s*$',
+# dump, not just the flattened CSV): a section subtotal like "Total BASF
+# Stable Value Fund: 644,262,835" is emitted by Camelot as its OWN one-cell
+# row, but with the value line and the label line in the opposite order from
+# a normal row -- one cell containing "644,262,835\nTotal BASF Stable Value
+# Fund:" (amount FIRST, label second, no trailing amount). That one-cell row
+# doesn't match _is_total_labeled_subtotal (which requires the label to come
+# first and a trailing colon+amount), so it falls into the generic
+# split-fund-name-fragment path below and gets PREPENDED onto the next row's
+# real value cell (e.g. Vanguard Institutional 500 Index's own
+# "916,262,534" becomes "644,262,835 Total BASF Stable Value Fund:
+# 916,262,534"), corrupting that row's real value. Recognize this
+# amount-then-label shape at the source and drop it like any other subtotal
+# marker, instead of queuing it for merge.
+_VALUE_THEN_TOTAL_LABEL_RE = re.compile(
+    r'^\$?\s*\(?[\d,]+(?:\.\d+)?\)?\s+(?:total|subtotal|sub-total|grand\s+total)\b.*:\s*$',
     re.IGNORECASE,
 )
 
 
-def _strip_embedded_total_suffix(value_text: str) -> str:
-    text = normalize_whitespace(value_text or "")
+def _is_value_then_total_label(text: str) -> bool:
+    text = normalize_whitespace(text or "")
     if not text:
-        return text
-    return _EMBEDDED_TOTAL_SUFFIX_RE.sub('', text).strip()
+        return False
+    return bool(_VALUE_THEN_TOTAL_LABEL_RE.match(text))
 
 
 def _is_blank_asset_type(value: str) -> bool:
@@ -2528,12 +2531,15 @@ def extract_tables_and_map(
                     # A one-cell numeric row is usually a subtotal/duplicate value line,
                     # not a split name. Do not attach it to the next investment row.
                     pending_single_cell_fragments.clear()
-                elif _is_total_labeled_subtotal(candidate_text):
+                elif _is_total_labeled_subtotal(candidate_text) or _is_value_then_total_label(candidate_text):
                     # A "Total <section name>: <amount>" subtotal line for a
                     # section name not covered by _TOTAL_CATEGORY_RE's fixed
-                    # enum (see _TOTAL_LABELED_SUBTOTAL_RE above). Same
-                    # treatment as the bare-numeric case: drop it, do not
-                    # merge it onto the next row's value cell.
+                    # enum (see _TOTAL_LABELED_SUBTOTAL_RE above), in either
+                    # label-then-amount or amount-then-label order (the latter
+                    # is how Camelot emits BASF's per-section subtotals -- see
+                    # _VALUE_THEN_TOTAL_LABEL_RE above). Same treatment as the
+                    # bare-numeric case: drop it, do not merge it onto the
+                    # next row's value cell.
                     pending_single_cell_fragments.clear()
                 else:
                     # Preserve split investment names that Camelot emits as a single-cell
@@ -2609,15 +2615,6 @@ def extract_tables_and_map(
                     row_data[_field] = _HEADING_PREFIX_RE.sub('', _val).strip()
                     current_section_type = 'Mutual Fund'
                     print(f"    Section heading prefix stripped from {_field} (row {row_idx})")
-
-            if row_data.get('current_value'):
-                _stripped_value = _strip_embedded_total_suffix(row_data['current_value'])
-                if _stripped_value != row_data['current_value']:
-                    print(
-                        f"    Embedded subtotal suffix stripped from current_value (row {row_idx}): "
-                        f"'{row_data['current_value']}' -> '{_stripped_value}'"
-                    )
-                    row_data['current_value'] = _stripped_value
 
             value_scale = page_value_scale.get(page_num, 1)
             if value_scale != 1 and row_data.get('current_value'):
