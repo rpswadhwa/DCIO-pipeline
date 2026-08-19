@@ -10,7 +10,7 @@ from rapidfuzz import process, fuzz
 
 import pandas as pd
 
-from .asset_type_patterns import ASSET_TYPE_PATTERNS, detect_asset_type
+from .asset_type_patterns import ASSET_TYPE_PATTERNS, detect_asset_type, detect_asset_type_strict
 from .data_cleaner import handle_split_rows, parse_investment_row
 from .utils import load_yaml, normalize_whitespace
 
@@ -292,6 +292,77 @@ def _detect_section_heading(row_data: Dict, fields: List[str]) -> Optional[str]:
 
 _VALUE_LIKE_RE = re.compile(r"\$?\s*\(?\s*[0-9][0-9,]*(?:\.[0-9]+)?\)?")
 
+# Heading-only patterns: phrasing that is a clear section-heading label but is
+# deliberately NOT in the shared ASSET_TYPE_PATTERNS vocabulary, because that
+# list is reused for loose substring matching against fund NAMES elsewhere
+# (data_cleaner.py, post_extract_validator.py). A bare "Government Securities"
+# there would mistype real mutual funds whose own name contains that phrase
+# (e.g. "Vanguard Government Securities Fund") as a Bond. _detect_section_heading_text
+# is only ever called on value-free candidate lines (never fund/row text with a
+# dollar value), so these patterns are safe here without loosening name matching.
+_HEADING_ONLY_PATTERNS = [
+    (r'Cash\s+Equivalents?',        'Cash Equivalent'),
+    (r'Government\s+Securities',    'Bond'),
+]
+
+# A section heading naming the vehicle plus its distributor/provider, e.g.
+# "Mutual funds offered by Teachers Insurance and Annuity Association" (Brown
+# University). The trailing "offered by <provider>" clause means it never
+# fullmatches an ASSET_TYPE_PATTERNS entry, so without this it fell through
+# to the split-fund-name-fragment path and got fused onto the next row's
+# issuer_name instead of being recognized as a heading. Anchored to the
+# start of the cell and requires "offered by" so it can never match a real
+# one-cell fund name.
+_HEADING_OFFERED_BY_RE = re.compile(
+    r'^(mutual\s+funds?|registered\s+investment\s+compan(?:y|ies))\s+offered\s+by\b',
+    re.IGNORECASE,
+)
+
+# "Total <Provider>" subtotal rows (e.g. Brown University's "Total Fidelity",
+# "Total Transamerica") group holdings by distributor rather than by a known
+# ASSET_TYPE_PATTERNS category, so _TOTAL_CATEGORY_RE never matches them and
+# they leak into the data as if they were real holdings. Require the exact
+# "Total <1-4 words>" shape and exclude any word that could plausibly be part
+# of a real fund's own name (Fund, Index, Bond, ...) so a legitimately-named
+# holding like "PIMCO Total Return Fund" is never dropped.
+_TOTAL_PROVIDER_RE = re.compile(
+    r'^(?:total|subtotal|sub-total|grand\s+total)\s+'
+    r'([A-Za-z][A-Za-z&.\-]*(?:\s+[A-Za-z][A-Za-z&.\-]*){0,3})$',
+    re.IGNORECASE,
+)
+_TOTAL_PROVIDER_EXCLUDE_WORDS = {
+    'fund', 'funds', 'trust', 'account', 'accounts', 'index', 'class',
+    'shares', 'share', 'portfolio', 'bond', 'bonds', 'equity', 'equities',
+    'stock', 'stocks', 'annuity', 'annuities', 'series', 'cap', 'growth',
+    'value', 'income', 'securities', 'market', 'markets', 'investment',
+    'investments', 'asset', 'assets', 'loan', 'loans', 'return', 'returns',
+}
+
+
+# Some layouts (e.g. Cleveland Clinic) don't emit the section heading as its
+# own row at all -- Camelot fuses it directly onto the first data row's own
+# cell, e.g. investment_description = "Mutual Funds and Variable Annuity
+# Contracts BLKRK LP IDX RTMT K" where "BLKRK LP IDX RTMT K" is the real fund
+# name. Strip the known heading prefix and use the remainder as the real
+# field value, same as any other data row.
+_HEADING_PREFIX_RE = re.compile(
+    r'^mutual\s+funds?\s+and\s+variable\s+annuit(?:y|ies)\s+contracts?\s+',
+    re.IGNORECASE,
+)
+
+
+def _is_total_provider_label(text: str) -> bool:
+    text = normalize_whitespace(text or '').rstrip(':').strip()
+    if not text:
+        return False
+    m = _TOTAL_PROVIDER_RE.match(text)
+    if not m:
+        return False
+    words = re.findall(r"[A-Za-z]+", m.group(1))
+    if any(w.lower() in _TOTAL_PROVIDER_EXCLUDE_WORDS for w in words):
+        return False
+    return True
+
 
 def _detect_section_heading_text(text: str) -> Optional[str]:
     """Return canonical asset type when a text line is a label-only section heading."""
@@ -306,6 +377,9 @@ def _detect_section_heading_text(text: str) -> Optional[str]:
     text_stripped = _TOTAL_AFFIX_RE.sub("", text_clean).strip()
     for candidate in {text_clean, text_stripped}:
         for pattern, canonical in ASSET_TYPE_PATTERNS:
+            if re.search(pattern, candidate, re.IGNORECASE):
+                return canonical
+        for pattern, canonical in _HEADING_ONLY_PATTERNS:
             if re.search(pattern, candidate, re.IGNORECASE):
                 return canonical
     return None
@@ -397,7 +471,8 @@ _TOTAL_CATEGORY_RE = re.compile(
     r'|common\s+collective\s+funds?'
     r'|pooled\s+separate\s+accounts?'
     r'|participant\s+loans?'
-    r'|common\s+stocks?'
+    r'|(?:other\s+)?common\s+stocks?'
+    r'|government\s+securit(?:y|ies)'
     r'|employer\s+securit(?:y|ies)'
     r'|insurance\s+company\s+general\s+accounts?'
     r'|general\s+accounts?'
@@ -414,6 +489,34 @@ def _is_total_summary_label(text: str) -> bool:
     if not text:
         return False
     return bool(_TOTAL_ONLY_RE.match(text) or _TOTAL_CATEGORY_RE.match(text))
+
+
+# A one-cell "Total <arbitrary section name>: <amount>" subtotal line (e.g.
+# BASF's "Total BASF Stable Value Fund: 916,262,534" / "Total Common/Collective
+# Trust: 896,769,005"). _TOTAL_CATEGORY_RE only matches a FIXED enum of known
+# category names directly after "Total ", so a plan-specific section name like
+# "BASF Stable Value Fund" -- or any name containing a word from
+# _TOTAL_PROVIDER_EXCLUDE_WORDS, which deliberately blocks _is_total_provider_label
+# on real fund names like "PIMCO Total Return Fund" -- never matches either
+# helper. Left unrecognized, this text falls into the split-fund-name-fragment
+# path below and gets merged onto the NEXT section's first data row's value
+# cell (e.g. "644,262,835 Total BASF Stable Value Fund: 916,262,534"), which
+# then fails parse_currency_value() and silently drops that row's real value.
+# Requiring a trailing "colon + amount" is what makes this safe to match on
+# ANY label without an enum: a genuine wrapped/split fund-name fragment (what
+# this one-cell branch exists to preserve) is bare text and never ends in a
+# colon followed by a number.
+_TOTAL_LABELED_SUBTOTAL_RE = re.compile(
+    r'^(?:total|subtotal|sub-total|grand\s+total)\b.*:\s*\$?\s*\(?[\d,]+(?:\.\d+)?\)?\s*$',
+    re.IGNORECASE,
+)
+
+
+def _is_total_labeled_subtotal(text: str) -> bool:
+    text = normalize_whitespace(text or "")
+    if not text:
+        return False
+    return bool(_TOTAL_LABELED_SUBTOTAL_RE.match(text))
 
 
 def _is_blank_asset_type(value: str) -> bool:
@@ -548,6 +651,7 @@ def classify_pages_text(pdf_path: str, keywords_yml: str) -> List[Dict]:
     negatives = [k.upper() for k in cfg.get("negative_keywords", [])]
     min_hits = int(cfg.get("min_keyword_hits", 1))
     max_lines = int(cfg.get("header_scan_max_lines", 12))
+    money_token_re = re.compile(r"\$?\s*\(?\s*[0-9][0-9,]*(?:\.[0-9]+)?\)?")
 
     pages = []
     with pdfplumber.open(pdf_path) as pdf:
@@ -558,6 +662,7 @@ def classify_pages_text(pdf_path: str, keywords_yml: str) -> List[Dict]:
             header_text = " ".join(header_lines).upper()
             hits = sum(1 for k in keywords if k in header_text)
             neg_hits = sum(1 for k in negatives if k in header_text)
+            money_line_count = sum(1 for l in lines if money_token_re.search(l))
             pages.append(
                 {
                     "pdf": pdf_path,
@@ -565,8 +670,40 @@ def classify_pages_text(pdf_path: str, keywords_yml: str) -> List[Dict]:
                     "page_number": i,
                     "header_text": header_text,
                     "is_supplemental": 1 if hits >= min_hits and neg_hits == 0 else 0,
+                    "_neg_hits": neg_hits,
+                    "_money_line_count": money_line_count,
                 }
             )
+
+    # A multi-page investment schedule's own keyword text (e.g. "Schedule H,
+    # Line 4i") can appear only on the schedule's first page or two --
+    # continuation pages that follow are sometimes nothing but bare
+    # issuer/value rows with no repeated header at all (seen on Quad/Graphics
+    # and Walmart: ~90% of a schedule's rows were dropped because only the
+    # first page(s) matched a keyword). Forward-propagate supplemental status
+    # from a matched page across a contiguous run of pages that still look
+    # like the same table -- dense with dollar-value-like tokens -- and stop
+    # the run the moment a page hits a negative keyword or stops looking
+    # tabular (prose, a new section, a signature page, etc.), so this never
+    # over-runs into unrelated content.
+    MIN_MONEY_LINES_FOR_CONTINUATION = 3
+    in_run = False
+    for p in pages:
+        if p["is_supplemental"] == 1:
+            in_run = True
+            continue
+        if in_run:
+            if p["_neg_hits"] > 0:
+                in_run = False
+            elif p["_money_line_count"] >= MIN_MONEY_LINES_FOR_CONTINUATION:
+                p["is_supplemental"] = 1
+            else:
+                in_run = False
+
+    for p in pages:
+        del p["_neg_hits"]
+        del p["_money_line_count"]
+
     return pages
 
 
@@ -1874,13 +2011,25 @@ def extract_tables_and_map(
     page_value_scale: Dict[int, int] = {}
     continuation_parser_profiles: Dict[int, str] = {}
     section_table_areas_by_page: Dict[int, List[Tuple[str, str]]] = {}
+    _reportable_or_service_page_re = re.compile(
+        r'REPORTABLE\s+TRANSACTIONS|SERVICE\s+PROVIDER\s+INFORMATION', re.IGNORECASE
+    )
     with pdfplumber.open(pdf_path) as _doc:
         filtered_pages = []
         active_parser_profile = ""
-        active_continuation_family = ""
+        active_schedule_run = False
         active_structural_profile: Dict[str, str] = {}
         active_structural_asset_type = ""
         continuation_asset_types: Dict[int, str] = {}
+        # Running "last section heading actually seen so far" (top-to-bottom,
+        # across pages), distinct from active_structural_asset_type which is
+        # frozen at whatever heading appeared FIRST on the page that started
+        # this schedule run. A multi-section filer whose schedule opens with
+        # "Mutual Funds" but later moves into "Common Stocks" (e.g. Chubb)
+        # would otherwise have every continuation page mistyped as Mutual
+        # Fund for the rest of the schedule, however many section changes
+        # happen in between.
+        last_seen_section_asset_type = ""
         for p in sorted(supplemental_pages):
             page_text = _doc.pages[p - 1].extract_text() or ''
 
@@ -1893,30 +2042,37 @@ def extract_tables_and_map(
 
             if is_target_schedule:
                 active_parser_profile = _infer_inline_text_parser_profile(page_text)
-                active_continuation_family = _profile_family(active_parser_profile)
+                active_schedule_run = True
                 active_structural_profile = _infer_structural_row_profile(page_text) if is_structural_schedule else {}
                 active_structural_asset_type = _infer_first_section_asset_type(page_text) if is_structural_schedule else ""
-            elif _is_new_exhibit_or_schedule_page(page_text):
+            elif _is_new_exhibit_or_schedule_page(page_text) or _reportable_or_service_page_re.search(page_text):
                 active_parser_profile = ""
-                active_continuation_family = ""
+                active_schedule_run = False
                 active_structural_profile = {}
                 active_structural_asset_type = ""
 
             is_profile_continuation = _matches_structural_row_profile(page_text, active_structural_profile)
-            is_continuation = (
-                bool(active_continuation_family) and _looks_like_investment_continuation_page(
-                    page_text, active_continuation_family
-                )
-            ) or is_profile_continuation
+            # classify_pages_text already forward-fills which pages belong to the
+            # active schedule using a structural signal (dollar-value-line
+            # density), not an asset-type keyword -- trust that here instead of
+            # re-deriving a narrower per-asset-type text pattern (the old
+            # approach only ever recognized "mutual fund" and "common stock"
+            # row shapes by name, silently dropping every other format's
+            # continuation pages). This is a candidate filter only: the
+            # per-table Camelot column-layout check
+            # (_looks_like_headerless_continuation, in the main row loop below)
+            # is still the real gate before any row from a candidate page gets used.
+            is_continuation = (active_schedule_run and not is_target_schedule) or is_profile_continuation
             if is_target_schedule or is_continuation:
                 filtered_pages.append(p)
                 section_table_areas = _find_section_table_areas(_doc.pages[p - 1])
                 if section_table_areas:
                     section_table_areas_by_page[p] = section_table_areas
+                    last_seen_section_asset_type = section_table_areas[-1][1]
                 if is_continuation and active_parser_profile:
                     continuation_parser_profiles[p] = active_parser_profile
-                if is_profile_continuation and active_structural_asset_type:
-                    continuation_asset_types[p] = active_structural_asset_type
+                if is_profile_continuation and (last_seen_section_asset_type or active_structural_asset_type):
+                    continuation_asset_types[p] = last_seen_section_asset_type or active_structural_asset_type
                 page_value_scale[p] = _page_value_scale_factor(page_text)
         supplemental_pages = filtered_pages
     if not supplemental_pages:
@@ -2120,6 +2276,52 @@ def extract_tables_and_map(
             print(f"    Remapped current_value column {value_col} -> {best_col} (reused map didn't match this table's layout)")
         return column_map
 
+    def _verify_or_remap_description_column(df, data_start_row: int, column_map: Dict[int, str]) -> Dict[int, str]:
+        """A wrapped multi-line header cell (e.g. Form 5500 column (c)'s
+        "Description of investment including maturity date, rate of
+        interest, collateral, par, or maturity value") can lead Camelot's
+        stream flavor to infer a wider column boundary for the header than
+        the data rows underneath actually use, so the header text lands one
+        column over from where the row-level description text sits (seen on
+        Syracuse University's Schedule H, line 4i table: header cell at
+        column 3, but every data row's description text is in column 2,
+        leaving column 3 -- and therefore investment_description -- blank
+        for every row). Verify the mapped description column actually has
+        text in the sampled data rows; if it's empty, retarget to whichever
+        immediately adjacent unmapped column has description-like
+        (non-numeric) text in most sampled rows.
+        """
+        desc_col = next((idx for idx, f in column_map.items() if f == 'investment_description'), None)
+        if desc_col is None or df.shape[0] <= data_start_row:
+            return column_map
+        sample = df.iloc[data_start_row:data_start_row + 15]
+
+        def _text_ratio(col_idx):
+            if col_idx < 0 or col_idx >= df.shape[1]:
+                return 0.0
+            cells = [normalize_whitespace(str(v)) for v in sample.iloc[:, col_idx].tolist()]
+            non_empty = [c for c in cells if c]
+            if not non_empty:
+                return 0.0
+            matches = sum(
+                1 for c in non_empty
+                if not re.fullmatch(r"\$?\s*\(?\s*[0-9][0-9,]*(?:\.[0-9]+)?\)?", c)
+            )
+            return matches / len(non_empty)
+
+        if _text_ratio(desc_col) >= 0.3:
+            return column_map
+        for candidate in (desc_col - 1, desc_col + 1):
+            if candidate in column_map:
+                continue
+            if _text_ratio(candidate) >= 0.5:
+                column_map = dict(column_map)
+                del column_map[desc_col]
+                column_map[candidate] = 'investment_description'
+                print(f"    Remapped investment_description column {desc_col} -> {candidate} (header cell empty in data rows)")
+                break
+        return column_map
+
     # Persists across pages: once a section heading is seen, all following rows
     # inherit its type until a new heading overrides it
     current_section_type = ""
@@ -2132,7 +2334,7 @@ def extract_tables_and_map(
         df = table.df
         if df.shape[0] < 2:
             continue
-        
+
         # Find the actual header rows - headers may span multiple rows
         # Look for rows with high schema matches and also check for partial keywords
         # BUT: Only consider first 4 rows as potential headers to avoid false positives
@@ -2209,15 +2411,26 @@ def extract_tables_and_map(
 
             _correct_maturing_value_description_column(header, column_map)
             _apply_plan_specific_column_overrides(_plan_specific_column_shift, column_map)
+            column_map = _verify_or_remap_description_column(df, data_start_row, column_map)
 
             if column_map:
                 previous_column_map = dict(column_map)
                 previous_column_map_page = page_num
-        elif table_section_asset_type and previous_column_map_page == page_num and previous_column_map:
+        elif table_section_asset_type and previous_column_map:
+            # This table's own row 0 is a known section-heading label (that's how
+            # table_section_asset_type got set), not a real header row, even though
+            # the generic header-detection above found nothing. Falling through to
+            # the "no header_rows" fallback below would treat that heading text as
+            # a header and fuzzy-match it against column-header synonyms -- e.g.
+            # "Cash Equivalent" scores 80 against the current_value synonym "value",
+            # producing a garbage single-column map that then corrupts every row in
+            # this split section. Reuse the running column map instead (not
+            # restricted to same-page: this is often the first section table on a
+            # freshly-split page, so no page-page match exists yet).
             column_map = _verify_or_remap_value_column(df, 0, dict(previous_column_map))
             data_start_row = 0
             reused_previous_column_map = True
-            print(f"    Reusing same-page column map for section table on page {page_num}")
+            print(f"    Reusing running column map for section table on page {page_num}")
         elif _looks_like_headerless_continuation(df, previous_column_map):
             column_map = _verify_or_remap_value_column(df, 0, dict(previous_column_map))
             data_start_row = 0
@@ -2248,6 +2461,7 @@ def extract_tables_and_map(
 
             _correct_maturing_value_description_column(header, column_map)
             _apply_plan_specific_column_overrides(_plan_specific_column_shift, column_map)
+            column_map = _verify_or_remap_description_column(df, data_start_row, column_map)
 
             if column_map:
                 previous_column_map = dict(column_map)
@@ -2280,6 +2494,8 @@ def extract_tables_and_map(
                             break
                     if matched:
                         break
+                if not matched and _HEADING_OFFERED_BY_RE.match(candidate):
+                    matched = 'Mutual Fund'
                 if matched:
                     current_section_type = matched
                     pending_single_cell_fragments.clear()
@@ -2287,6 +2503,13 @@ def extract_tables_and_map(
                 elif re.fullmatch(r"\$?\s*\(?\s*[0-9][0-9,]*(?:\.[0-9]+)?\)?", candidate_text):
                     # A one-cell numeric row is usually a subtotal/duplicate value line,
                     # not a split name. Do not attach it to the next investment row.
+                    pending_single_cell_fragments.clear()
+                elif _is_total_labeled_subtotal(candidate_text):
+                    # A "Total <section name>: <amount>" subtotal line for a
+                    # section name not covered by _TOTAL_CATEGORY_RE's fixed
+                    # enum (see _TOTAL_LABELED_SUBTOTAL_RE above). Same
+                    # treatment as the bare-numeric case: drop it, do not
+                    # merge it onto the next row's value cell.
                     pending_single_cell_fragments.clear()
                 else:
                     # Preserve split investment names that Camelot emits as a single-cell
@@ -2356,6 +2579,13 @@ def extract_tables_and_map(
             if row_data.get('issuer_name'):
                 row_data['issuer_name'] = row_data['issuer_name'].lstrip('* ').strip()
 
+            for _field in ('investment_description', 'issuer_name'):
+                _val = row_data.get(_field, '')
+                if _val and _HEADING_PREFIX_RE.match(_val):
+                    row_data[_field] = _HEADING_PREFIX_RE.sub('', _val).strip()
+                    current_section_type = 'Mutual Fund'
+                    print(f"    Section heading prefix stripped from {_field} (row {row_idx})")
+
             value_scale = page_value_scale.get(page_num, 1)
             if value_scale != 1 and row_data.get('current_value'):
                 row_data['current_value'] = _scale_currency_string(row_data['current_value'], value_scale)
@@ -2367,8 +2597,36 @@ def extract_tables_and_map(
                 print(f"    Section heading detected: '{section_type}' (row {row_idx})")
                 continue
 
-            # Propagate the current section type to rows with blank asset_type
-            if _is_blank_asset_type(row_data.get('asset_type', '')):
+            # "X offered by <provider>" heading rows can carry a stray value in
+            # some layouts (see Brown University's "Mutual funds offered by
+            # Fidelity: BrokerageLink ..." row), so _detect_section_heading's
+            # value-free check above misses them. Catch them here by text
+            # shape regardless of whether a value landed on the row.
+            _issuer_or_desc = row_data.get('issuer_name') or row_data.get('investment_description') or ''
+            if _HEADING_OFFERED_BY_RE.match(normalize_whitespace(str(_issuer_or_desc)).rstrip(':').strip()):
+                current_section_type = 'Mutual Fund'
+                print(f"    Section heading (offered-by, value row): 'Mutual Fund' (row {row_idx})")
+                continue
+
+            # "Total <Provider>" / "Total <Category>" subtotal rows are not
+            # individual holdings -- drop them rather than let them leak into
+            # the data as a fake row (Brown's "Total Fidelity" $270,880,520,
+            # "Total Transamerica" $723,006).
+            if _is_total_summary_label(_issuer_or_desc) or _is_total_provider_label(_issuer_or_desc):
+                print(f"    Subtotal row dropped: '{_issuer_or_desc}' (row {row_idx})")
+                continue
+
+            # Propagate the current section type to rows with blank asset_type, or to
+            # rows whose own 'asset_type' cell holds a non-canonical investment-style
+            # label (e.g. "Domestic equities", "Multi-strategy funds") rather than a
+            # real DOL vehicle-type declaration -- happens when a PDF's per-row column
+            # in this position is actually a style/category column, not a Type column
+            # (e.g. Brown University's "Mutual funds offered by Teachers Insurance and
+            # Annuity Association" section). The section heading is the authoritative
+            # vehicle-type signal; an in-row value only overrides it when that value
+            # itself resolves to a real canonical type.
+            _row_asset_type = row_data.get('asset_type', '')
+            if _is_blank_asset_type(_row_asset_type) or not detect_asset_type_strict(_row_asset_type):
                 if table_section_asset_type:
                     row_data['asset_type'] = table_section_asset_type
                 elif current_section_type:
@@ -2499,5 +2757,28 @@ def extract_tables_and_map(
                     _row["asset_type"] = _ptype
     except Exception as _ttl_exc:
         print(f"    [sub-schedule tag] skipped: {_ttl_exc}")
+
+    # --- Diversified-holdings demotion for 'Employer Stock' ---
+    # A "Common Stock" heading or a per-row single-security regex match (name + share
+    # count) assumes the row IS the plan's own employer stock -- true for ESOPs/stock
+    # funds, which show exactly one company name repeated. But self-directed brokerage
+    # schedules holding many DIFFERENT companies' individual stocks (sometimes even fund
+    # names) trip the same per-row match and get every holding mistyped as Employer
+    # Stock. Distinct-issuer count is a cheap, reliable signal: a real employer-stock
+    # fund never shows more than a couple of distinct names in one filing; a diversified
+    # brokerage sleeve routinely shows dozens.
+    _emp_stock_rows = [
+        _r for _entry in result for _r in _entry.get("mapped_rows", [])
+        if normalize_whitespace(str(_r.get("asset_type", "") or "")).strip() == "Employer Stock"
+    ]
+    _distinct_issuers = {
+        normalize_whitespace(str(_r.get("issuer_name") or _r.get("investment_description") or "")).strip().upper()
+        for _r in _emp_stock_rows
+    }
+    _distinct_issuers.discard("")
+    if len(_distinct_issuers) > 3:
+        for _r in _emp_stock_rows:
+            _r["asset_type"] = "Common Stock"
+        print(f"    Demoted {len(_emp_stock_rows)} 'Employer Stock' rows ({len(_distinct_issuers)} distinct issuers) to 'Common Stock' -- diversified holdings, not a single employer-stock fund")
 
     return plan_info, result

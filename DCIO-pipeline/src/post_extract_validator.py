@@ -65,8 +65,8 @@ _KNOWN_MANAGERS = frozenset({
 })
 
 _SHARE_CLASS_RE = _re.compile(
-    r"(class\s+[a-z]|institutional|investor|admiral|signal|"
-    r"premium|select|premier|r[\s-]?\d+(?=\s|$)|i\s*shares?)",
+    r"\b(class\s+[a-z]|institutional|investor|admiral|signal|"
+    r"premium|select|premier|r[\s-]?\d+(?=\s|$)|i\s*shares?)\b",
     _re.IGNORECASE,
 )
 
@@ -91,8 +91,8 @@ _GENERIC_CATEGORIES = frozenset({
 })
 
 _SHARE_CLASS_STRONG_RE = _re.compile(
-    r"(r[\s-]?[1-6](?=\s|$)|institutional(?:\s+(?:plus|shares?))?|investor\s+shares?|"
-    r"admiral\s+shares?|signal\s+shares?|class\s+[a-z]|i\s*shares?|etf)",
+    r"\b(r[\s-]?[1-6](?=\s|$)|institutional(?:\s+(?:plus|shares?))?|investor\s+shares?|"
+    r"admiral\s+shares?|signal\s+shares?|class\s+[a-z]|i\s*shares?|etf)\b",
     _re.IGNORECASE,
 )
 
@@ -119,7 +119,7 @@ def _score_as_fund_name(text):
         score += 15
     elif _SHARE_CLASS_RE.search(text):
         score += 10
-    if _re.search(r"20[2-9]\d", text):
+    if _re.search(r"\b20[2-9]\d\b", text):
         score += 20
     word_count = len(text.split())
     if 3 <= word_count <= 12:
@@ -644,7 +644,7 @@ def build_mf_rows_df(rows: List[Dict],
         # plans' Sch H tables list CREF accounts under a "Mutual fund" asset type/description;
         # certified totals for those filings include them, so excluding them undercaptures).
         _desc = str(row.get("investment_description", "") or "")
-        _explicit_mf = asset_type == "mutual fund" or bool(_re.search(r"mutual\s+funds?", _desc, _re.IGNORECASE))
+        _explicit_mf = asset_type == "mutual fund" or bool(_re.search(r"\bmutual\s+funds?\b", _desc, _re.IGNORECASE))
         if mf_only and not _explicit_mf and _ANNUITY_VEHICLE_RE.search(_name):
             continue
         records.append({
