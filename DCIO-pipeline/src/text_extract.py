@@ -2322,7 +2322,7 @@ def extract_tables_and_map(
             print(f"    Remapped current_value column {value_col} -> {best_col} (reused map didn't match this table's layout)")
         return column_map
 
-    def _verify_or_remap_description_column(df, data_start_row: int, column_map: Dict[int, str]) -> Dict[int, str]:
+    def _verify_or_remap_description_column(df, data_start_row: int, column_map: Dict[int, str]) -> Tuple[Dict[int, str], Optional[int]]:
         """A wrapped multi-line header cell (e.g. Form 5500 column (c)'s
         "Description of investment including maturity date, rate of
         interest, collateral, par, or maturity value") can lead Camelot's
@@ -2336,10 +2336,22 @@ def extract_tables_and_map(
         text in the sampled data rows; if it's empty, retarget to whichever
         immediately adjacent unmapped column has description-like
         (non-numeric) text in most sampled rows.
+
+        Also returns a secondary "sibling" column index, if one is found.
+        Camelot's stream flavor can split the description text across TWO
+        adjacent columns inconsistently row-to-row -- not just wrong for the
+        whole table -- when a longer issuer name pushes the following text
+        past the inferred column boundary (seen on Penn's Supplemental
+        Retirement Annuity Plan: "Mutual Fund" / "Pooled Separate Account"
+        lands in one column for most rows but the column next to it for
+        rows with longer issuer names, e.g. "TIAA Traditional Benefit
+        Responsive Annuity"). The caller uses this sibling column as a
+        per-row fallback when the primary description column is blank for
+        that specific row, rather than silently losing the value.
         """
         desc_col = next((idx for idx, f in column_map.items() if f == 'investment_description'), None)
         if desc_col is None or df.shape[0] <= data_start_row:
-            return column_map
+            return column_map, None
         sample = df.iloc[data_start_row:data_start_row + 15]
 
         def _text_ratio(col_idx):
@@ -2355,18 +2367,27 @@ def extract_tables_and_map(
             )
             return matches / len(non_empty)
 
-        if _text_ratio(desc_col) >= 0.3:
-            return column_map
+        if _text_ratio(desc_col) < 0.3:
+            for candidate in (desc_col - 1, desc_col + 1):
+                if candidate in column_map:
+                    continue
+                if _text_ratio(candidate) >= 0.5:
+                    column_map = dict(column_map)
+                    del column_map[desc_col]
+                    column_map[candidate] = 'investment_description'
+                    print(f"    Remapped investment_description column {desc_col} -> {candidate} (header cell empty in data rows)")
+                    desc_col = candidate
+                    break
+
+        sibling_col = None
         for candidate in (desc_col - 1, desc_col + 1):
-            if candidate in column_map:
+            if candidate < 0 or candidate >= df.shape[1] or candidate in column_map:
                 continue
-            if _text_ratio(candidate) >= 0.5:
-                column_map = dict(column_map)
-                del column_map[desc_col]
-                column_map[candidate] = 'investment_description'
-                print(f"    Remapped investment_description column {desc_col} -> {candidate} (header cell empty in data rows)")
+            if _text_ratio(candidate) >= 0.3:
+                sibling_col = candidate
                 break
-        return column_map
+
+        return column_map, sibling_col
 
     # Persists across pages: once a section heading is seen, all following rows
     # inherit its type until a new heading overrides it
@@ -2423,6 +2444,7 @@ def extract_tables_and_map(
         page_num = int(table.page)
         table_section_asset_type = section_asset_type_by_table.get(id(table), "")
         reused_previous_column_map = False
+        desc_fallback_col: Optional[int] = None
 
         # If we found header rows, use the first and last to determine the header span.
         # If not, a continuation page may start directly with data rows; in that case,
@@ -2457,7 +2479,7 @@ def extract_tables_and_map(
 
             _correct_maturing_value_description_column(header, column_map)
             _apply_plan_specific_column_overrides(_plan_specific_column_shift, column_map)
-            column_map = _verify_or_remap_description_column(df, data_start_row, column_map)
+            column_map, desc_fallback_col = _verify_or_remap_description_column(df, data_start_row, column_map)
 
             if column_map:
                 previous_column_map = dict(column_map)
@@ -2507,7 +2529,7 @@ def extract_tables_and_map(
 
             _correct_maturing_value_description_column(header, column_map)
             _apply_plan_specific_column_overrides(_plan_specific_column_shift, column_map)
-            column_map = _verify_or_remap_description_column(df, data_start_row, column_map)
+            column_map, desc_fallback_col = _verify_or_remap_description_column(df, data_start_row, column_map)
 
             if column_map:
                 previous_column_map = dict(column_map)
@@ -2606,6 +2628,15 @@ def extract_tables_and_map(
                         row_data[field] = normalize_whitespace(str(row_data[field]) + " " + text)
                     else:
                         row_data[field] = text
+
+            # Camelot's stream flavor can split description text across two adjacent
+            # columns inconsistently row-to-row (see _verify_or_remap_description_column).
+            # If the primary description column came up blank for THIS row, check the
+            # sibling column before giving up on it.
+            if not row_data.get('investment_description') and desc_fallback_col is not None and desc_fallback_col < len(row):
+                fallback_text = normalize_whitespace(str(row[desc_fallback_col]))
+                if fallback_text and not re.fullmatch(r"\$?\s*\(?\s*[0-9][0-9,]*(?:\.[0-9]+)?\)?", fallback_text):
+                    row_data['investment_description'] = fallback_text
 
             # Recover a fund name Camelot shifted one column right of where the header
             # says issuer_name lives -- happens when a row is visually indented under a
