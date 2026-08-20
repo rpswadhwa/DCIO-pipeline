@@ -680,6 +680,17 @@ def classify_pages_text(pdf_path: str, keywords_yml: str) -> List[Dict]:
     max_lines = int(cfg.get("header_scan_max_lines", 12))
     money_token_re = re.compile(r"\$?\s*\(?\s*[0-9][0-9,]*(?:\.[0-9]+)?\)?")
 
+    # "Registered Investment Companies" (the formal 5500 term for mutual funds) is common
+    # boilerplate that can appear in narrative text or unrelated schedules, so it's not a
+    # keywords.yml entry -- it only counts as a match here when the page ALSO carries the
+    # actual asset-schedule column headers, mirroring the stricter structural-page check in
+    # _looks_like_structural_investment_schedule. This catches filers (e.g. Oracle) who
+    # split their Schedule of Assets so an early page opens under "Notes to Financial
+    # Statements" with this heading instead of the usual "Schedule H, Line 4(i)" title.
+    ric_re = re.compile(r'registered\s+investment\s+compan(?:y|ies)', re.IGNORECASE)
+    identity_re = re.compile(r'identity\s+of\s+issue|borrower,?\s+lessor', re.IGNORECASE)
+    description_re = re.compile(r'description\s+of\s+investments?', re.IGNORECASE)
+
     pages = []
     with pdfplumber.open(pdf_path) as pdf:
         for i, page in enumerate(pdf.pages, start=1):
@@ -690,13 +701,20 @@ def classify_pages_text(pdf_path: str, keywords_yml: str) -> List[Dict]:
             hits = sum(1 for k in keywords if k in header_text)
             neg_hits = sum(1 for k in negatives if k in header_text)
             money_line_count = sum(1 for l in lines if money_token_re.search(l))
+            has_ric_schedule = (
+                bool(ric_re.search(header_text))
+                and bool(identity_re.search(header_text))
+                and bool(description_re.search(header_text))
+                and "CURRENT" in header_text
+                and "VALUE" in header_text
+            )
             pages.append(
                 {
                     "pdf": pdf_path,
                     "pdf_stem": pdf_path.split("/")[-1].rsplit(".", 1)[0],
                     "page_number": i,
                     "header_text": header_text,
-                    "is_supplemental": 1 if hits >= min_hits and neg_hits == 0 else 0,
+                    "is_supplemental": 1 if (hits >= min_hits or has_ric_schedule) and neg_hits == 0 else 0,
                     "_neg_hits": neg_hits,
                     "_money_line_count": money_line_count,
                 }
@@ -1730,7 +1748,7 @@ def _looks_like_structural_investment_schedule(text: str) -> bool:
     if not re.search(
         r'mutual\s+funds?|common/?collective\s+trusts?|collective\s+investment\s+funds?|'
         r'guaranteed\s+investment\s+contracts?|self[- ]directed\s+brokerage\s+accounts?|'
-        r'pooled\s+separate\s+accounts?',
+        r'pooled\s+separate\s+accounts?|registered\s+investment\s+compan(?:y|ies)',
         text,
         re.IGNORECASE,
     ):
@@ -1758,6 +1776,7 @@ def _infer_first_section_asset_type(text: str) -> str:
     """Infer the first asset section heading on a structural investment schedule page."""
     section_map = [
         (r'\bmutual\s+funds?\b', 'Mutual Fund'),
+        (r'\bregistered\s+investment\s+compan(?:y|ies)\b', 'Mutual Fund'),
         (r'\bcommon/?collective\s+trusts?\b|\bcollective\s+investment\s+funds?\b', 'Common/Collective Trust Fund'),
         (r'\bguaranteed\s+investment\s+contracts?\b', 'Guaranteed Investment Contract'),
         (r'\bself[- ]directed\s+brokerage\s+accounts?\b', 'Self-Directed Brokerage Account'),
@@ -1828,7 +1847,7 @@ def find_structural_investment_pages(pdf_path: str, max_pages: int = 1000) -> Li
     section_re = re.compile(
         r'mutual\s+funds?|common/?collective\s+trusts?|collective\s+investment\s+funds?|'
         r'guaranteed\s+investment\s+contracts?|self[- ]directed\s+brokerage\s+accounts?|'
-        r'pooled\s+separate\s+accounts?',
+        r'pooled\s+separate\s+accounts?|registered\s+investment\s+compan(?:y|ies)',
         re.IGNORECASE,
     )
     value_re = re.compile(r'\$?\s*\d{1,3}(?:,\d{3})+(?:\.\d+)?')
