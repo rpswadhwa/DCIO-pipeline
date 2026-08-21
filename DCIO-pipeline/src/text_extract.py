@@ -1996,6 +1996,31 @@ def _infer_schedule_of_title_asset_type(text: str) -> str:
     return ''
 
 
+def _dedupe_duplicate_tables(tables: list) -> list:
+    """Camelot's stream flavor can detect multiple overlapping table regions on a
+    single page that all resolve to identical content -- seen on Trane
+    Technologies' Schedule of Assets, where a single continuous, unruled table
+    on page 1 was returned as three separate 40x8 tables with identical rows,
+    silently tripling every extracted value when concatenated. Drop later
+    tables whose full cell content exactly matches an already-kept table from
+    the same page."""
+    seen_by_page: Dict[int, set] = {}
+    deduped = []
+    for t in tables:
+        page_num = int(t.page)
+        signature = tuple(
+            tuple(normalize_whitespace(str(cell)) for cell in row)
+            for row in t.df.values.tolist()
+        )
+        page_signatures = seen_by_page.setdefault(page_num, set())
+        if signature in page_signatures:
+            print(f"    Dropping duplicate table on page {page_num} (identical to an already-extracted table)")
+            continue
+        page_signatures.add(signature)
+        deduped.append(t)
+    return deduped
+
+
 def extract_tables_and_map(
     pdf_path: str,
     supplemental_pages: List[int],
@@ -2200,6 +2225,7 @@ def extract_tables_and_map(
     # default table BEFORE the heading-bearing page's split tables ever run,
     # leaving the continuation page's rows with a blank asset_type. Sort is stable,
     # so same-page tables (e.g. multiple section areas) keep their relative order.
+    tables = _dedupe_duplicate_tables(tables)
     tables = sorted(tables, key=lambda t: int(t.page))
 
     if use_llm:
