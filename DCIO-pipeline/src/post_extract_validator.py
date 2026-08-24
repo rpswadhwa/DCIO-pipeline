@@ -727,12 +727,19 @@ def write_iceberg_via_athena(df: pd.DataFrame, glue_db: str, table: str,
         df = df.copy()
         df["asset_type"] = ""
 
-    # Delete existing rows for these ack_ids before inserting (idempotency)
-    # Only works for Iceberg/transactional tables; skips silently for plain Hive tables
-    ack_ids = df["ack_id"].dropna().unique().tolist()
-    if ack_ids:
-        ids_sql = ", ".join("'" + str(a).replace("'", "''") + "'" for a in ack_ids)
-        delete_sql = f"DELETE FROM {glue_db}.{table} WHERE ack_id IN ({ids_sql})"
+    # Delete-then-insert per ack_id (idempotency), one ack_id at a time, so a process kill
+    # mid-write (e.g. an SSM command timeout) can orphan at most the single ack_id in flight
+    # instead of every ack_id in this run -- a batch-wide DELETE followed by a separate
+    # batch-wide INSERT loop left every already-deleted-but-not-yet-reinserted ack_id with
+    # zero rows if the process died partway through the INSERT batches.
+    # Only works for Iceberg/transactional tables; skips silently for plain Hive tables.
+    batch_size = 500
+    total = 0
+    for ack_id, group in df.groupby("ack_id", sort=False):
+        if pd.isna(ack_id) or not str(ack_id).strip():
+            continue
+        id_sql = "'" + str(ack_id).replace("'", "''") + "'"
+        delete_sql = f"DELETE FROM {glue_db}.{table} WHERE ack_id IN ({id_sql})"
         try:
             delete_qid = wr.athena.start_query_execution(
                 sql=delete_sql,
@@ -741,61 +748,60 @@ def write_iceberg_via_athena(df: pd.DataFrame, glue_db: str, table: str,
                 s3_output=s3_staging,
             )
             wr.athena.wait_query(query_execution_id=delete_qid)
-            logger.info("Deleted existing rows for %d ack_ids from %s.%s", len(ack_ids), glue_db, table)
         except Exception as e:
-            logger.warning("DELETE skipped for %s.%s (not a transactional table?): %s", glue_db, table, e)
+            logger.warning("DELETE skipped for %s.%s ack_id=%s (not a transactional table?): %s", glue_db, table, ack_id, e)
 
-    batch_size = 500
-    total = len(df)
-    for start in range(0, total, batch_size):
-        batch = df.iloc[start:start + batch_size]
-        values_parts = []
-        for _, row in batch.iterrows():
-            def q(v):
-                if v is None:
-                    return "NULL"
-                try:
-                    if math.isnan(float(v)):
+        group_total = len(group)
+        for start in range(0, group_total, batch_size):
+            batch = group.iloc[start:start + batch_size]
+            values_parts = []
+            for _, row in batch.iterrows():
+                def q(v):
+                    if v is None:
                         return "NULL"
+                    try:
+                        if math.isnan(float(v)):
+                            return "NULL"
+                    except (TypeError, ValueError):
+                        pass
+                    return "'" + str(v).replace("'", "''") + "'"
+
+                amt = row.get("plan_investment_amt")
+                try:
+                    _a = float(amt)
+                    # DECIMAL(18,2) overflows ~1e16; null obvious overflow/garbage
+                    # and use fixed-point (no exponent) formatting for valid values.
+                    amt_sql = "NULL" if (math.isnan(_a) or abs(_a) >= 1e15) else ("%.2f" % _a)
                 except (TypeError, ValueError):
-                    pass
-                return "'" + str(v).replace("'", "''") + "'"
+                    amt_sql = "NULL"
 
-            amt = row.get("plan_investment_amt")
-            try:
-                _a = float(amt)
-                # DECIMAL(18,2) overflows ~1e16; null obvious overflow/garbage
-                # and use fixed-point (no exponent) formatting for valid values.
-                amt_sql = "NULL" if (math.isnan(_a) or abs(_a) >= 1e15) else ("%.2f" % _a)
-            except (TypeError, ValueError):
-                amt_sql = "NULL"
+                _vals = [
+                    q(row.get("ack_id")),
+                    q(row.get("raw_entity_name")),
+                    q(row.get("raw_sponsor_name")),
+                    amt_sql,
+                    q(row.get("asset_class", "PENDING_AI")),
+                    q(row.get("asset_sub_class", "PENDING_AI")),
+                    q(row.get("validation_status", "UNVALIDATED")),
+                ]
+                if include_asset_type:
+                    _vals.append(q(row.get("asset_type", "")))
+                values_parts.append("(" + ", ".join(_vals) + ")")
 
-            _vals = [
-                q(row.get("ack_id")),
-                q(row.get("raw_entity_name")),
-                q(row.get("raw_sponsor_name")),
-                amt_sql,
-                q(row.get("asset_class", "PENDING_AI")),
-                q(row.get("asset_sub_class", "PENDING_AI")),
-                q(row.get("validation_status", "UNVALIDATED")),
-            ]
+            _cols = ("ack_id, raw_entity_name, raw_sponsor_name, plan_investment_amt, "
+                     "asset_class, asset_sub_class, validation_status")
             if include_asset_type:
-                _vals.append(q(row.get("asset_type", "")))
-            values_parts.append("(" + ", ".join(_vals) + ")")
-
-        _cols = ("ack_id, raw_entity_name, raw_sponsor_name, plan_investment_amt, "
-                 "asset_class, asset_sub_class, validation_status")
-        if include_asset_type:
-            _cols += ", asset_type"
-        sql = "INSERT INTO {}.{} ({}) VALUES {}".format(glue_db, table, _cols, ", ".join(values_parts))
-        query_id = wr.athena.start_query_execution(
-            sql=sql,
-            database=glue_db,
-            workgroup=workgroup,
-            s3_output=s3_staging,
-        )
-        wr.athena.wait_query(query_execution_id=query_id)
-        logger.info("Inserted rows %d-%d into Iceberg %s.%s", start, start + len(batch), glue_db, table)
+                _cols += ", asset_type"
+            sql = "INSERT INTO {}.{} ({}) VALUES {}".format(glue_db, table, _cols, ", ".join(values_parts))
+            query_id = wr.athena.start_query_execution(
+                sql=sql,
+                database=glue_db,
+                workgroup=workgroup,
+                s3_output=s3_staging,
+            )
+            wr.athena.wait_query(query_execution_id=query_id)
+            total += len(batch)
+            logger.info("Inserted %d rows for ack_id=%s into Iceberg %s.%s", len(batch), ack_id, glue_db, table)
 
     logger.info("Wrote %d rows to Iceberg table %s.%s", total, glue_db, table)
 

@@ -1672,6 +1672,12 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
                 'INTEREST-BEARING CASH': 'Money Market Fund',
                 'MONEY MARKET': 'Money Market Fund',
                 'MMRK': 'Money Market Fund',
+                # Vanguard's own DC-plan terminology for its Target Retirement Trusts (a CIT
+                # product line, reported in "shares" like a mutual fund would be) -- kept in sync
+                # with the same rule in src/asset_type_patterns.py's ROW_TYPE_PATTERNS, which the
+                # camelot table-based extraction path uses but this text-fallback path did not.
+                'LIFECYCLE INVESTMENT OPTION': 'Common/Collective Trust Fund',
+                'LIFECYCLE INVESTMENT OPTIONS': 'Common/Collective Trust Fund',
                 # additional non-MF categories -- SAFE trailing labels only (anchored to end of
                 # the description). Bond/corporate keys are deliberately OMITTED here: a bond
                 # MUTUAL FUND description can end in 'Corporate Bond', which must stay MF.
