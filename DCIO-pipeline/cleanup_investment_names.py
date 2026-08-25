@@ -66,50 +66,53 @@ def parse_issuer_and_investment(issuer_name, investment_desc, asset_type):
     if (not desc.strip(' "\'`*.-:;,')) or _is_asset_type_label(desc):
         desc = issuer_name
 
-    if issuer_name.upper().startswith('VANGUARD') or issuer_name.upper().startswith('VANG'):
-        return ('Vanguard', desc)
+    # if issuer_name.upper().startswith('VANGUARD') or issuer_name.upper().startswith('VANG'):
+    #     return ('Vanguard', desc)
 
-    if issuer_name.upper().startswith('PIMCO'):
-        return ('PIMCO', desc)
+    # if issuer_name.upper().startswith('PIMCO'):
+    #     return ('PIMCO', desc)
 
-    if issuer_name.upper().startswith('BLACKROCK') or 'LIFEPATH' in issuer_name.upper():
-        return ('BlackRock', desc)
+    # if issuer_name.upper().startswith('BLACKROCK') or 'LIFEPATH' in issuer_name.upper():
+    #     return ('BlackRock', desc)
 
-    if issuer_name.upper().startswith('AF ') or 'EUROPAC' in issuer_name.upper():
-        return ('American Funds', desc)
+    # if issuer_name.upper().startswith('AF ') or 'EUROPAC' in issuer_name.upper():
+    #     return ('American Funds', desc)
 
-    if 'FIDELITY' in issuer_name.upper() or issuer_name.upper().startswith('FID '):
-        return ('Fidelity', desc)
+    # if 'FIDELITY' in issuer_name.upper() or issuer_name.upper().startswith('FID '):
+    #     return ('Fidelity', desc)
 
-    if issuer_name.upper().startswith('NUVEEN'):
-        return ('Nuveen', desc)
+    # if issuer_name.upper().startswith('NUVEEN'):
+    #     return ('Nuveen', desc)
 
-    if 'T ROWE' in issuer_name.upper() or 'T. ROWE' in issuer_name.upper():
-        return ('T. Rowe Price', desc)
+    # if 'T ROWE' in issuer_name.upper() or 'T. ROWE' in issuer_name.upper():
+    #     return ('T. Rowe Price', desc)
 
-    if 'STATE STREET' in issuer_name.upper() or issuer_name.upper().startswith('SSG'):
-        return ('State Street', desc)
+    # if 'STATE STREET' in issuer_name.upper() or issuer_name.upper().startswith('SSG'):
+    #     return ('State Street', desc)
 
-    if 'BNY' in issuer_name.upper() or 'MELLON' in issuer_name.upper():
-        return ('BNY Mellon', desc)
+    # if 'BNY' in issuer_name.upper() or 'MELLON' in issuer_name.upper():
+    #     return ('BNY Mellon', desc)
 
-    if 'BAILLIE' in issuer_name.upper() or 'GIFFORD' in issuer_name.upper():
-        return ('Baillie Gifford', desc)
+    # if 'BAILLIE' in issuer_name.upper() or 'GIFFORD' in issuer_name.upper():
+    #     return ('Baillie Gifford', desc)
 
-    if issuer_name.upper().startswith('AB '):
-        return ('AllianceBernstein', desc)
+    # if issuer_name.upper().startswith('AB '):
+    #     return ('AllianceBernstein', desc)
 
-    if 'JP' in issuer_name.upper() and 'MORGAN' in issuer_name.upper():
-        return ('J.P. Morgan', desc)
+    # if 'JP' in issuer_name.upper() and 'MORGAN' in issuer_name.upper():
+    #     return ('J.P. Morgan', desc)
 
-    if 'BROKERAGE' in issuer_name.upper() or 'BROKERGE' in issuer_name.upper():
-        return ('Self-Directed', desc)
+    # if 'BROKERAGE' in issuer_name.upper() or 'BROKERGE' in issuer_name.upper():
+    #     return ('Self-Directed', desc)
 
-    if issuer_name.startswith('*'):
-        clean_issuer = re.sub(r',.*$|Inc\.?$|LLC$|Corp\.?$', '', issuer_name.replace('*', '')).strip()
-        return (clean_issuer, desc)
+    # if issuer_name.startswith('*'):
+    #     clean_issuer = re.sub(r',.*$|Inc\.?$|LLC$|Corp\.?$', '', issuer_name.replace('*', '')).strip()
+    #     return (clean_issuer, desc)
 
-    # Default: keep original issuer and description unchanged
+    # # Default: keep original issuer and description unchanged
+    # return (issuer_name, desc)
+
+    # Truncation logic disabled per decision: full issuer_name now always passes through unmodified.
     return (issuer_name, desc)
 
 

@@ -34,6 +34,7 @@ ASSET_TYPE_PATTERNS = [
     (r'Short[\-\s]Term\s+Investment\s+Funds?',                     'Short-Term Investment Fund'),
     (r'Common\s*/\s*Collective\s+Trust\s+Funds?',               'Common/Collective Trust Fund'),
     (r'Common\s*/\s*Collective\s+Trusts?',                      'Common/Collective Trust Fund'),
+    (r'Lifecycle\s+Investment\s+Options?',                      'Common/Collective Trust Fund'),
     (r'Collective\s*/\s*Common\s+Trust\s+Funds?',               'Common/Collective Trust Fund'),
     (r'Common\s+Collective\s+Trust\s+Funds?',                   'Common/Collective Trust Fund'),
     (r'Collective\s+Investment\s+Trusts?',                      'Common/Collective Trust Fund'),
@@ -50,6 +51,7 @@ ASSET_TYPE_PATTERNS = [
     (r'Commingled\s+Pools?',                                    'Commingled Fund'),
     (r'Commingled',                                             'Commingled Fund'),
     (r'Company\s+Stocks?',                                      'Employer Stock'),
+    (r'Unallocated\s+Insurance\s+Contracts?',                   'Insurance General Account'),
     (r'Self[\-\s]?Directed\s+Brokerage',                       'Self-Directed Brokerage Account'),
     (r'Collective\s+Funds?',                                    'Commingled Fund'),
     (r'Stable\s+Value\s+Funds?',                                'Stable Value Fund'),
@@ -66,6 +68,7 @@ ASSET_TYPE_PATTERNS = [
     (r'Unit\s+Investment\s+Trusts?',                            'Mutual Fund'),
     (r'Institutional\s+Funds?',                                 'Mutual Fund'),
     (r'Funds?\s+of\s+Funds?',                                   'Mutual Fund'),
+    (r'Exchange[\-\s]Traded\s+Funds?(?:\s*\(?ETFs?\)?)?',              'ETF'),
     (r'Mutual\s+Funds?',                                        'Mutual Fund'),
     (r'Employer\s+Stocks?',                                     'Employer Stock'),
     (r'Employer\s+Securities',                                  'Employer Stock'),
@@ -146,6 +149,12 @@ ROW_TYPE_PATTERNS = [
     (r'collective\s+investment\s+trusts?',             'Common/Collective Trust Fund'),
     (r'collective\s+investment',                       'Common/Collective Trust Fund'),
     (r'collecti\w{0,3}e\s+trusts?',                     'Common/Collective Trust Fund'),  # OCR-tolerant
+    # Vanguard's own DC-plan terminology for its Target Retirement Trusts (a CIT
+    # product line, reported in "shares" like a mutual fund would be) -- seen on
+    # Trane Technologies' Schedule of Assets. Certified Schedule H CIT total for
+    # that filing ($4.135B) is consistent with these being CIT, not MF; the
+    # generic '40-Act mutual fund equivalent says "mutual fund," not this phrase.
+    (r'lifecycle\s+investment\s+options?',             'Common/Collective Trust Fund'),
     (r'commingled',                                    'Commingled Fund'),
     (r'pooled\s+funds?',                               'Commingled Fund'),
     (r'group\s+annuity',                               'Group Annuity Contract'),
