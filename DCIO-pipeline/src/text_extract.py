@@ -1494,11 +1494,15 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
 
         page_scale_factor = _page_value_scale_factor(text)
 
-        # Two value patterns:
-        # 1. "** $VALUE" or "** VALUE"  (classic Form 5500 format)
+        # Value patterns:
+        # 1. Line contains a footnote asterisk ("*"/"**") anywhere -- strip it and
+        #    take the trailing number as the value (no minimum digit count, since
+        #    the asterisk already confirms a value is present). See note below on
+        #    why position is no longer used to anchor this.
         # 2. "Fund Name $ 225,122,092" or "Fund Name 225,122,092" (simple two-column format)
         # 3. "Fund Name $ 698" — explicit $ with small value (no minimum digit count)
-        star_value_pattern   = re.compile(r'\*\*\s*\$?\s*([\d,]+)')
+        _asterisk_re = re.compile(r'\*+')
+        trailing_value_pattern = re.compile(r'\$?\s*([\d,]+)\s*$')
         dollar_value_pattern = re.compile(r'\$\s*([\d,]+)\s*$')          # explicit $
         simple_value_pattern = re.compile(r'([\d,]{4,})\s*$')             # no $, 4+ chars
 
@@ -1581,10 +1585,28 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
             # even if it contains an asset-type keyword like "Registered Investment
             # Company".  Section heading detection only fires when no value is found.
             line = _footnote_re.sub('', _rejoin_split_number(line)).rstrip()
-            value_match = star_value_pattern.search(line)
+
+            # Asterisks are Form 5500 footnote markers ("**Party-in-interest",
+            # "*Participant-directed", etc.). Their POSITION in the line varies by
+            # filer -- sometimes right before the value (classic "TYPE ** $VALUE"
+            # format), sometimes as a suffix on the fund name itself (e.g.
+            # "FID 500 INDEX** 1,943,507.37shares * 396,844,770", where the fund's
+            # own footnote sits well before the real value). Anchoring on the
+            # marker's position grabbed whatever number happened to follow the
+            # FIRST asterisk -- the share count, not the value, whenever a filer
+            # put the footnote on the fund name instead of on the value. Strip all
+            # asterisks and take the line's TRAILING number instead, regardless of
+            # where any asterisk sat.
+            if '*' in line:
+                stripped = _asterisk_re.sub(' ', line)
+                value_match = trailing_value_pattern.search(stripped)
+            else:
+                stripped = line
+                value_match = None
+
             if value_match:
                 current_value = value_match.group(1).replace(',', '')
-                issuer_description = line[:value_match.start()].strip()
+                issuer_description = stripped[:value_match.start()].strip()
             else:
                 # Try explicit "$ VALUE" pattern (any digit count)
                 value_match = dollar_value_pattern.search(line)
