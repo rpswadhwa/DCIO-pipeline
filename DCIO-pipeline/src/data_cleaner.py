@@ -477,99 +477,33 @@ def remove_duplicates(rows, verbose=True):
 
 
 
-_KNOWN_MANAGERS_LOWER = frozenset({
-    'the vanguard group', 'vanguard', 'fidelity', 'fidelity investments',
-    't. rowe price', 'blackrock', 'american funds', 'jp morgan', 'jpmorgan',
-    'pimco', 'dimensional', 'invesco', 'schwab', 'principal', 'prudential',
-    'columbia', 'dodge & cox', 'metropolitan life', 'massmutual', 'john hancock',
-    'state street', 'ssga', 'tiaa', 'cref', 'putnam', 'oppenheimer', 'nuveen',
-    'wells fargo', 'morgan stanley', 'merrill lynch', 'lord abbett', 'loomis sayles',
-    'eaton vance', 'mfs', 'franklin', 'franklin templeton', 'templeton',
-    'american century', 'calvert', 'baird', 'william blair', 'parametric',
-})
-
-
-def _fund_specificity_score(row):
-    """Higher score = more complete record. Prefer the duplicate that carries the
-    most usable data (a real fund name, a resolved asset_type, a value) over one
-    that's missing fields -- e.g. a Schedule H summary-page row with dot-leader
-    padding ("Northern Trust S&P 500 Tier 3 . . . . . . . . .") but no asset_type,
-    versus the Schedule of Assets Held detail-page row for the same holding that
-    has a clean description AND a resolved asset_type. Dot-leader padding used to
-    inflate the summary row's raw string length past the detail row's, causing the
-    less-complete row to win; stripping it before scoring and counting field
-    presence instead of length fixes that.
-    """
-    desc = str(row.get('investment_description', '') or '').strip()
-    issuer = str(row.get('issuer_name', '') or '').strip()
-    asset_type = str(row.get('asset_type', '') or '').strip()
-    value = row.get('current_value')
-    value_present = str(value).strip() not in ('', 'None', 'nan', '0', '0.0')
-
-    best = desc if desc else issuer
-    cleaned = re.sub(r'(?:\s*\.){3,}\s*$', '', best).strip()
-    cleaned_lower = cleaned.lower()
-    name_present = bool(cleaned) and cleaned_lower not in _KNOWN_MANAGERS_LOWER
-
-    score = 0
-    if name_present:
-        score += 1
-    if asset_type:
-        score += 1
-    if value_present:
-        score += 1
-    # Tie-break among equally-complete rows: prefer the more descriptive name,
-    # using the dot-leader-stripped length so padding can't skew this either.
-    score += min(len(cleaned), 80) / 1000.0
-    return score
-
-
 def remove_cross_page_duplicates(rows, value_threshold=10000, verbose=True):
     """
-    Secondary dedup: same (pdf, value) appearing on multiple pages with different field layouts.
-    Keeps the row with the most specific fund name; drops generic manager-name rows.
+    Secondary dedup: same (pdf, description) → keep smallest value (larger is a subtotal).
+
+    NOTE: this used to also dedup by (pdf, value) alone, on the theory that the same
+    fund could appear on multiple pages with different field layouts. Removed
+    2026-08-26: that pass scored candidates via _fund_specificity_score(), which prefers
+    investment_description over issuer_name whenever description is non-empty -- but for
+    some PDF table layouts investment_description is just a generic asset-type restatement
+    ("Mutual fund", "Collective trust fund"), not the real fund name, which lives in
+    issuer_name and was never scored. Two distinct, correctly-extracted funds that happened
+    to report the same dollar total on the same page (not actually cross-page duplicates)
+    got silently collapsed into one, with the survivor picked by comparing the lengths of
+    those generic labels -- e.g. Pfizer Savings Plan (ack_id
+    20251002084241NAL0000160195001) lost 'T. Rowe Price Small Cap Stock Fund' ($279,792,000)
+    to 'Jennison Small-Mid Cap Equity Fund' and 'SEI Diversified Bond Fund - High Yield'
+    ($13,967,000) to 'SEI Diversified Bond Fund - Opportunities Income', both same-page,
+    same-value coincidences, not duplicates. value_threshold kept as a param for signature
+    compatibility; no longer used.
     """
     from collections import defaultdict
 
-    def norm_val(v):
-        if v is None:
-            return None
-        s = str(v).replace('$', '').replace(',', '').strip()
-        if s in ('', '-', 'nan', 'None', '0', '0.0'):
-            return None
-        if s.startswith('(') and s.endswith(')'):
-            s = '-' + s[1:-1].strip()
-        try:
-            return round(float(s), 2)
-        except ValueError:
-            return None
-
-    groups = defaultdict(list)
-    for i, row in enumerate(rows):
-        pdf_key = row.get('pdf_stem', '') or row.get('pdf_name', '')
-        val = norm_val(row.get('current_value'))
-        if val and abs(val) >= value_threshold:
-            groups[(pdf_key, val)].append(i)
-
     indices_to_remove = set()
-    for (pdf_key, val), idxs in groups.items():
-        if len(idxs) < 2:
-            continue
-        scored = sorted([(_fund_specificity_score(rows[i]), i) for i in idxs], reverse=True)
-        best_score, best_idx = scored[0]
-        if best_score > 0:
-            for score, idx in scored[1:]:
-                if verbose:
-                    r = rows[idx]
-                    print(f"  CROSS-PAGE DEDUP: removing issuer={r.get('issuer_name')!r} "
-                          f"desc={r.get('investment_description')!r} val={val:,.0f}")
-                indices_to_remove.add(idx)
 
-    # Second pass: same (pdf, description) → keep smallest value (larger is a subtotal)
+    # Same (pdf, description) → keep smallest value (larger is a subtotal)
     desc_groups = defaultdict(list)
     for i, row in enumerate(rows):
-        if i in indices_to_remove:
-            continue
         pdf_key = row.get('pdf_stem', '') or row.get('pdf_name', '')
         desc = str(row.get('investment_description', '') or '').strip().lower()
         if desc:
