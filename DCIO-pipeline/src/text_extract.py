@@ -479,6 +479,12 @@ _TOTAL_CATEGORY_RE = re.compile(
     r'|stable\s+value\s+funds?'
     r'|money\s+market\s+funds?'
     r')'
+    # Grand-total lines often qualify the category with a trailing "(held at
+    # end of year)" / "held for investment at end of year" phrase before the
+    # value (e.g. Schedule H's "TOTAL ASSETS (HELD AT END OF YEAR)") -- allow
+    # it here so the category still matches instead of falling through and
+    # leaking the grand-total line into the data as a fake row.
+    r'(?:\s*\(?\s*held\s+(?:at|for\s+investment\s+at)\s+end\s+of\s+year\s*\)?)?'
     r'(?:\s*[:\-]?\s*[\d,$().-]+)?\s*$',
     re.IGNORECASE,
 )
@@ -1558,6 +1564,17 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
             'derivative': 'Derivative',
         }
         current_section_type = inherited_asset_type or ''
+        # Rows appended to `investments` with no asset_type resolved yet (no
+        # leading heading seen, no keyword match). Some layouts (e.g. American
+        # Cancer Society's 403(b) plan) never announce a section with a leading
+        # heading at all -- the only type signal is a TRAILING "Total <category>"
+        # line after the block. Hold these rows here until such a line resolves
+        # a type, then back-fill it onto all of them. Cleared on every section
+        # boundary (a new leading heading, or ANY trailing Total-row, resolved
+        # or not) so one group's rows can never leak into a later, unrelated
+        # group's backfill. Mirrors the same mechanism in the camelot
+        # table-based extraction loop above.
+        pending_untyped_rows: List[Dict] = []
 
         _footnote_re = re.compile(r'(?:\s*(?:\([A-Za-z0-9]{1,3}\)|\*+)\s*,?)+\s*$')
         # Rejoin a space-split leading number group into the value (e.g. "6 1,962,451" ->
@@ -1619,10 +1636,36 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
                     if not value_match:
                         # No value on this line — check if it is a section heading
                         line_lower_full = line.lower().strip()
-                        for key, val in SECTION_HEADING_MAP.items():
-                            if key in line_lower_full:
-                                current_section_type = val
-                                break
+                        # A trailing "Total <category>" subtotal whose amount
+                        # wraps to the NEXT line (e.g. "TOTAL MUTUAL FUNDS" /
+                        # "408,217,661" on separate lines) lands here too, since
+                        # this line itself has no value. Check that shape FIRST:
+                        # SECTION_HEADING_MAP's substring match below is a
+                        # LEADING-heading heuristic and would otherwise treat
+                        # "TOTAL MUTUAL FUNDS" as if "Mutual Funds" were being
+                        # announced going forward, discarding pending_untyped_rows
+                        # without ever backfilling them, and leaking the type
+                        # onto whatever unrelated row comes next instead.
+                        _is_trailing_total_heading = bool(re.match(
+                            r'^(?:total|subtotal|sub-total|grand\s+total)\b', line.strip(), re.IGNORECASE
+                        ))
+                        _vl_trailing_type = (
+                            _detect_section_heading_text(line.strip()) if _is_trailing_total_heading else None
+                        )
+                        if _vl_trailing_type:
+                            if pending_untyped_rows:
+                                for _pending_row in pending_untyped_rows:
+                                    _pending_row['asset_type'] = _vl_trailing_type
+                                print(f"    Back-filled asset_type '{_vl_trailing_type}' onto "
+                                      f"{len(pending_untyped_rows)} row(s) from trailing total "
+                                      f"'{line.strip()}' (text-based, value on next line, page {page_num})")
+                            pending_untyped_rows.clear()
+                        else:
+                            for key, val in SECTION_HEADING_MAP.items():
+                                if key in line_lower_full:
+                                    current_section_type = val
+                                    pending_untyped_rows.clear()
+                                    break
                         continue
                     current_value = value_match.group(1).replace(',', '')
                     issuer_description = line[:value_match.start()].strip()
@@ -1640,7 +1683,27 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
                 'total investments and notes receivable',
             )):
                 continue
-            if _is_total_summary_label(issuer_description):
+            # As in the camelot table-based loop above, _is_total_summary_label's
+            # fixed category enum doesn't cover every real "Total <category>"
+            # shape (e.g. "TOTAL FIXED ANNUITY CONTRACTS", "TOTAL VARIABLE
+            # ANNUITY ACCOUNTS" -- American Cancer Society's 403(b) plan). Widen
+            # the drop to also catch any literal "Total ..."/"Subtotal ..."/
+            # "Grand total ..." line whose text resolves to a real canonical
+            # asset type via _detect_section_heading_text, and use that
+            # resolved type to back-fill any rows collected in
+            # pending_untyped_rows since the last section boundary.
+            _is_trailing_total_line = bool(re.match(
+                r'^(?:total|subtotal|sub-total|grand\s+total)\b', issuer_description, re.IGNORECASE
+            ))
+            _trailing_type = _detect_section_heading_text(issuer_description) if _is_trailing_total_line else None
+            if _is_total_summary_label(issuer_description) or _trailing_type:
+                if _trailing_type and pending_untyped_rows:
+                    for _pending_row in pending_untyped_rows:
+                        _pending_row['asset_type'] = _trailing_type
+                    print(f"    Back-filled asset_type '{_trailing_type}' onto "
+                          f"{len(pending_untyped_rows)} row(s) from trailing total "
+                          f"'{issuer_description}' (text-based, page {page_num})")
+                pending_untyped_rows.clear()
                 continue
 
             # Skip section-label subtotal rows: lines whose pre-value text is
@@ -1657,6 +1720,7 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
                     if len(_before) <= 1 and len(_after) <= 3:
                         current_section_type = _val
                         _is_section_label = True
+                        pending_untyped_rows.clear()
                         break
             if _is_section_label:
                 continue
@@ -1734,7 +1798,7 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
                 continue
 
             row_num += 1
-            investments.append({
+            _investment_row = {
                 'issuer_name': issuer_name,
                 'investment_description': '',
                 'asset_type': asset_type,
@@ -1744,7 +1808,15 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
                 'units_or_shares': '',
                 'page_number': page_num,
                 'row_id': row_num,
-            })
+            }
+            investments.append(_investment_row)
+            # Still no type after all the above? Hold onto this row so a later
+            # trailing "Total <category>" line can back-fill it (see the
+            # _is_total_summary_label branch above). Holds a reference to the
+            # same dict just appended, so mutating it later still reaches
+            # this row.
+            if not _investment_row['asset_type']:
+                pending_untyped_rows.append(_investment_row)
 
         # Fallback: GM composite plan format (fund-code column A, values on next line)
         if not investments:
@@ -2449,6 +2521,15 @@ def extract_tables_and_map(
     previous_column_map: Dict[int, str] = {}
     previous_column_map_page: Optional[int] = None
     pending_single_cell_fragments: Dict[int, str] = {}
+    # Rows appended to mapped_pages with no asset_type resolved yet (no leading
+    # heading, no Type column value). Some layouts (e.g. American Cancer Society's
+    # 403(b) plan) never announce a section with a leading heading at all -- the
+    # only type signal is a TRAILING "Total <category>" line after the block. Hold
+    # these rows here until such a line resolves a type, then back-fill it onto all
+    # of them. Cleared on every section boundary (a new leading heading, or ANY
+    # trailing Total-row, resolved or not) so one group's rows can never leak into
+    # a later, unrelated group's backfill.
+    pending_untyped_rows: List[Dict] = []
 
     for table in tables:
         pending_single_cell_fragments.clear()
@@ -2621,6 +2702,7 @@ def extract_tables_and_map(
                 if matched:
                     current_section_type = matched
                     pending_single_cell_fragments.clear()
+                    pending_untyped_rows.clear()
                     print(f"    Section heading: '{matched}' (row {row_idx})")
                 elif re.fullmatch(r"\$?\s*\(?\s*[0-9][0-9,]*(?:\.[0-9]+)?\)?", candidate_text):
                     # A one-cell numeric row is usually a subtotal/duplicate value line,
@@ -2634,8 +2716,11 @@ def extract_tables_and_map(
                     # is how Camelot emits BASF's per-section subtotals -- see
                     # _VALUE_THEN_TOTAL_LABEL_RE above). Same treatment as the
                     # bare-numeric case: drop it, do not merge it onto the
-                    # next row's value cell.
+                    # next row's value cell. This is still a section boundary --
+                    # clear pending_untyped_rows so an unresolved label here can't
+                    # let an earlier group's rows get backfilled by a later one.
                     pending_single_cell_fragments.clear()
+                    pending_untyped_rows.clear()
                 else:
                     # Preserve split investment names that Camelot emits as a single-cell
                     # row. Merge them into the same column on the next value-bearing row.
@@ -2718,6 +2803,7 @@ def extract_tables_and_map(
                 if _val and _HEADING_PREFIX_RE.match(_val):
                     row_data[_field] = _HEADING_PREFIX_RE.sub('', _val).strip()
                     current_section_type = 'Mutual Fund'
+                    pending_untyped_rows.clear()
                     print(f"    Section heading prefix stripped from {_field} (row {row_idx})")
 
             value_scale = page_value_scale.get(page_num, 1)
@@ -2728,6 +2814,7 @@ def extract_tables_and_map(
             section_type = _detect_section_heading(row_data, fields)
             if section_type is not None:
                 current_section_type = section_type
+                pending_untyped_rows.clear()
                 print(f"    Section heading detected: '{section_type}' (row {row_idx})")
                 continue
 
@@ -2739,6 +2826,7 @@ def extract_tables_and_map(
             _issuer_or_desc = row_data.get('issuer_name') or row_data.get('investment_description') or ''
             if _HEADING_OFFERED_BY_RE.match(normalize_whitespace(str(_issuer_or_desc)).rstrip(':').strip()):
                 current_section_type = 'Mutual Fund'
+                pending_untyped_rows.clear()
                 print(f"    Section heading (offered-by, value row): 'Mutual Fund' (row {row_idx})")
                 continue
 
@@ -2746,7 +2834,37 @@ def extract_tables_and_map(
             # individual holdings -- drop them rather than let them leak into
             # the data as a fake row (Brown's "Total Fidelity" $270,880,520,
             # "Total Transamerica" $723,006).
-            if _is_total_summary_label(_issuer_or_desc) or _is_total_provider_label(_issuer_or_desc):
+            # _is_total_summary_label's category enum and _is_total_provider_label's
+            # provider-shape check both have deliberately narrow coverage (the
+            # latter excludes "annuity" outright, to avoid dropping a real fund
+            # named e.g. "XYZ Variable Annuity Fund"), so neither one recognizes
+            # a line like "TOTAL FIXED ANNUITY CONTRACTS" or "TOTAL VARIABLE
+            # ANNUITY ACCOUNTS" (American Cancer Society's 403(b) plan). Catch
+            # those here: any literal "Total ..."/"Subtotal ..."/"Grand total ..."
+            # line whose text (after stripping that prefix) resolves to a real
+            # canonical asset type via _detect_section_heading_text is safe to
+            # treat as a subtotal too -- a genuine fund name only starting with
+            # "Total" (e.g. "Total Return Fund") strips down to something that
+            # does NOT resolve to a canonical type, so it is left alone.
+            _is_trailing_total_line = bool(re.match(
+                r'^(?:total|subtotal|sub-total|grand\s+total)\b', _issuer_or_desc, re.IGNORECASE
+            ))
+            _trailing_type = _detect_section_heading_text(_issuer_or_desc) if _is_trailing_total_line else None
+            if _is_total_summary_label(_issuer_or_desc) or _is_total_provider_label(_issuer_or_desc) or _trailing_type:
+                # Some layouts (e.g. American Cancer Society's 403(b) plan)
+                # never announce a section with a leading heading -- the only
+                # type signal is this trailing "Total <category>" line. If it
+                # resolves to a real canonical type, back-fill it onto every
+                # row collected in pending_untyped_rows since the last section
+                # boundary. Either way (resolved or not), this line marks a
+                # boundary, so the pending list is cleared here.
+                if _trailing_type and pending_untyped_rows:
+                    for _pending_row in pending_untyped_rows:
+                        _pending_row['asset_type'] = _trailing_type
+                    print(f"    Back-filled asset_type '{_trailing_type}' onto "
+                          f"{len(pending_untyped_rows)} row(s) from trailing total "
+                          f"'{_issuer_or_desc}' (row {row_idx})")
+                pending_untyped_rows.clear()
                 print(f"    Subtotal row dropped: '{_issuer_or_desc}' (row {row_idx})")
                 continue
 
@@ -2765,6 +2883,14 @@ def extract_tables_and_map(
                     row_data['asset_type'] = table_section_asset_type
                 elif current_section_type:
                     row_data['asset_type'] = current_section_type
+
+            # Still no type after the forward-stamp? Hold onto this row so a
+            # later trailing "Total <category>" line can back-fill it (see
+            # the _is_total_summary_label/_is_total_provider_label branch
+            # above). Holds a reference to the same dict that's about to be
+            # appended below, so mutating it later still reaches this row.
+            if _is_blank_asset_type(row_data.get('asset_type', '')):
+                pending_untyped_rows.append(row_data)
 
             mapped_pages.setdefault(page_num, []).append(row_data)
 

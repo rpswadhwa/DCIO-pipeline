@@ -12,6 +12,7 @@ ASSET_TYPE_PATTERNS = [
     (r'Insurance\s+Company\s+General\s+Account\s+Contracts?',   'Insurance General Account'),
     (r'General\s+Account\s+Contracts?',                         'Insurance General Account'),
     (r'Group\s+Annuity\s+Contracts?',                           'Group Annuity Contract'),
+    (r'Fixed\s+Annuity\s+Contracts?',                           'Group Annuity Contract'),
     (r'CREF\s+Accounts?',                                       'Group Annuity Contract'),
     (r'Fully[\-\s]Benefit[\-\s]Responsive\s+Contracts?',       'Stable Value Fund'),
     (r'Non[\-\s]Benefit[\-\s]Responsive\s+Contracts?',         'Stable Value Fund'),
@@ -44,6 +45,11 @@ ASSET_TYPE_PATTERNS = [
     (r'Common\s+Collective\s+Trusts?',                          'Common/Collective Trust Fund'),
     (r'Collecti\w{0,3}e\s+Trusts?',                             'Common/Collective Trust Fund'),  # OCR-tolerant: "Collecti11e Trusts"
     (r'Pooled\s+Separate\s+(?:Investment\s+)?Accounts?',        'Separate Account'),
+    # bare "separate accounts" (no "pooled" qualifier) -- e.g. a trailing "Total separate
+    # accounts" subtotal line under a block of insurance-company variable-annuity
+    # sub-accounts (Navicent Health / Lincoln VIP funds). Must follow the "Pooled Separate
+    # Accounts" patterns above so those more specific labels still win when present.
+    (r'Separate\s+Accounts?',                                   'Separate Account'),
     (r'Pooled\s+Funds?',                                        'Commingled Fund'),
     (r'Separately\s+Managed\s+Accounts?',                       'Separately Managed Account'),
     (r'Self[\-\s]Directed\s+Brokerage\s+Accounts?',             'Self-Directed Brokerage Account'),
