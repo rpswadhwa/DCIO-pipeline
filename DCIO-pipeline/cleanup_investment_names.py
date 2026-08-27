@@ -18,13 +18,14 @@ except ImportError:
 
 _SHARES_OF_RE = re.compile(r"^[\d,]+(?:\.\d+)?\s+shares?\s+of\s+", re.IGNORECASE)
 # Strips trailing share counts like ", 5,770,653 shares" or "- 6,576,777" or "1,234,567"
+# or "; 264,734 shares" (semicolon separator, e.g. "Collective Trust Fund; 264,734 shares")
 # but NOT plain years like "2035" (no commas, no shares/units keyword).
 # Uses two alternatives:
-#   1. any number + explicit shares/units keyword (comma separator allowed)
-#   2. comma-formatted count with internal commas (optional keyword, comma separator allowed)
+#   1. any number + explicit shares/units keyword (comma/semicolon separator allowed)
+#   2. comma-formatted count with internal commas (optional keyword, comma/semicolon separator allowed)
 _LABEL_TRAILING_RE = re.compile(
-    r'[,\s\-]+\d[\d,]*\s+(?:shares?|units?)\s*$'
-    r'|[,\s\-]+\d{1,3}(?:,\d{3})+\.?\d*\s*(?:shares?|units?)?\s*$',
+    r'[,;\s\-]+\d[\d,]*\s+(?:shares?|units?)\s*$'
+    r'|[,;\s\-]+\d{1,3}(?:,\d{3})+\.?\d*\s*(?:shares?|units?)?\s*$',
     re.IGNORECASE,
 )
 
