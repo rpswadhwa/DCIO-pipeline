@@ -1481,7 +1481,18 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
         has_inherited_continuation_profile = bool(profile_family) and _looks_like_investment_continuation_page(
             text, profile_family
         )
-        if not has_schedule_marker and not has_inherited_continuation_profile:
+        # Oracle Corporation's 401(k) filing omits the "Schedule H, Line 4(i)"
+        # title on the schedule's own first page (it only says "Notes to
+        # Financial Statements", same as the narrative pages before it) --
+        # the standard schedule-marker regex above can't tell this page apart
+        # from a real notes page. Narrow, filer-specific exception rather than
+        # widening the general marker, since a bare "Notes to Financial
+        # Statements" heading is not on its own a reliable signal for any
+        # other filer.
+        is_oracle_untitled_schedule_page = (
+            'ORACLE' in text.upper() and 'NOTES TO FINANCIAL STATEMENTS' in text.upper()
+        )
+        if not has_schedule_marker and not has_inherited_continuation_profile and not is_oracle_untitled_schedule_page:
             return investments
         
         lines = text.split('\n')
