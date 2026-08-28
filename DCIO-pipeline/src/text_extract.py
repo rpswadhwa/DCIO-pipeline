@@ -1825,6 +1825,23 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
                         issuer_description = issuer_description[:_pos].strip().rstrip(',').strip()
                         break
 
+            # Some filers (e.g. plans reporting "N/A" instead of a share count for
+            # participant-directed investments -- no "shares"/"units" text for the
+            # check above to key off) put the category label at the FRONT of the
+            # identity-of-issue field on every row instead of as a section heading
+            # ("Registered Investment Company Nuveen International Equity Index
+            # N/A ..." -- the real fund name follows the label on the same row).
+            # Anchored to the start of the line so it only fires on this literal
+            # per-row layout and can't misfire on a fund name that merely mentions
+            # one of these phrases elsewhere in its text.
+            if not asset_type:
+                _ud_stripped = issuer_description.lstrip('*').strip().upper()
+                for _k, _v in asset_type_patterns.items():
+                    if _ud_stripped.startswith(_k):
+                        asset_type = _v
+                        issuer_description = issuer_description.lstrip('*').strip()[len(_k):].strip()
+                        break
+
             issuer_name = issuer_description.lstrip('*').rstrip('*').strip()
             if not issuer_name:
                 continue
