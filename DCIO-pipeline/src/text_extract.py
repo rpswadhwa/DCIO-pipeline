@@ -364,6 +364,25 @@ def _is_total_provider_label(text: str) -> bool:
     return True
 
 
+# Some filers put "Total"/"Subtotal" at the FRONT of a category subtotal line
+# ("Total Mutual Funds"), others put it at the END ("Mutual Funds Total" --
+# e.g. Lee Health System's Schedule H). Recognize both shapes so a trailing-
+# total line is still treated as a total/backfill trigger rather than leaking
+# into the data as a fake row (and, worse, leaving every real row above it
+# with no asset_type at all since the backfill never fires). Only used to
+# decide whether to ATTEMPT resolving a canonical type via
+# _detect_section_heading_text -- a line that merely happens to end in the
+# word "Total" but isn't a real category (e.g. "PIMCO Income Total") still
+# won't resolve there, so this stays safe to widen.
+def _is_total_line_shape(text: str) -> bool:
+    text = (text or '').strip()
+    if not text:
+        return False
+    if re.match(r'^(?:total|subtotal|sub-total|grand\s+total)\b', text, re.IGNORECASE):
+        return True
+    return bool(re.search(r'\b(?:total|subtotal|sub-total|grand\s+total)\s*$', text, re.IGNORECASE))
+
+
 def _detect_section_heading_text(text: str) -> Optional[str]:
     """Return canonical asset type when a text line is a label-only section heading."""
     text_clean = normalize_whitespace(text or "").rstrip(":").strip()
@@ -1646,9 +1665,7 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
                         # announced going forward, discarding pending_untyped_rows
                         # without ever backfilling them, and leaking the type
                         # onto whatever unrelated row comes next instead.
-                        _is_trailing_total_heading = bool(re.match(
-                            r'^(?:total|subtotal|sub-total|grand\s+total)\b', line.strip(), re.IGNORECASE
-                        ))
+                        _is_trailing_total_heading = _is_total_line_shape(line.strip())
                         _vl_trailing_type = (
                             _detect_section_heading_text(line.strip()) if _is_trailing_total_heading else None
                         )
@@ -1692,9 +1709,7 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
             # asset type via _detect_section_heading_text, and use that
             # resolved type to back-fill any rows collected in
             # pending_untyped_rows since the last section boundary.
-            _is_trailing_total_line = bool(re.match(
-                r'^(?:total|subtotal|sub-total|grand\s+total)\b', issuer_description, re.IGNORECASE
-            ))
+            _is_trailing_total_line = _is_total_line_shape(issuer_description)
             _trailing_type = _detect_section_heading_text(issuer_description) if _is_trailing_total_line else None
             if _is_total_summary_label(issuer_description) or _trailing_type:
                 if _trailing_type and pending_untyped_rows:
@@ -1752,6 +1767,12 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
                 'COLLECTIVE FUND': 'Commingled Fund',
                 'SELF-DIRECTED ACCOUNT': 'Self-Directed Brokerage Account',
                 'SELF DIRECTED ACCOUNT': 'Self-Directed Brokerage Account',
+                # Charles Schwab's own product name for its SDBA offering, seen both spelled out
+                # and abbreviated ("Retment") in filer text -- kept in sync with the same rule in
+                # src/asset_type_patterns.py's ROW_TYPE_PATTERNS (which the camelot table-based
+                # extraction path uses but this text-fallback path did not).
+                'PERSONAL CHOICE RETIREMENT ACCOUNT': 'Self-Directed Brokerage Account',
+                'PERSONAL CHOICE RETMENT ACCOUNT': 'Self-Directed Brokerage Account',
                 'GUARANTEED INTEREST ACCOUNT': 'Stable Value Fund',
                 'GUARANTEED INCOME ACCOUNT': 'Stable Value Fund',
                 'GUARANTEED INVESTMENT CONTRACT': 'Stable Value Fund',
@@ -2846,9 +2867,7 @@ def extract_tables_and_map(
             # treat as a subtotal too -- a genuine fund name only starting with
             # "Total" (e.g. "Total Return Fund") strips down to something that
             # does NOT resolve to a canonical type, so it is left alone.
-            _is_trailing_total_line = bool(re.match(
-                r'^(?:total|subtotal|sub-total|grand\s+total)\b', _issuer_or_desc, re.IGNORECASE
-            ))
+            _is_trailing_total_line = _is_total_line_shape(_issuer_or_desc)
             _trailing_type = _detect_section_heading_text(_issuer_or_desc) if _is_trailing_total_line else None
             if _is_total_summary_label(_issuer_or_desc) or _is_total_provider_label(_issuer_or_desc) or _trailing_type:
                 # Some layouts (e.g. American Cancer Society's 403(b) plan)
