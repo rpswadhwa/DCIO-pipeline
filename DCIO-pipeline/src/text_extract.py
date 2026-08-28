@@ -318,6 +318,14 @@ _HEADING_OFFERED_BY_RE = re.compile(
     re.IGNORECASE,
 )
 
+# Strips just the "<vehicle> offered by <provider>:" clause (through its
+# trailing colon) so any real fund name/value Camelot fused onto the same
+# row as this heading survives instead of being dropped with it.
+_HEADING_OFFERED_BY_STRIP_RE = re.compile(
+    r'^(?:mutual\s+funds?|registered\s+investment\s+compan(?:y|ies))\s+offered\s+by\s+[^:]*:\s*',
+    re.IGNORECASE,
+)
+
 # "Total <Provider>" subtotal rows (e.g. Brown University's "Total Fidelity",
 # "Total Transamerica") group holdings by distributor rather than by a known
 # ASSET_TYPE_PATTERNS category, so _TOTAL_CATEGORY_RE never matches them and
@@ -2872,12 +2880,27 @@ def extract_tables_and_map(
             # Fidelity: BrokerageLink ..." row), so _detect_section_heading's
             # value-free check above misses them. Catch them here by text
             # shape regardless of whether a value landed on the row.
-            _issuer_or_desc = row_data.get('issuer_name') or row_data.get('investment_description') or ''
+            _issuer_or_desc_field = 'issuer_name' if row_data.get('issuer_name') else 'investment_description'
+            _issuer_or_desc = row_data.get(_issuer_or_desc_field) or ''
             if _HEADING_OFFERED_BY_RE.match(normalize_whitespace(str(_issuer_or_desc)).rstrip(':').strip()):
                 current_section_type = 'Mutual Fund'
                 pending_untyped_rows.clear()
-                print(f"    Section heading (offered-by, value row): 'Mutual Fund' (row {row_idx})")
-                continue
+                # Camelot can fuse this heading directly onto the FIRST real data
+                # row of its section rather than emitting it as its own row (see
+                # Brown University's "Mutual funds offered by Fidelity:
+                # BrokerageLink Fidelity Fund" and "...Teachers Insurance and
+                # Annuity Association: John Hancock Funds III..." rows) -- in
+                # that shape the row also carries a real fund name and dollar
+                # value that would be silently lost by unconditionally dropping
+                # the row. Strip just the heading clause (through its trailing
+                # colon) and keep processing the row if anything real remains.
+                _stripped = _HEADING_OFFERED_BY_STRIP_RE.sub('', normalize_whitespace(str(_issuer_or_desc))).strip()
+                if _stripped:
+                    row_data[_issuer_or_desc_field] = _stripped
+                    print(f"    Section heading (offered-by) prefix stripped, kept fused data row (row {row_idx})")
+                else:
+                    print(f"    Section heading (offered-by, heading-only row): 'Mutual Fund' (row {row_idx})")
+                    continue
 
             # "Total <Provider>" / "Total <Category>" subtotal rows are not
             # individual holdings -- drop them rather than let them leak into
