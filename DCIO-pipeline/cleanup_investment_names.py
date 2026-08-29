@@ -28,14 +28,21 @@ _LABEL_TRAILING_RE = re.compile(
     r'|[,;\s\-]+\d{1,3}(?:,\d{3})+\.?\d*\s*(?:shares?|units?)?\s*$',
     re.IGNORECASE,
 )
+# Strips trailing "N/A" placeholder tokens left over from empty Collateral/Rate/Maturity-Date
+# columns bleeding into the description (e.g. "Mutual Fund N/A N/A"), so the label check below
+# still recognizes the row as a pure asset-type label instead of treating the N/A tokens as
+# fund-specific content.
+_NA_TRAILING_RE = re.compile(r'(?:\s*N/?A\b)+\s*$', re.IGNORECASE)
 
 
 def _is_asset_type_label(text: str) -> bool:
     """Return True if text is purely an asset type category label with no fund-specific content.
-    Strips trailing share counts first so "Mutual Fund - 6,576,777 shares" is also caught,
+    Strips trailing share counts and trailing "N/A" placeholder tokens first so
+    "Mutual Fund - 6,576,777 shares" and "Mutual Fund N/A N/A" are also caught,
     but preserves trailing years like "2035" so "Target Date Fund 2035" is NOT a pure label.
     """
     t = _LABEL_TRAILING_RE.sub('', (text or '').strip()).strip()
+    t = _NA_TRAILING_RE.sub('', t).strip()
     for pattern, _ in ASSET_TYPE_PATTERNS:
         if re.fullmatch(pattern, t, re.IGNORECASE):
             return True
