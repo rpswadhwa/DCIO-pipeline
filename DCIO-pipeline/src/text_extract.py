@@ -402,12 +402,19 @@ def _detect_section_heading_text(text: str) -> Optional[str]:
         return None
 
     text_stripped = _TOTAL_AFFIX_RE.sub("", text_clean).strip()
+    # Fullmatch, not search: this function is documented to detect "label-only"
+    # heading lines. A substring search here lets a short pattern (e.g. "Interest
+    # Bearing Cash") false-match inside an unrelated longer sentence, such as a
+    # parenthetical description line that merely mentions that phrase in passing
+    # (e.g. a Self-Directed Brokerage Account's own multi-line heading text
+    # "...MUTUAL FUNDS, INTEREST BEARING CASH, NONINTEREST-BEARING CASH AND
+    # OTHER LIABILITIES)"), incorrectly splitting a false new section area.
     for candidate in {text_clean, text_stripped}:
         for pattern, canonical in ASSET_TYPE_PATTERNS:
-            if re.search(pattern, candidate, re.IGNORECASE):
+            if re.fullmatch(pattern, candidate, re.IGNORECASE):
                 return canonical
         for pattern, canonical in _HEADING_ONLY_PATTERNS:
-            if re.search(pattern, candidate, re.IGNORECASE):
+            if re.fullmatch(pattern, candidate, re.IGNORECASE):
                 return canonical
     return None
 
@@ -2464,6 +2471,93 @@ def extract_tables_and_map(
 
     _plan_specific_column_shift = _detect_plan_specific_column_shift(pdf_path, supplemental_pages)
 
+    # Plan-specific value-column bootstrap, scoped by plan name (same
+    # rationale as the issuer-column-shift table above: the ack_id changes
+    # every filing year but this filer's PDF layout persists). On Nouryon
+    # Chemicals LLC's Schedule H, line 4i page, column (E)'s header text is
+    # corrupted in the source PDF -- it literally reads "18" instead of
+    # "Current Value" -- and the real header band sits above the area
+    # _find_section_table_areas scanned (its header_bottom regex doesn't
+    # recognize this filer's header wording), so Camelot never sees a header
+    # row at all. The "Fallback to row 0" path then scores a data row
+    # against header synonyms, nothing clears the 70-point threshold, and
+    # column_map ends up completely empty -- every row on the page loses
+    # all data. Text-based header matching can never recover this column
+    # since "18" has zero overlap with any current_value synonym, so this
+    # falls back to positional detection: the mostly-numeric column is
+    # current_value, the column with the most non-numeric text is
+    # issuer_name. Only engages when this plan is detected on a
+    # supplemental page AND header-text matching found neither column, so
+    # it can never override a table that already mapped correctly.
+    _PLAN_SPECIFIC_VALUE_COLUMN_BOOTSTRAP_BY_NAME = (
+        re.compile(r'NOURYON\s+CHEMICALS', re.IGNORECASE),
+    )
+
+    def _detect_plan_specific_value_bootstrap(pdf_path: str, pages: List[int]) -> bool:
+        try:
+            with pdfplumber.open(pdf_path) as _doc:
+                for p in pages:
+                    page_text = _doc.pages[p - 1].extract_text() or ''
+                    for name_re in _PLAN_SPECIFIC_VALUE_COLUMN_BOOTSTRAP_BY_NAME:
+                        if name_re.search(page_text):
+                            return True
+        except Exception:
+            return False
+        return False
+
+    _plan_specific_value_bootstrap = _detect_plan_specific_value_bootstrap(pdf_path, supplemental_pages)
+
+    def _bootstrap_missing_value_and_issuer_columns(enabled: bool, df, data_start_row: int, column_map: Dict[int, str]) -> Dict[int, str]:
+        if not enabled or df.shape[0] <= data_start_row:
+            return column_map
+        if 'current_value' in column_map.values() or 'issuer_name' in column_map.values():
+            return column_map
+        sample = df.iloc[data_start_row:]
+        numeric_pattern = r"\$?\s*\(?\s*[0-9][0-9,]*(?:\.[0-9]+)?\)?"
+
+        def _ratio(col_idx, matches_numeric):
+            cells = [normalize_whitespace(str(v)) for v in sample.iloc[:, col_idx].tolist()]
+            non_empty = [c for c in cells if c]
+            if not non_empty:
+                return 0.0, non_empty
+            is_numeric = [bool(re.fullmatch(numeric_pattern, c)) for c in non_empty]
+            matches = sum(is_numeric) if matches_numeric else sum(not m for m in is_numeric)
+            return matches / len(non_empty), non_empty
+
+        best_value_col, best_value_ratio = None, 0.0
+        for col_idx in range(df.shape[1] - 1, -1, -1):
+            ratio, _ = _ratio(col_idx, matches_numeric=True)
+            if ratio > best_value_ratio:
+                best_value_col, best_value_ratio = col_idx, ratio
+        if best_value_col is None or best_value_ratio < 0.5:
+            return column_map
+
+        # Restrict the issuer search to the rows where the value column is
+        # actually populated -- on this layout, pure asset-type-category
+        # label rows (e.g. "COMMON/COLLECTIVE TRUST") share the table with
+        # real data rows but land on alternating physical rows with an
+        # empty value cell, so counting non-empty text across ALL rows
+        # picks the category-label column instead of the true issuer
+        # column (which is blank on those same label rows).
+        value_cells = [normalize_whitespace(str(v)) for v in sample.iloc[:, best_value_col].tolist()]
+        data_row_mask = [bool(re.fullmatch(numeric_pattern, c)) for c in value_cells]
+        best_issuer_col, best_issuer_nonempty = None, 0
+        for col_idx in range(df.shape[1]):
+            if col_idx == best_value_col:
+                continue
+            cells = [normalize_whitespace(str(v)) for v in sample.iloc[:, col_idx].tolist()]
+            non_empty = sum(1 for c, is_data_row in zip(cells, data_row_mask) if is_data_row and c)
+            if non_empty > best_issuer_nonempty:
+                best_issuer_col, best_issuer_nonempty = col_idx, non_empty
+        if best_issuer_col is None or best_issuer_nonempty == 0:
+            return column_map
+
+        column_map = dict(column_map)
+        column_map[best_value_col] = 'current_value'
+        column_map[best_issuer_col] = 'issuer_name'
+        print(f"    Plan-specific bootstrap: mapped column {best_issuer_col} -> issuer_name, column {best_value_col} -> current_value (header text unrecoverable)")
+        return column_map
+
     def _verify_or_remap_value_column(df, data_start_row: int, column_map: Dict[int, str]) -> Dict[int, str]:
         """A reused column map assumes the same column layout as the table it
         was captured from. Camelot's stream flavor infers columns
@@ -2590,6 +2684,16 @@ def extract_tables_and_map(
 
     for table in tables:
         pending_single_cell_fragments.clear()
+        # Tracks whether a row-level section-heading label (e.g. "REGISTERED
+        # INVESTMENT COMPANY") has been seen within THIS table, as opposed to
+        # inherited from a previous table's running current_section_type.
+        # Reset per table so a fresh, more specific in-row signal can outrank
+        # this table's own coarse table_section_asset_type default (see the
+        # priority check below), without letting current_section_type's
+        # cross-table persistence (needed for headerless continuation pages)
+        # wrongly override a genuinely different table_section_asset_type on
+        # a later table that hasn't announced its own heading yet.
+        section_type_seen_in_table = False
         df = table.df
         if df.shape[0] < 2:
             continue
@@ -2722,6 +2826,7 @@ def extract_tables_and_map(
             _correct_maturing_value_description_column(header, column_map)
             _apply_plan_specific_column_overrides(_plan_specific_column_shift, column_map)
             column_map, desc_fallback_col = _verify_or_remap_description_column(df, data_start_row, column_map)
+            column_map = _bootstrap_missing_value_and_issuer_columns(_plan_specific_value_bootstrap, df, data_start_row, column_map)
 
             if column_map:
                 previous_column_map = dict(column_map)
@@ -2758,6 +2863,7 @@ def extract_tables_and_map(
                     matched = 'Mutual Fund'
                 if matched:
                     current_section_type = matched
+                    section_type_seen_in_table = True
                     pending_single_cell_fragments.clear()
                     pending_untyped_rows.clear()
                     print(f"    Section heading: '{matched}' (row {row_idx})")
@@ -2860,6 +2966,7 @@ def extract_tables_and_map(
                 if _val and _HEADING_PREFIX_RE.match(_val):
                     row_data[_field] = _HEADING_PREFIX_RE.sub('', _val).strip()
                     current_section_type = 'Mutual Fund'
+                    section_type_seen_in_table = True
                     pending_untyped_rows.clear()
                     print(f"    Section heading prefix stripped from {_field} (row {row_idx})")
 
@@ -2871,6 +2978,7 @@ def extract_tables_and_map(
             section_type = _detect_section_heading(row_data, fields)
             if section_type is not None:
                 current_section_type = section_type
+                section_type_seen_in_table = True
                 pending_untyped_rows.clear()
                 print(f"    Section heading detected: '{section_type}' (row {row_idx})")
                 continue
@@ -2884,6 +2992,7 @@ def extract_tables_and_map(
             _issuer_or_desc = row_data.get(_issuer_or_desc_field) or ''
             if _HEADING_OFFERED_BY_RE.match(normalize_whitespace(str(_issuer_or_desc)).rstrip(':').strip()):
                 current_section_type = 'Mutual Fund'
+                section_type_seen_in_table = True
                 pending_untyped_rows.clear()
                 # Camelot can fuse this heading directly onto the FIRST real data
                 # row of its section rather than emitting it as its own row (see
@@ -2949,7 +3058,21 @@ def extract_tables_and_map(
             # itself resolves to a real canonical type.
             _row_asset_type = row_data.get('asset_type', '')
             if _is_blank_asset_type(_row_asset_type) or not detect_asset_type_strict(_row_asset_type):
-                if table_section_asset_type:
+                # A row-level heading seen WITHIN this table (e.g. "REGISTERED
+                # INVESTMENT COMPANY" between individual fund rows) is more
+                # specific than this table's own table_section_asset_type default
+                # (set once for the whole Camelot-detected area, which can span
+                # multiple real asset-type sections when area-splitting only
+                # found the page's coarse headings -- see Nouryon Chemicals
+                # LLC's Schedule H, 4i page, where one merged "Mutual Fund" area
+                # actually contains Common/Collective Trust, Registered
+                # Investment Company, Managed Separate Account, and Interest
+                # Bearing Cash rows). Prefer it when present; otherwise fall
+                # back to table_section_asset_type as before (needed for
+                # continuation pages/tables with no heading of their own yet).
+                if section_type_seen_in_table and current_section_type:
+                    row_data['asset_type'] = current_section_type
+                elif table_section_asset_type:
                     row_data['asset_type'] = table_section_asset_type
                 elif current_section_type:
                     row_data['asset_type'] = current_section_type

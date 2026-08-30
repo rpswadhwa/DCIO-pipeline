@@ -52,6 +52,11 @@ ASSET_TYPE_PATTERNS = [
     (r'Separate\s+Accounts?',                                   'Separate Account'),
     (r'Pooled\s+Funds?',                                        'Commingled Fund'),
     (r'Separately\s+Managed\s+Accounts?',                       'Separately Managed Account'),
+    # Reversed word order from "Separately Managed Account" above (e.g. Nouryon
+    # Chemicals LLC's Schedule H, 4i page uses "MANAGED SEPARATE ACCOUNT" as its
+    # section heading for a Galliard stable value holding whose dollar amount
+    # matches the plan's certified amt_pooled_sep_acct bucket exactly).
+    (r'Managed\s+Separate\s+Accounts?',                         'Separate Account'),
     (r'Self[\-\s]Directed\s+Brokerage\s+Accounts?',             'Self-Directed Brokerage Account'),
     (r'Commingled\s+Funds?',                                    'Commingled Fund'),
     (r'Commingled\s+Pools?',                                    'Commingled Fund'),
@@ -62,6 +67,15 @@ ASSET_TYPE_PATTERNS = [
     (r'Collective\s+Funds?',                                    'Commingled Fund'),
     (r'Stable\s+Value\s+Funds?',                                'Stable Value Fund'),
     (r'Money\s+Market\s+Funds?',                                'Money Market Fund'),
+    # No canonical pattern here previously mapped this DOL Schedule H, 4i
+    # heading at all -- it silently fell through the one-cell heading
+    # detector as an unrecognized fragment (see Nouryon Chemicals LLC's
+    # page, where "INTEREST BEARING CASH" preceded a Vanguard money-market
+    # holding whose dollar amount is close to the plan's certified
+    # amt_interest_cash bucket). 'Cash' matches the canonical name already
+    # used for this same heading text in section_typing.py / text_extract.py's
+    # _SCHEDULE_OF_TITLE_TYPE_MAP.
+    (r'Interest[\-\s]*Bearing\s+Cash',                          'Cash'),
     (r'\bMMRK\b',                                                'Money Market Fund'),
     (r'Variable\s+Annuit(?:y|ies)(?:\s+(?:Contracts?|Accounts?))?', 'Variable Annuity Contract'),
     (r'Registered\s+Investment\s+Compan(?:y|ies)',              'Mutual Fund'),
