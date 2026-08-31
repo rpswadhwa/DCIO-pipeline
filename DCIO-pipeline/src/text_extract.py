@@ -1561,6 +1561,7 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
         # Keys are matched both exactly and as substrings of the line
         SECTION_HEADING_MAP = {
             'mutual fund': 'Mutual Fund',
+            'mutual and exchange-traded fund': 'Mutual Fund',
             'registered investment compan': 'Mutual Fund',
             'registered investment fund': 'Mutual Fund',
             'variable annuity': 'Variable Annuity Contract',
@@ -1634,6 +1635,16 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
                 return joined if re.fullmatch(r'\d{1,3}(?:,\d{3})+', joined) else m.group(0)
             return _split_value_re.sub(_repl, _text)
 
+        # Some filers print two trailing dollar columns per row -- "Fair Value"
+        # then "Cost" -- reversed from the IRS's standard Cost/Current-Value
+        # order that the trailing-number logic below otherwise assumes (last
+        # number on the line = current value). Detected via this filer's own
+        # header wording ("... Value Cost"); only fires on lines that actually
+        # have two distinct trailing numbers, so single-value lines and
+        # standard-order filers are unaffected.
+        _value_before_cost = bool(re.search(r'\bvalue\s+cost\b', text, re.IGNORECASE))
+        _dual_trailing_pattern = re.compile(r'\$?\s*([\d,]+)\s+\$?\s*([\d,]+)\s*$')
+
         row_num = 0
         for i in range(data_start_idx, len(lines)):
             line = lines[i].strip()
@@ -1659,14 +1670,20 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
             # put the footnote on the fund name instead of on the value. Strip all
             # asterisks and take the line's TRAILING number instead, regardless of
             # where any asterisk sat.
-            if '*' in line:
+            dual_match = _dual_trailing_pattern.search(line) if _value_before_cost else None
+            if dual_match:
+                current_value = dual_match.group(1).replace(',', '')
+                issuer_description = line[:dual_match.start()].strip()
+            elif '*' in line:
                 stripped = _asterisk_re.sub(' ', line)
                 value_match = trailing_value_pattern.search(stripped)
             else:
                 stripped = line
                 value_match = None
 
-            if value_match:
+            if dual_match:
+                pass
+            elif value_match:
                 current_value = value_match.group(1).replace(',', '')
                 issuer_description = stripped[:value_match.start()].strip()
             else:
