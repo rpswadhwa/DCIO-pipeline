@@ -712,6 +712,47 @@ def find_attachment_pages(
 
     return attachment_pages
 
+# Kelley Drye & Warren LLP Retirement Savings Plan (ack_id
+# 20251015111048NAL0002192867001) embeds its Schedule H, Line 4i table with
+# characters flagged upright=False whose transform matrices are actually
+# near-identity (only ~1e-8/1e-9 floating-point noise off the diagonal, not
+# real rotation/skew). pdfplumber's extract_text() mis-groups these chars
+# into garbled, unreadable lines. Scoped to this one filing only -- other
+# filers are unaffected and this has not been checked for regressions
+# elsewhere.
+_GARBLED_UPRIGHT_ACK_IDS = {"20251015111048NAL0002192867001"}
+
+
+def _pdf_stem_from_path(pdf_path: str) -> str:
+    return pdf_path.replace("\\", "/").split("/")[-1].rsplit(".", 1)[0]
+
+
+def _extract_text_robust(page) -> str:
+    """
+    Fallback to a page's raw text when pdfplumber's extract_text() garbles it
+    due to chars incorrectly flagged upright=False (see
+    _GARBLED_UPRIGHT_ACK_IDS above). Groups chars by rounded top position and
+    sorts each line by x0, inserting a space wherever the x-gap between
+    consecutive chars suggests a word boundary.
+    """
+    rows: Dict[int, list] = {}
+    for c in page.chars:
+        rows.setdefault(round(c["top"]), []).append(c)
+
+    out_lines = []
+    for top in sorted(rows.keys()):
+        row_chars = sorted(rows[top], key=lambda c: c["x0"])
+        parts = []
+        prev_x1 = None
+        for c in row_chars:
+            if prev_x1 is not None and c["x0"] - prev_x1 > 2.0:
+                parts.append(" ")
+            parts.append(c["text"])
+            prev_x1 = c["x1"]
+        out_lines.append("".join(parts))
+    return "\n".join(out_lines)
+
+
 def classify_pages_text(pdf_path: str, keywords_yml: str) -> List[Dict]:
     cfg = load_yaml(keywords_yml)
     keywords = [k.upper() for k in cfg.get("supplemental_schedule_keywords", [])]
@@ -731,10 +772,12 @@ def classify_pages_text(pdf_path: str, keywords_yml: str) -> List[Dict]:
     identity_re = re.compile(r'identity\s+of\s+issue|borrower,?\s+lessor', re.IGNORECASE)
     description_re = re.compile(r'description\s+of\s+investments?', re.IGNORECASE)
 
+    use_robust_extraction = _pdf_stem_from_path(pdf_path) in _GARBLED_UPRIGHT_ACK_IDS
+
     pages = []
     with pdfplumber.open(pdf_path) as pdf:
         for i, page in enumerate(pdf.pages, start=1):
-            text = page.extract_text() or ""
+            text = _extract_text_robust(page) if use_robust_extraction else (page.extract_text() or "")
             lines = [normalize_whitespace(l) for l in text.splitlines() if l.strip()]
             header_lines = lines[:max_lines]
             header_text = " ".join(header_lines).upper()
@@ -816,6 +859,20 @@ def classify_pages_text(pdf_path: str, keywords_yml: str) -> List[Dict]:
                 p["is_supplemental"] = 1
             else:
                 in_run = False
+
+    # Kelley Drye & Warren LLP Retirement Savings Plan (ack_id
+    # 20251015111048NAL0002192867001) has page 16 as a byte-for-byte duplicate
+    # of page 15's Schedule H, Line 4i table (confirmed: identical char stream,
+    # same positions and text). Without this override, both pages would end
+    # up supplemental (page 16 would also re-qualify via the continuation-run
+    # money-line check above, since it's literally the same dense table) and
+    # the pipeline would double-count every holding. Applied after the
+    # continuation run so it can't be re-flipped back to 1. Scoped to this
+    # one filing/page only.
+    if _pdf_stem_from_path(pdf_path) in _GARBLED_UPRIGHT_ACK_IDS:
+        for p in pages:
+            if p["page_number"] == 16:
+                p["is_supplemental"] = 0
 
     for p in pages:
         del p["_neg_hits"]
@@ -1514,8 +1571,12 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
             return investments
         
         page = pdf.pages[page_num - 1]
-        text = page.extract_text() or ""
-        
+        text = (
+            _extract_text_robust(page)
+            if _pdf_stem_from_path(pdf_path) in _GARBLED_UPRIGHT_ACK_IDS
+            else (page.extract_text() or "")
+        )
+
         # Check if this is a Schedule H Line 4(i) investment page or a
         # headerless continuation of one.
         has_schedule_marker = bool(re.search(
