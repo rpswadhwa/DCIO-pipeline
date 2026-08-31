@@ -741,6 +741,7 @@ def classify_pages_text(pdf_path: str, keywords_yml: str) -> List[Dict]:
             hits = sum(1 for k in keywords if k in header_text)
             neg_hits = sum(1 for k in negatives if k in header_text)
             money_line_count = sum(1 for l in lines if money_token_re.search(l))
+            money_line_density = (money_line_count / len(lines)) if lines else 0.0
             has_ric_schedule = (
                 bool(ric_re.search(header_text))
                 and bool(identity_re.search(header_text))
@@ -748,15 +749,46 @@ def classify_pages_text(pdf_path: str, keywords_yml: str) -> List[Dict]:
                 and "CURRENT" in header_text
                 and "VALUE" in header_text
             )
+            # Some filers print a routine citation like "(See Independent Auditors'
+            # Report)" directly in the real schedule's own header, which trips
+            # negative_keywords entries meant to reject the auditor's narrative
+            # opinion pages (e.g. "INDEPENDENT AUDITOR") and wrongly zeroes out the
+            # genuine Schedule H, Line 4i page (seen on Wilbur-Ellis 401(k) Plan).
+            # A negative-keyword hit shouldn't veto a page that also carries the
+            # actual schedule's column structure -- the identity-of-issue column
+            # header plus a current-value column -- since that combination is
+            # specific to the real asset table, not narrative auditor prose.
+            looks_like_schedule_page = (
+                bool(identity_re.search(header_text))
+                and "CURRENT" in header_text
+                and "VALUE" in header_text
+            )
+            # A page that matches a schedule keyword only because it's narrating/
+            # citing the schedule in prose (e.g. an auditor's "Other Matter --
+            # Supplemental Schedules" boilerplate paragraph) shouldn't be able to
+            # kick off the continuation run below and sweep in the real narrative
+            # pages that follow it (seen on Wilbur-Ellis: the auditor's own
+            # sign-off paragraph pulled in 13 pages of "Notes to the Financial
+            # Statements" as a false continuation). Genuine schedule pages are
+            # dense with dollar-value-shaped lines; prose pages that merely
+            # mention a schedule are not, even though they can contain plenty of
+            # scattered dollar figures/dates/percentages of their own.
+            MIN_START_DENSITY = 0.4
+            is_narrative_keyword_match = (
+                not has_ric_schedule and not looks_like_schedule_page and money_line_density < MIN_START_DENSITY
+            )
             pages.append(
                 {
                     "pdf": pdf_path,
                     "pdf_stem": pdf_path.split("/")[-1].rsplit(".", 1)[0],
                     "page_number": i,
                     "header_text": header_text,
-                    "is_supplemental": 1 if (hits >= min_hits or has_ric_schedule) and neg_hits == 0 else 0,
+                    "is_supplemental": 1
+                    if (hits >= min_hits or has_ric_schedule) and (neg_hits == 0 or looks_like_schedule_page)
+                    else 0,
                     "_neg_hits": neg_hits,
                     "_money_line_count": money_line_count,
+                    "_is_narrative_keyword_match": is_narrative_keyword_match,
                 }
             )
 
@@ -775,7 +807,7 @@ def classify_pages_text(pdf_path: str, keywords_yml: str) -> List[Dict]:
     in_run = False
     for p in pages:
         if p["is_supplemental"] == 1:
-            in_run = True
+            in_run = not p["_is_narrative_keyword_match"]
             continue
         if in_run:
             if p["_neg_hits"] > 0:
@@ -788,6 +820,7 @@ def classify_pages_text(pdf_path: str, keywords_yml: str) -> List[Dict]:
     for p in pages:
         del p["_neg_hits"]
         del p["_money_line_count"]
+        del p["_is_narrative_keyword_match"]
 
     return pages
 
