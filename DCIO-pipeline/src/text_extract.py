@@ -31,7 +31,12 @@ def _page_values_are_in_thousands(text: str) -> bool:
     """Return True when page text declares dollar amounts in thousands."""
     return bool(re.search(
         r'\b(?:in\s+thousands|amounts?\s+(?:are\s+)?in\s+thousands|'
-        r'dollars?\s+in\s+thousands|thousands\s+of\s+dollars|\$\s*000s?)\b',
+        r'dollars?\s+in\s+thousands|thousands\s+of\s+dollars|\$\s*000s?|'
+        # Some filers use "(amounts in 000's)" instead of the word "thousands";
+        # the apostrophe often extracts as a stray/garbled character (curly
+        # quote, PDF font mojibake) rather than a plain ' , so match any
+        # short run of non-word characters between "000" and the trailing "s".
+        r'\bin\s+000\W{0,2}s\b)\b',
         text or '',
         re.IGNORECASE,
     ))
