@@ -29,7 +29,7 @@ _TOTAL_AFFIX_RE = re.compile(
 
 def _page_values_are_in_thousands(text: str) -> bool:
     """Return True when page text declares dollar amounts in thousands."""
-    return bool(re.search(
+    if re.search(
         r'\b(?:in\s+thousands|amounts?\s+(?:are\s+)?in\s+thousands|'
         r'dollars?\s+in\s+thousands|thousands\s+of\s+dollars|\$\s*000s?|'
         # Some filers use "(amounts in 000's)" instead of the word "thousands";
@@ -39,7 +39,13 @@ def _page_values_are_in_thousands(text: str) -> bool:
         r'\bin\s+000\W{0,2}s\b)\b',
         text or '',
         re.IGNORECASE,
-    ))
+    ):
+        return True
+    # Some filers (e.g. ALLETE) print a bare standalone "Thousands" label as its
+    # own header line instead of an "in thousands" phrase. Anchored to a whole
+    # line (not just a substring) so it doesn't fire on unrelated prose that
+    # happens to contain the word "thousands" (e.g. "thousands of participants").
+    return bool(re.search(r'(?m)^\s*thousands\s*$', text or '', re.IGNORECASE))
 
 
 def _page_values_are_in_millions(text: str) -> bool:

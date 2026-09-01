@@ -96,6 +96,15 @@ _SHARE_CLASS_STRONG_RE = _re.compile(
     _re.IGNORECASE,
 )
 
+# Some Schedule H, 4i tables put the asset-type category (not the fund name) in the
+# "Description of Investment" column, followed only by a share/unit count bled in from
+# an adjacent column, e.g. "Mutual Fund - 738 Shares" or "Pooled Separate Account - 783".
+# That is a near-zero-information placeholder, not a name -- strip the trailing count so
+# it can be checked against _GENERIC_CATEGORIES like any other bare category label.
+_TRAILING_COUNT_RE = _re.compile(
+    r"[-–]\s*[\d,]+(?:\.\d+)?\s*(?:shares?|units?)?\s*$", _re.IGNORECASE,
+)
+
 def _score_as_fund_name(text):
     if not text or not text.strip():
         return -999
@@ -109,6 +118,11 @@ def _score_as_fund_name(text):
     for cat in _GENERIC_CATEGORIES:
         if cat.replace(" ", "") == t_nospace:
             return -50
+    # Same penalty when the category label has a share/unit count tacked on
+    # ("mutual fund - 738 shares" -> "mutual fund").
+    _decounted = _TRAILING_COUNT_RE.sub("", t_collapsed).strip()
+    if _decounted and _decounted != t_collapsed and _decounted in _GENERIC_CATEGORIES:
+        return -50
     words = set(_re.findall(r"\w+", t))
     score = 0
     score += len(words & _FUND_KEYWORDS) * 3
