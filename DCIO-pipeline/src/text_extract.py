@@ -1715,6 +1715,19 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
         # group's backfill. Mirrors the same mechanism in the camelot
         # table-based extraction loop above.
         pending_untyped_rows: List[Dict] = []
+        # A fund's own name+description line with NO trailing value (e.g.
+        # "Dodge & Cox Stock X Registered investment company", value wraps to
+        # a later, separate line) is otherwise indistinguishable from a bare
+        # category heading like "Mutual Funds:" once it falls into the
+        # no-value branch below. Stash the name text here so the next line
+        # that resolves to a value with no name of its own can reclaim it,
+        # instead of losing it to the section-heading match. Mirrors
+        # `pending_single_cell_fragments` in the camelot table-based loop
+        # above, which solves the identical problem for single-cell table
+        # rows. Cleared on every section boundary alongside
+        # pending_untyped_rows so a stale name can never leak onto an
+        # unrelated later row.
+        pending_issuer_name: str = ""
 
         _footnote_re = re.compile(r'(?:\s*(?:\([A-Za-z0-9]{1,3}\)|\*+)\s*,?)+\s*$')
         # Rejoin a space-split leading number group into the value (e.g. "6 1,962,451" ->
@@ -1814,15 +1827,55 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
                                       f"{len(pending_untyped_rows)} row(s) from trailing total "
                                       f"'{line.strip()}' (text-based, value on next line, page {page_num})")
                             pending_untyped_rows.clear()
+                            pending_issuer_name = ""
                         else:
                             for key, val in SECTION_HEADING_MAP.items():
-                                if key in line_lower_full:
+                                if key not in line_lower_full:
+                                    continue
+                                _idx = line_lower_full.index(key)
+                                _before = line_lower_full[:_idx].strip(' *')
+                                # No length check on what follows the matched key --
+                                # a bare heading can carry innocuous trailing words
+                                # (e.g. "Registered Investment Companies Shares")
+                                # and must still match unconditionally, exactly as
+                                # the original code did. Only _before distinguishes
+                                # a real bare heading from a fund's own name+
+                                # description line.
+                                if len(_before) <= 1:
+                                    # Bare category heading (e.g. "Mutual Funds:") --
+                                    # unchanged existing behavior.
                                     current_section_type = val
                                     pending_untyped_rows.clear()
-                                    break
+                                    pending_issuer_name = ""
+                                else:
+                                    # Real fund-name text precedes the description
+                                    # phrase (e.g. "Dodge & Cox Stock X Registered
+                                    # investment company") -- this filer wraps the
+                                    # row's value onto a LATER, separate line
+                                    # instead of trailing it on this one. Stash the
+                                    # name instead of discarding it as a false
+                                    # section-heading match.
+                                    pending_issuer_name = line[:_idx].strip(' *')
+                                    current_section_type = val
+                                break
                         continue
                     current_value = value_match.group(1).replace(',', '')
                     issuer_description = line[:value_match.start()].strip()
+
+            if pending_issuer_name:
+                if not issuer_description.strip():
+                    # This line is a bare value with no name of its own --
+                    # reclaim the name stashed from the preceding name+
+                    # description line (e.g. "$ 461,376,276" following
+                    # "Dodge & Cox Stock X Registered investment company").
+                    issuer_description = pending_issuer_name
+                else:
+                    # This value line already carries its own text, so the
+                    # pending fragment wasn't actually followed by a bare
+                    # value line as expected. Drop it rather than risk it
+                    # leaking onto a later, unrelated row.
+                    pass
+                pending_issuer_name = ""
 
             if page_scale_factor != 1:
                 current_value = _scale_currency_string(current_value, page_scale_factor)
