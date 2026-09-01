@@ -1750,6 +1750,15 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
         # have two distinct trailing numbers, so single-value lines and
         # standard-order filers are unaffected.
         _value_before_cost = bool(re.search(r'\bvalue\s+cost\b', text, re.IGNORECASE))
+        # Same shape of bug, different column: some filers add a supplemental
+        # "Shares Held" column AFTER the standard Current Value column (e.g.
+        # "... CREF Stock R2  33,385,095  36,632" = value then share count).
+        # Header wording wraps unpredictably across the fixed-width columns
+        # (pdfplumber often emits "...Current Shares\n...value value held"),
+        # so match loosely across the gap rather than anchoring on word order.
+        # Same guard as _value_before_cost: only changes behavior on lines that
+        # actually have two distinct trailing numbers.
+        _value_before_shares = bool(re.search(r'shares\b[\s\S]{0,120}\bheld\b', text, re.IGNORECASE))
         _dual_trailing_pattern = re.compile(r'\$?\s*([\d,]+)\s+\$?\s*([\d,]+)\s*$')
 
         row_num = 0
@@ -1777,7 +1786,7 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
             # put the footnote on the fund name instead of on the value. Strip all
             # asterisks and take the line's TRAILING number instead, regardless of
             # where any asterisk sat.
-            dual_match = _dual_trailing_pattern.search(line) if _value_before_cost else None
+            dual_match = _dual_trailing_pattern.search(line) if (_value_before_cost or _value_before_shares) else None
             if dual_match:
                 current_value = dual_match.group(1).replace(',', '')
                 issuer_description = line[:dual_match.start()].strip()
@@ -2584,7 +2593,12 @@ def extract_tables_and_map(
         for idx, h in enumerate(header):
             if idx in current_value_cols and len(current_value_cols) == 1:
                 continue
-            if re.search(r'(?:collateral.*)?par.*matur(?:ing|ity)\s+value', h, re.IGNORECASE):
+            # Some filers' fonts extract with a stray space inside "maturity"
+            # (e.g. "m aturity value") -- normalize it away before matching so
+            # this guard still recognizes the boilerplate description-column
+            # header instead of leaving it mismapped to current_value.
+            h_norm = re.sub(r'\bm\s+aturity\b', 'maturity', h, flags=re.IGNORECASE)
+            if re.search(r'(?:collateral.*)?par.*matur(?:ing|ity)\s+value', h_norm, re.IGNORECASE):
                 column_map[idx] = 'investment_description'
 
     # Plan-specific column-mapping fix, scoped by plan name (not ack_id, since the
@@ -2601,6 +2615,8 @@ def extract_tables_and_map(
     # plan's column_map is untouched.
     _PLAN_SPECIFIC_ISSUER_COLUMN_SHIFT_BY_NAME = {
         re.compile(r'SAINT\s+LOUIS\s+UNIVERSITY\s+403\(B\)\s+ANNUITY\s+PLAN', re.IGNORECASE): -1,
+        # Same filer/vendor, same layout quirk, different plan at the same university.
+        re.compile(r'SAINT\s+LOUIS\s+UNIVERSITY\s+RETIREMENT\s+PLAN', re.IGNORECASE): -1,
     }
 
     def _detect_plan_specific_column_shift(pdf_path: str, pages: List[int]) -> int:
@@ -3340,13 +3356,22 @@ def extract_tables_and_map(
     
     # Process TEXT-EXTRACTED pages WITHOUT DataFrame operations (already clean)
     for page_num, rows in text_extracted_pages.items():
-        # Text-extracted data is already properly formatted, use as-is
+        # Names/descriptions are already properly formatted, but asset_type still needs
+        # the same per-row override the table path gets below (a row's own explicit
+        # vehicle-type declaration, e.g. "Registered Investment Company", must win over
+        # a wrongly-propagated section type) -- pages with no standalone section-heading
+        # line (type stated inline per row instead) never get typed correctly otherwise.
+        cleaned_text_rows = []
+        for row in rows:
+            parsed = parse_investment_row(row)
+            row['asset_type'] = parsed['asset_type']
+            cleaned_text_rows.append(row)
         result.append(
             {
                 "pdf": pdf_path,
                 "pdf_stem": pdf_path.split("/")[-1].rsplit(".", 1)[0],
                 "page_number": page_num,
-                "mapped_rows": rows,  # Use directly without processing
+                "mapped_rows": cleaned_text_rows,
                 "ocr_cells": [],
                 "normalized_path": pdf_path,
             }
