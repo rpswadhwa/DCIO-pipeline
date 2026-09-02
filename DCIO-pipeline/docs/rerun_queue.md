@@ -474,6 +474,22 @@ Do not run these prod reloads without explicit go-ahead — add here, then wait.
   current_value figures for this page (Mutual Fund, Collective Fund,
   Employer Stock) correct from 1000x-understated to their true values.
 
+## Citadel Retirement Savings Plan
+- ack_id: `20250717153557NAL0000980354001`
+- Bug: **not a code bug — suspected OCR/scanned-page issue.** Schedule H,
+  Line 4i (PDF page 16) lists ~33 real holdings (American Funds target-date
+  series, several Fidelity/AS/Baron/Cohen & Steers registered funds,
+  self-directed brokerage, participant loans), but a cached local-extraction
+  baseline for this PDF only produced 3 total rows. Page renders/looks
+  normal on manual open, consistent with a scanned or image-heavy page that
+  the current text/camelot extraction path can't read — the pipeline has no
+  OCR fallback build yet.
+- Fix status: N/A — blocked on the OCR build, which does not exist yet.
+  No code investigation or fix attempted for this ack_id.
+- Rerun status: **not applicable / do not rerun.** Queued here as notes
+  only. Revisit once an OCR-capable extraction path is built, then rerun
+  scoped to this ack_id.
+
 ---
 
 Template for a new entry:
