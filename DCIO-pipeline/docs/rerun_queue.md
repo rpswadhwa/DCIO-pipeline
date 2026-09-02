@@ -19,6 +19,27 @@ Do not run these prod reloads without explicit go-ahead — add here, then wait.
   isolated scratch pipeline run (both funds recovered, $293,759,000 gap closed).
 - Rerun status: **not yet run** — user said "Hold off" on the prod reload.
 
+## Freeman 401(k) Plan
+- ack_id: `20251015134100NAL0002505795001`
+- Issue: stale prod data, not a current-code bug. `plan_holdings_staging` has
+  all 33 rows (Vanguard, Fidelity index/target-date funds, MFS, Causeway,
+  Allspring, PIMCO) incorrectly stamped `asset_type = 'self-directed
+  brokerage account'`, except the money market row — looks like a type value
+  bled across the whole page from an old extraction run. Also one mangled
+  row name from that same stale run: `"325 to 850 generally due through
+  2030"` (a garbled fragment of the participant-loan interest-rate range).
+- Verified via local trace against current code (`freeman_trace.py`,
+  2026-09-01): fresh extraction on the PDF produces 33 clean rows matching
+  the real holdings, with `asset_type` correctly **blank** for most rows
+  (the PDF's Schedule H table doesn't label most funds with a type at all —
+  only Putnam Stable Value, the two Self-Directed Brokerage lines, and the
+  Treasury Money Market fund carry an explicit type in the source). No
+  under-extraction, no mistyping, in current code.
+- Fix status: N/A — no code fix needed, current code is already correct for
+  this plan.
+- Rerun status: **not yet run** — queue for a data refresh once reruns are
+  authorized (refresh only, no deploy required first).
+
 ## Pending sponsor (undercapture_47 tracker row 24)
 - ack_id: `20250924113851NAL0002990851001`
 - Bug: `extract_text_based_investments()` (`src/text_extract.py`) matched the
