@@ -162,8 +162,8 @@ aws ssm send-command \
   - rapidfuzz
   - pyyaml
   - boto3
-  - paddleocr
-  - opencv-python
+  - opencv-python-headless
+  - pytesseract (requires the `tesseract` system binary — see below)
 
 ## File Structure on EC2
 ```
