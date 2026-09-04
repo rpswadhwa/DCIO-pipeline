@@ -65,8 +65,8 @@ _KNOWN_MANAGERS = frozenset({
 })
 
 _SHARE_CLASS_RE = _re.compile(
-    r"(class\s+[a-z]|institutional|investor|admiral|signal|"
-    r"premium|select|premier|r[\s-]?\d+(?=\s|$)|i\s*shares?)",
+    r"\b(class\s+[a-z]|institutional|investor|admiral|signal|"
+    r"premium|select|premier|r[\s-]?\d+(?=\s|$)|i\s*shares?)\b",
     _re.IGNORECASE,
 )
 
@@ -91,9 +91,18 @@ _GENERIC_CATEGORIES = frozenset({
 })
 
 _SHARE_CLASS_STRONG_RE = _re.compile(
-    r"(r[\s-]?[1-6](?=\s|$)|institutional(?:\s+(?:plus|shares?))?|investor\s+shares?|"
-    r"admiral\s+shares?|signal\s+shares?|class\s+[a-z]|i\s*shares?|etf)",
+    r"\b(r[\s-]?[1-6](?=\s|$)|institutional(?:\s+(?:plus|shares?))?|investor\s+shares?|"
+    r"admiral\s+shares?|signal\s+shares?|class\s+[a-z]|i\s*shares?|etf)\b",
     _re.IGNORECASE,
+)
+
+# Some Schedule H, 4i tables put the asset-type category (not the fund name) in the
+# "Description of Investment" column, followed only by a share/unit count bled in from
+# an adjacent column, e.g. "Mutual Fund - 738 Shares" or "Pooled Separate Account - 783".
+# That is a near-zero-information placeholder, not a name -- strip the trailing count so
+# it can be checked against _GENERIC_CATEGORIES like any other bare category label.
+_TRAILING_COUNT_RE = _re.compile(
+    r"[-–]\s*[\d,]+(?:\.\d+)?\s*(?:shares?|units?)?\s*$", _re.IGNORECASE,
 )
 
 def _score_as_fund_name(text):
@@ -109,6 +118,11 @@ def _score_as_fund_name(text):
     for cat in _GENERIC_CATEGORIES:
         if cat.replace(" ", "") == t_nospace:
             return -50
+    # Same penalty when the category label has a share/unit count tacked on
+    # ("mutual fund - 738 shares" -> "mutual fund").
+    _decounted = _TRAILING_COUNT_RE.sub("", t_collapsed).strip()
+    if _decounted and _decounted != t_collapsed and _decounted in _GENERIC_CATEGORIES:
+        return -50
     words = set(_re.findall(r"\w+", t))
     score = 0
     score += len(words & _FUND_KEYWORDS) * 3
@@ -119,7 +133,7 @@ def _score_as_fund_name(text):
         score += 15
     elif _SHARE_CLASS_RE.search(text):
         score += 10
-    if _re.search(r"20[2-9]\d", text):
+    if _re.search(r"\b20[2-9]\d\b", text):
         score += 20
     word_count = len(text.split())
     if 3 <= word_count <= 12:
@@ -644,7 +658,7 @@ def build_mf_rows_df(rows: List[Dict],
         # plans' Sch H tables list CREF accounts under a "Mutual fund" asset type/description;
         # certified totals for those filings include them, so excluding them undercaptures).
         _desc = str(row.get("investment_description", "") or "")
-        _explicit_mf = asset_type == "mutual fund" or bool(_re.search(r"mutual\s+funds?", _desc, _re.IGNORECASE))
+        _explicit_mf = asset_type == "mutual fund" or bool(_re.search(r"\bmutual\s+funds?\b", _desc, _re.IGNORECASE))
         if mf_only and not _explicit_mf and _ANNUITY_VEHICLE_RE.search(_name):
             continue
         records.append({
@@ -727,12 +741,19 @@ def write_iceberg_via_athena(df: pd.DataFrame, glue_db: str, table: str,
         df = df.copy()
         df["asset_type"] = ""
 
-    # Delete existing rows for these ack_ids before inserting (idempotency)
-    # Only works for Iceberg/transactional tables; skips silently for plain Hive tables
-    ack_ids = df["ack_id"].dropna().unique().tolist()
-    if ack_ids:
-        ids_sql = ", ".join("'" + str(a).replace("'", "''") + "'" for a in ack_ids)
-        delete_sql = f"DELETE FROM {glue_db}.{table} WHERE ack_id IN ({ids_sql})"
+    # Delete-then-insert per ack_id (idempotency), one ack_id at a time, so a process kill
+    # mid-write (e.g. an SSM command timeout) can orphan at most the single ack_id in flight
+    # instead of every ack_id in this run -- a batch-wide DELETE followed by a separate
+    # batch-wide INSERT loop left every already-deleted-but-not-yet-reinserted ack_id with
+    # zero rows if the process died partway through the INSERT batches.
+    # Only works for Iceberg/transactional tables; skips silently for plain Hive tables.
+    batch_size = 500
+    total = 0
+    for ack_id, group in df.groupby("ack_id", sort=False):
+        if pd.isna(ack_id) or not str(ack_id).strip():
+            continue
+        id_sql = "'" + str(ack_id).replace("'", "''") + "'"
+        delete_sql = f"DELETE FROM {glue_db}.{table} WHERE ack_id IN ({id_sql})"
         try:
             delete_qid = wr.athena.start_query_execution(
                 sql=delete_sql,
@@ -741,61 +762,60 @@ def write_iceberg_via_athena(df: pd.DataFrame, glue_db: str, table: str,
                 s3_output=s3_staging,
             )
             wr.athena.wait_query(query_execution_id=delete_qid)
-            logger.info("Deleted existing rows for %d ack_ids from %s.%s", len(ack_ids), glue_db, table)
         except Exception as e:
-            logger.warning("DELETE skipped for %s.%s (not a transactional table?): %s", glue_db, table, e)
+            logger.warning("DELETE skipped for %s.%s ack_id=%s (not a transactional table?): %s", glue_db, table, ack_id, e)
 
-    batch_size = 500
-    total = len(df)
-    for start in range(0, total, batch_size):
-        batch = df.iloc[start:start + batch_size]
-        values_parts = []
-        for _, row in batch.iterrows():
-            def q(v):
-                if v is None:
-                    return "NULL"
-                try:
-                    if math.isnan(float(v)):
+        group_total = len(group)
+        for start in range(0, group_total, batch_size):
+            batch = group.iloc[start:start + batch_size]
+            values_parts = []
+            for _, row in batch.iterrows():
+                def q(v):
+                    if v is None:
                         return "NULL"
+                    try:
+                        if math.isnan(float(v)):
+                            return "NULL"
+                    except (TypeError, ValueError):
+                        pass
+                    return "'" + str(v).replace("'", "''") + "'"
+
+                amt = row.get("plan_investment_amt")
+                try:
+                    _a = float(amt)
+                    # DECIMAL(18,2) overflows ~1e16; null obvious overflow/garbage
+                    # and use fixed-point (no exponent) formatting for valid values.
+                    amt_sql = "NULL" if (math.isnan(_a) or abs(_a) >= 1e15) else ("%.2f" % _a)
                 except (TypeError, ValueError):
-                    pass
-                return "'" + str(v).replace("'", "''") + "'"
+                    amt_sql = "NULL"
 
-            amt = row.get("plan_investment_amt")
-            try:
-                _a = float(amt)
-                # DECIMAL(18,2) overflows ~1e16; null obvious overflow/garbage
-                # and use fixed-point (no exponent) formatting for valid values.
-                amt_sql = "NULL" if (math.isnan(_a) or abs(_a) >= 1e15) else ("%.2f" % _a)
-            except (TypeError, ValueError):
-                amt_sql = "NULL"
+                _vals = [
+                    q(row.get("ack_id")),
+                    q(row.get("raw_entity_name")),
+                    q(row.get("raw_sponsor_name")),
+                    amt_sql,
+                    q(row.get("asset_class", "PENDING_AI")),
+                    q(row.get("asset_sub_class", "PENDING_AI")),
+                    q(row.get("validation_status", "UNVALIDATED")),
+                ]
+                if include_asset_type:
+                    _vals.append(q(row.get("asset_type", "")))
+                values_parts.append("(" + ", ".join(_vals) + ")")
 
-            _vals = [
-                q(row.get("ack_id")),
-                q(row.get("raw_entity_name")),
-                q(row.get("raw_sponsor_name")),
-                amt_sql,
-                q(row.get("asset_class", "PENDING_AI")),
-                q(row.get("asset_sub_class", "PENDING_AI")),
-                q(row.get("validation_status", "UNVALIDATED")),
-            ]
+            _cols = ("ack_id, raw_entity_name, raw_sponsor_name, plan_investment_amt, "
+                     "asset_class, asset_sub_class, validation_status")
             if include_asset_type:
-                _vals.append(q(row.get("asset_type", "")))
-            values_parts.append("(" + ", ".join(_vals) + ")")
-
-        _cols = ("ack_id, raw_entity_name, raw_sponsor_name, plan_investment_amt, "
-                 "asset_class, asset_sub_class, validation_status")
-        if include_asset_type:
-            _cols += ", asset_type"
-        sql = "INSERT INTO {}.{} ({}) VALUES {}".format(glue_db, table, _cols, ", ".join(values_parts))
-        query_id = wr.athena.start_query_execution(
-            sql=sql,
-            database=glue_db,
-            workgroup=workgroup,
-            s3_output=s3_staging,
-        )
-        wr.athena.wait_query(query_execution_id=query_id)
-        logger.info("Inserted rows %d-%d into Iceberg %s.%s", start, start + len(batch), glue_db, table)
+                _cols += ", asset_type"
+            sql = "INSERT INTO {}.{} ({}) VALUES {}".format(glue_db, table, _cols, ", ".join(values_parts))
+            query_id = wr.athena.start_query_execution(
+                sql=sql,
+                database=glue_db,
+                workgroup=workgroup,
+                s3_output=s3_staging,
+            )
+            wr.athena.wait_query(query_execution_id=query_id)
+            total += len(batch)
+            logger.info("Inserted %d rows for ack_id=%s into Iceberg %s.%s", len(batch), ack_id, glue_db, table)
 
     logger.info("Wrote %d rows to Iceberg table %s.%s", total, glue_db, table)
 

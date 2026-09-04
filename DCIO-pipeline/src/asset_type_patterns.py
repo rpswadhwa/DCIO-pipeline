@@ -9,9 +9,10 @@ ASSET_TYPE_PATTERNS = [
     (r'Investments?\s+in\s+common\s+collective\s+trusts?',      'Common/Collective Trust Fund'),
     (r'Investments?\s+in\s+pooled\s+separate\s+(?:investment\s+)?accounts?', 'Separate Account'),
     (r'Investments?\s+in\s+investment\s+contracts?',            'Stable Value Fund'),
-    (r'Insurance\s+Company\s+General\s+Account\s+Contracts?',   'Insurance General Account'),
+    (r'Insurance\s+Company[\s/]+General\s+Accounts?\s*(?:Contracts?)?', 'Insurance General Account'),
     (r'General\s+Account\s+Contracts?',                         'Insurance General Account'),
     (r'Group\s+Annuity\s+Contracts?',                           'Group Annuity Contract'),
+    (r'Fixed\s+Annuity\s+Contracts?',                           'Group Annuity Contract'),
     (r'CREF\s+Accounts?',                                       'Group Annuity Contract'),
     (r'Fully[\-\s]Benefit[\-\s]Responsive\s+Contracts?',       'Stable Value Fund'),
     (r'Non[\-\s]Benefit[\-\s]Responsive\s+Contracts?',         'Stable Value Fund'),
@@ -44,8 +45,18 @@ ASSET_TYPE_PATTERNS = [
     (r'Common\s+Collective\s+Trusts?',                          'Common/Collective Trust Fund'),
     (r'Collecti\w{0,3}e\s+Trusts?',                             'Common/Collective Trust Fund'),  # OCR-tolerant: "Collecti11e Trusts"
     (r'Pooled\s+Separate\s+(?:Investment\s+)?Accounts?',        'Separate Account'),
+    # bare "separate accounts" (no "pooled" qualifier) -- e.g. a trailing "Total separate
+    # accounts" subtotal line under a block of insurance-company variable-annuity
+    # sub-accounts (Navicent Health / Lincoln VIP funds). Must follow the "Pooled Separate
+    # Accounts" patterns above so those more specific labels still win when present.
+    (r'Separate\s+Accounts?',                                   'Separate Account'),
     (r'Pooled\s+Funds?',                                        'Commingled Fund'),
     (r'Separately\s+Managed\s+Accounts?',                       'Separately Managed Account'),
+    # Reversed word order from "Separately Managed Account" above (e.g. Nouryon
+    # Chemicals LLC's Schedule H, 4i page uses "MANAGED SEPARATE ACCOUNT" as its
+    # section heading for a Galliard stable value holding whose dollar amount
+    # matches the plan's certified amt_pooled_sep_acct bucket exactly).
+    (r'Managed\s+Separate\s+Accounts?',                         'Separate Account'),
     (r'Self[\-\s]Directed\s+Brokerage\s+Accounts?',             'Self-Directed Brokerage Account'),
     (r'Commingled\s+Funds?',                                    'Commingled Fund'),
     (r'Commingled\s+Pools?',                                    'Commingled Fund'),
@@ -56,6 +67,15 @@ ASSET_TYPE_PATTERNS = [
     (r'Collective\s+Funds?',                                    'Commingled Fund'),
     (r'Stable\s+Value\s+Funds?',                                'Stable Value Fund'),
     (r'Money\s+Market\s+Funds?',                                'Money Market Fund'),
+    # No canonical pattern here previously mapped this DOL Schedule H, 4i
+    # heading at all -- it silently fell through the one-cell heading
+    # detector as an unrecognized fragment (see Nouryon Chemicals LLC's
+    # page, where "INTEREST BEARING CASH" preceded a Vanguard money-market
+    # holding whose dollar amount is close to the plan's certified
+    # amt_interest_cash bucket). 'Cash' matches the canonical name already
+    # used for this same heading text in section_typing.py / text_extract.py's
+    # _SCHEDULE_OF_TITLE_TYPE_MAP.
+    (r'Interest[\-\s]*Bearing\s+Cash',                          'Cash'),
     (r'\bMMRK\b',                                                'Money Market Fund'),
     (r'Variable\s+Annuit(?:y|ies)(?:\s+(?:Contracts?|Accounts?))?', 'Variable Annuity Contract'),
     (r'Registered\s+Investment\s+Compan(?:y|ies)',              'Mutual Fund'),
@@ -68,7 +88,6 @@ ASSET_TYPE_PATTERNS = [
     (r'Unit\s+Investment\s+Trusts?',                            'Mutual Fund'),
     (r'Institutional\s+Funds?',                                 'Mutual Fund'),
     (r'Funds?\s+of\s+Funds?',                                   'Mutual Fund'),
-    (r'Exchange[\-\s]Traded\s+Funds?(?:\s*\(?ETFs?\)?)?',              'ETF'),
     (r'Mutual\s+Funds?',                                        'Mutual Fund'),
     (r'Employer\s+Stocks?',                                     'Employer Stock'),
     (r'Employer\s+Securities',                                  'Employer Stock'),
@@ -165,8 +184,8 @@ ROW_TYPE_PATTERNS = [
     (r'fixed\s+annuit',                                'Group Annuity Contract'),
     (r'guaranteed\s+portfolio',                        'Group Annuity Contract'),
     (r'(?:non[\-\s]?)?benefit[\-\s]?responsive',       'Group Annuity Contract'),
-    (r'ins(?:urance)?\s+(?:co(?:mpany)?\s+)?general\s+account', 'Insurance General Account'),
-    (r'personal\s+choice\s+retirement\s+account',      'Self-Directed Brokerage Account'),
+    (r'ins(?:urance)?\s+(?:co(?:mpany)?[\s/]+)?general\s+accounts?', 'Insurance General Account'),
+    (r'personal\s+choice\s+ret(?:ire)?ment\s+account',  'Self-Directed Brokerage Account'),
     (r'guaranteed\s+(?:investment\s+contract|income)', 'Stable Value Fund'),
     (r'stable\s+value',                                'Stable Value Fund'),
     # Variable annuities are now typed as their own non-MF vehicle (Variable Annuity Contract)

@@ -3,6 +3,18 @@ set -e
 cd /home/ec2-user/DCIO-pipeline/DCIO-pipeline
 source /home/ec2-user/DCIO-pipeline/venv/bin/activate
 
+echo "=== DEPLOY PROVENANCE ==="
+if [ -f .deployed_commit ]; then
+  echo "Code deployed via deploy_to_ec2.sh from local commit:"
+  cat .deployed_commit
+else
+  echo "!!! WARNING: no .deployed_commit marker found."
+  echo "!!! This tree was not deployed via deploy_to_ec2.sh (hand-edited on EC2,"
+  echo "!!! or deployed the old ad hoc way). Do not trust results until this is"
+  echo "!!! reconciled back into the local git repo and redeployed properly."
+fi
+echo "=========================="
+
 export $(grep -v ^# .env | xargs)
 
 # boto3 clients in STEP 10 (Athena/Glue) need an explicit region; the shell
@@ -25,7 +37,10 @@ RUN_YEAR="${BATCH_DATE:0:4}"
 S3_INPUT_PATH="s3://retirementinsights-bronze/filings_5500_pdf/year=${RUN_YEAR}/batch_date=${BATCH_DATE}/"
 
 echo "[STEP 0] Syncing PDFs from S3: $S3_INPUT_PATH"
-aws s3 sync "$S3_INPUT_PATH" data/inputs/ --exclude "*" --include "*.pdf"
+# --delete makes data/inputs/ an exact mirror of this batch's S3 folder. Without it,
+# PDFs from every previous batch ever synced on this box accumulate forever and get
+# reprocessed on every run (this silently turned 10-plan runs into 130+-plan runs).
+aws s3 sync "$S3_INPUT_PATH" data/inputs/ --exclude "*" --include "*.pdf" --delete
 echo "Sync complete: $(ls data/inputs/*.pdf 2>/dev/null | wc -l) PDFs"
 
 PYTHONPATH=. python3.11 -m src.run_pipeline

@@ -60,19 +60,28 @@ def load_s3_sql(s3_uri: str) -> str:
 SEED_SQL = f"""
 INSERT INTO fund_intelligence_mapping_mf
     (raw_entity_name, asset_class, asset_sub_class, tranche, last_processed_date)
-SELECT DISTINCT
-    h.raw_entity_name,
+SELECT
+    raw_entity_name,
     'PENDING_AI'      AS asset_class,
     'PENDING_AI'      AS asset_sub_class,
     {TRANCHE}         AS tranche,
     current_timestamp AS last_processed_date
-FROM plan_mf_history_v3 h
-WHERE h.asset_class = 'PENDING_AI'
-  AND NOT EXISTS (
-      SELECT 1
-      FROM fund_intelligence_mapping_mf f
-      WHERE f.raw_entity_name = h.raw_entity_name
-  )
+FROM (
+    SELECT
+        h.raw_entity_name,
+        row_number() OVER (
+            PARTITION BY lower(trim(h.raw_entity_name))
+            ORDER BY h.raw_entity_name
+        ) AS rn
+    FROM plan_mf_history_v3 h
+    WHERE h.asset_class = 'PENDING_AI'
+      AND NOT EXISTS (
+          SELECT 1
+          FROM fund_intelligence_mapping_mf f
+          WHERE lower(trim(f.raw_entity_name)) = lower(trim(h.raw_entity_name))
+      )
+)
+WHERE rn = 1
 """
 
 WRITEBACK_SQL = """

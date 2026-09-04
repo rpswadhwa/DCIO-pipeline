@@ -18,23 +18,31 @@ except ImportError:
 
 _SHARES_OF_RE = re.compile(r"^[\d,]+(?:\.\d+)?\s+shares?\s+of\s+", re.IGNORECASE)
 # Strips trailing share counts like ", 5,770,653 shares" or "- 6,576,777" or "1,234,567"
+# or "; 264,734 shares" (semicolon separator, e.g. "Collective Trust Fund; 264,734 shares")
 # but NOT plain years like "2035" (no commas, no shares/units keyword).
 # Uses two alternatives:
-#   1. any number + explicit shares/units keyword (comma separator allowed)
-#   2. comma-formatted count with internal commas (optional keyword, comma separator allowed)
+#   1. any number + explicit shares/units keyword (comma/semicolon separator allowed)
+#   2. comma-formatted count with internal commas (optional keyword, comma/semicolon separator allowed)
 _LABEL_TRAILING_RE = re.compile(
-    r'[,\s\-]+\d[\d,]*\s+(?:shares?|units?)\s*$'
-    r'|[,\s\-]+\d{1,3}(?:,\d{3})+\.?\d*\s*(?:shares?|units?)?\s*$',
+    r'[,;\s\-]+\d[\d,]*\s+(?:shares?|units?)\s*$'
+    r'|[,;\s\-]+\d{1,3}(?:,\d{3})+\.?\d*\s*(?:shares?|units?)?\s*$',
     re.IGNORECASE,
 )
+# Strips trailing "N/A" placeholder tokens left over from empty Collateral/Rate/Maturity-Date
+# columns bleeding into the description (e.g. "Mutual Fund N/A N/A"), so the label check below
+# still recognizes the row as a pure asset-type label instead of treating the N/A tokens as
+# fund-specific content.
+_NA_TRAILING_RE = re.compile(r'(?:\s*N/?A\b)+\s*$', re.IGNORECASE)
 
 
 def _is_asset_type_label(text: str) -> bool:
     """Return True if text is purely an asset type category label with no fund-specific content.
-    Strips trailing share counts first so "Mutual Fund - 6,576,777 shares" is also caught,
+    Strips trailing share counts and trailing "N/A" placeholder tokens first so
+    "Mutual Fund - 6,576,777 shares" and "Mutual Fund N/A N/A" are also caught,
     but preserves trailing years like "2035" so "Target Date Fund 2035" is NOT a pure label.
     """
     t = _LABEL_TRAILING_RE.sub('', (text or '').strip()).strip()
+    t = _NA_TRAILING_RE.sub('', t).strip()
     for pattern, _ in ASSET_TYPE_PATTERNS:
         if re.fullmatch(pattern, t, re.IGNORECASE):
             return True
@@ -66,53 +74,50 @@ def parse_issuer_and_investment(issuer_name, investment_desc, asset_type):
     if (not desc.strip(' "\'`*.-:;,')) or _is_asset_type_label(desc):
         desc = issuer_name
 
-    # if issuer_name.upper().startswith('VANGUARD') or issuer_name.upper().startswith('VANG'):
-    #     return ('Vanguard', desc)
+    if issuer_name.upper().startswith('VANGUARD') or issuer_name.upper().startswith('VANG'):
+        return ('Vanguard', desc)
 
-    # if issuer_name.upper().startswith('PIMCO'):
-    #     return ('PIMCO', desc)
+    if issuer_name.upper().startswith('PIMCO'):
+        return ('PIMCO', desc)
 
-    # if issuer_name.upper().startswith('BLACKROCK') or 'LIFEPATH' in issuer_name.upper():
-    #     return ('BlackRock', desc)
+    if issuer_name.upper().startswith('BLACKROCK') or 'LIFEPATH' in issuer_name.upper():
+        return ('BlackRock', desc)
 
-    # if issuer_name.upper().startswith('AF ') or 'EUROPAC' in issuer_name.upper():
-    #     return ('American Funds', desc)
+    if issuer_name.upper().startswith('AF ') or 'EUROPAC' in issuer_name.upper():
+        return ('American Funds', desc)
 
-    # if 'FIDELITY' in issuer_name.upper() or issuer_name.upper().startswith('FID '):
-    #     return ('Fidelity', desc)
+    if 'FIDELITY' in issuer_name.upper() or issuer_name.upper().startswith('FID '):
+        return ('Fidelity', desc)
 
-    # if issuer_name.upper().startswith('NUVEEN'):
-    #     return ('Nuveen', desc)
+    if issuer_name.upper().startswith('NUVEEN'):
+        return ('Nuveen', desc)
 
-    # if 'T ROWE' in issuer_name.upper() or 'T. ROWE' in issuer_name.upper():
-    #     return ('T. Rowe Price', desc)
+    if 'T ROWE' in issuer_name.upper() or 'T. ROWE' in issuer_name.upper():
+        return ('T. Rowe Price', desc)
 
-    # if 'STATE STREET' in issuer_name.upper() or issuer_name.upper().startswith('SSG'):
-    #     return ('State Street', desc)
+    if 'STATE STREET' in issuer_name.upper() or issuer_name.upper().startswith('SSG'):
+        return ('State Street', desc)
 
-    # if 'BNY' in issuer_name.upper() or 'MELLON' in issuer_name.upper():
-    #     return ('BNY Mellon', desc)
+    if 'BNY' in issuer_name.upper() or 'MELLON' in issuer_name.upper():
+        return ('BNY Mellon', desc)
 
-    # if 'BAILLIE' in issuer_name.upper() or 'GIFFORD' in issuer_name.upper():
-    #     return ('Baillie Gifford', desc)
+    if 'BAILLIE' in issuer_name.upper() or 'GIFFORD' in issuer_name.upper():
+        return ('Baillie Gifford', desc)
 
-    # if issuer_name.upper().startswith('AB '):
-    #     return ('AllianceBernstein', desc)
+    if issuer_name.upper().startswith('AB '):
+        return ('AllianceBernstein', desc)
 
-    # if 'JP' in issuer_name.upper() and 'MORGAN' in issuer_name.upper():
-    #     return ('J.P. Morgan', desc)
+    if 'JP' in issuer_name.upper() and 'MORGAN' in issuer_name.upper():
+        return ('J.P. Morgan', desc)
 
-    # if 'BROKERAGE' in issuer_name.upper() or 'BROKERGE' in issuer_name.upper():
-    #     return ('Self-Directed', desc)
+    if 'BROKERAGE' in issuer_name.upper() or 'BROKERGE' in issuer_name.upper():
+        return ('Self-Directed', desc)
 
-    # if issuer_name.startswith('*'):
-    #     clean_issuer = re.sub(r',.*$|Inc\.?$|LLC$|Corp\.?$', '', issuer_name.replace('*', '')).strip()
-    #     return (clean_issuer, desc)
+    if issuer_name.startswith('*'):
+        clean_issuer = re.sub(r',.*$|Inc\.?$|LLC$|Corp\.?$', '', issuer_name.replace('*', '')).strip()
+        return (clean_issuer, desc)
 
-    # # Default: keep original issuer and description unchanged
-    # return (issuer_name, desc)
-
-    # Truncation logic disabled per decision: full issuer_name now always passes through unmodified.
+    # Default: keep original issuer and description unchanged
     return (issuer_name, desc)
 
 
