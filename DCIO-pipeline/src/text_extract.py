@@ -764,6 +764,33 @@ def _extract_text_robust(page) -> str:
     return "\n".join(out_lines)
 
 
+def _page_has_garbled_upright_text(page) -> bool:
+    """
+    Generalizes the Kelley Drye-specific detection above: flags a page where a
+    meaningful share of chars are marked upright=False by pdfplumber but whose
+    transform matrix is actually near-identity (b/c terms ~1e-4 or smaller --
+    floating-point noise, not real rotation/skew). Real rotated/vertical text
+    has substantial off-diagonal terms and is correctly left alone. Sampling
+    the first 200 chars is enough to detect the pattern without reading the
+    whole page twice.
+    """
+    chars = page.chars
+    if not chars:
+        return False
+    sample = chars[:200]
+    flagged = 0
+    for c in sample:
+        if c.get("upright", True):
+            continue
+        matrix = c.get("matrix")
+        if not matrix:
+            continue
+        _, b, cc, _ = matrix[0], matrix[1], matrix[2], matrix[3]
+        if abs(b) < 1e-4 and abs(cc) < 1e-4:
+            flagged += 1
+    return (flagged / len(sample)) > 0.3
+
+
 def classify_pages_text(pdf_path: str, keywords_yml: str) -> List[Dict]:
     cfg = load_yaml(keywords_yml)
     keywords = [k.upper() for k in cfg.get("supplemental_schedule_keywords", [])]
@@ -783,11 +810,13 @@ def classify_pages_text(pdf_path: str, keywords_yml: str) -> List[Dict]:
     identity_re = re.compile(r'identity\s+of\s+issue|borrower,?\s+lessor', re.IGNORECASE)
     description_re = re.compile(r'description\s+of\s+investments?', re.IGNORECASE)
 
-    use_robust_extraction = _pdf_stem_from_path(pdf_path) in _GARBLED_UPRIGHT_ACK_IDS
-
     pages = []
     with pdfplumber.open(pdf_path) as pdf:
         for i, page in enumerate(pdf.pages, start=1):
+            use_robust_extraction = (
+                _pdf_stem_from_path(pdf_path) in _GARBLED_UPRIGHT_ACK_IDS
+                or _page_has_garbled_upright_text(page)
+            )
             text = _extract_text_robust(page) if use_robust_extraction else (page.extract_text() or "")
             lines = [normalize_whitespace(l) for l in text.splitlines() if l.strip()]
             header_lines = lines[:max_lines]
@@ -1584,7 +1613,10 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
         page = pdf.pages[page_num - 1]
         text = (
             _extract_text_robust(page)
-            if _pdf_stem_from_path(pdf_path) in _GARBLED_UPRIGHT_ACK_IDS
+            if (
+                _pdf_stem_from_path(pdf_path) in _GARBLED_UPRIGHT_ACK_IDS
+                or _page_has_garbled_upright_text(page)
+            )
             else (page.extract_text() or "")
         )
 
@@ -1714,6 +1746,26 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
             '103-12': '103-12 Investment Entity',
             'derivative': 'Derivative',
         }
+        # Same shape as simple_value_pattern, but for filings scaled to millions/
+        # thousands where a row's own value can be just 1-3 digits with no "$"
+        # (e.g. "JP Morgan Equity Income Fund Mutual Fund 57" -- PPG Industries'
+        # Schedule H,4i mixes some rows with an explicit "$" and some without,
+        # and the bare 4+ digit floor on simple_value_pattern exists specifically
+        # to avoid treating stray short numbers as values by accident. That guard
+        # is unnecessary here because the row-level asset-type label (a
+        # SECTION_HEADING_MAP key) sitting directly before the number is itself
+        # strong evidence this is a real data row, not a heading -- built after
+        # PPG's JP Morgan row was found completely missing from staging despite
+        # extracting fine textually (it fell through both dollar_value_pattern,
+        # no "$", and simple_value_pattern, only 2 digits, then got misread as a
+        # bare fund-name-awaiting-a-later-value line, discarding its own "57").
+        _TYPE_ANCHORED_VALUE_RE = re.compile(
+            r'(?:' + '|'.join(
+                re.escape(_k).replace(r'\ ', r'\s+')
+                for _k in sorted(SECTION_HEADING_MAP.keys(), key=len, reverse=True)
+            ) + r')\s*\**\s*([\d,]+)\s*$',
+            re.IGNORECASE,
+        )
         current_section_type = inherited_asset_type or ''
         # Rows appended to `investments` with no asset_type resolved yet (no
         # leading heading seen, no keyword match). Some layouts (e.g. American
@@ -1822,6 +1874,11 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
                 else:
                     # Try plain trailing number (4+ chars to avoid false positives)
                     value_match = simple_value_pattern.search(line)
+                    if not value_match:
+                        # Short/no-$ trailing number anchored by a known row-level
+                        # asset-type label (e.g. "... Mutual Fund 57") -- see
+                        # _TYPE_ANCHORED_VALUE_RE definition above.
+                        value_match = _TYPE_ANCHORED_VALUE_RE.search(line)
                     if not value_match:
                         # No value on this line — check if it is a section heading
                         line_lower_full = line.lower().strip()
@@ -2367,6 +2424,50 @@ def _dedupe_duplicate_tables(tables: list) -> list:
         page_signatures.add(signature)
         deduped.append(t)
     return deduped
+
+
+def _dedupe_mapped_rows_by_name(rows: list) -> list:
+    """Camelot can detect the same visual table twice via two overlapping
+    region guesses that get column-split differently -- seen on Boston
+    Medical Center 403(b) Plan's Schedule H, Line 4i page, where one
+    detection's column mapping merged the Par/Maturity Value and Current
+    Value columns into a single unparseable cell per row ("2,816,629
+    61,965,830") while the other split them correctly, so every fund on the
+    page appeared twice in mapped_pages: once with a real value, once with a
+    value that fails to parse as a plain number. _dedupe_duplicate_tables
+    can't catch this -- the two Camelot Table objects' raw cell content is
+    equally clean, only the downstream column-to-field mapping differs.
+    Dedupe here instead, after mapping, on the actual current_value: for
+    rows sharing the same page and issuer_name, keep the one with a clean
+    single-number current_value over one that's blank or a mis-split
+    multi-number string."""
+    _clean_re = re.compile(r'^\$?\s*\(?[\d,]+(?:\.\d+)?\)?\s*$')
+    groups: Dict[tuple, list] = {}
+    order: list = []
+    for row in rows:
+        key = (row.get('page_number'), normalize_whitespace(str(row.get('issuer_name', ''))).upper())
+        if key not in groups:
+            groups[key] = []
+            order.append(key)
+        groups[key].append(row)
+
+    result = []
+    for key in order:
+        group = groups[key]
+        if len(group) == 1:
+            result.append(group[0])
+            continue
+        clean = [r for r in group if _clean_re.match(str(r.get('current_value', '')).strip())]
+        if clean and len(clean) < len(group):
+            print(
+                f"    Dropping {len(group) - len(clean)} duplicate row(s) for "
+                f"'{key[1]}' on page {key[0]} (overlapping table detection, "
+                f"keeping clean-value copy)"
+            )
+            result.extend(clean)
+        else:
+            result.extend(group)
+    return result
 
 
 def extract_tables_and_map(
@@ -3277,6 +3378,9 @@ def extract_tables_and_map(
                 pending_untyped_rows.append(row_data)
 
             mapped_pages.setdefault(page_num, []).append(row_data)
+
+    for page_num in list(mapped_pages.keys()):
+        mapped_pages[page_num] = _dedupe_mapped_rows_by_name(mapped_pages[page_num])
 
     # FALLBACK: Check if table extraction produced mostly empty data
     # If so, try text-based extraction instead
