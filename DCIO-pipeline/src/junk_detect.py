@@ -153,6 +153,8 @@ V3_CLEANUP_BOILERPLATE_EXACT = {norm(n) for n in [
     "Forwarded",  # preventive
     "Investments at contract value",  # preventive
     "from 4.25 to 9.50 percent)",  # preventive
+    # 2026-09-09: confirmed live, deleted from v3 -- narrative transfer-between-plans line
+    "Transfer to the Cornerstone Building Brands 401k Profit Sharing Plan",
 ]}
 
 # Bucket 3: individual stocks manually confirmed present in plan_mf_history_v3 (a stock
@@ -190,6 +192,15 @@ V3_CLEANUP_STOCK_EXACT = {norm(n) for n in [
 _EIN_FRAGMENT_RE = re.compile(r"^ein\d+$")               # isolated EIN digit-group, e.g. "EIN 59"
 _FORM_ID_CODE_RE = re.compile(r"^\d[a-z]\d{4}[a-z]$")     # form/schedule code, e.g. "1P1211A"
 _MULTI_SEDOL_RE = re.compile(r"sedol.*sedol")             # 2+ SEDOLs spliced into one "name"
+
+# Bucket 6 (2026-09-09): interest-rate-swap / CDS derivative contract legs, e.g.
+# "99S273OA7 SWU02FMZ1 IRS EUR P V 06MEURIB SWUV2FMZ3 CCPVANILLA". A dummy "99S..."
+# identifier prefix, a swap-leg counterparty code (BWU/SWU/BWPC/SWPC), and an IRS/CDS
+# instrument tag are jointly distinctive enough that no real fund name collides with the
+# shape -- confirmed against all 279 live matches (both pay and receive legs, several
+# currencies/reference-rate variants, IRS and CDS) before this pattern was added. These
+# are derivative positions, never a mutual fund.
+_SWAP_CDS_LEG_RE = re.compile(r"^99s\w*[bs]w(u|pc)\w*(irs|cds)")
 
 # Participant loans / notes receivable -- never a fund. Matched as a normalized substring
 # because the phrasing is bounded and never occurs inside a real fund name.
@@ -282,6 +293,8 @@ def is_junk_name(name: str) -> Tuple[bool, str, str]:
         return True, "v3 cleanup: form/schedule ID code, e.g. '1P1211A' (2026-09-09)", "DELETE"
     if _MULTI_SEDOL_RE.search(nn):
         return True, "v3 cleanup: multiple SEDOLs spliced into one name (2026-09-09)", "DELETE"
+    if _SWAP_CDS_LEG_RE.match(nn):
+        return True, "v3 cleanup: interest-rate-swap/CDS contract leg, not a fund (2026-09-09)", "DELETE"
     # Participant loans / notes receivable (bounded phrasing, safe as substring)
     if _LOAN_RE.search(nn):
         return True, "participant loan / notes receivable", "DELETE"
