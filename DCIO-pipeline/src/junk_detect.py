@@ -106,6 +106,53 @@ JUNK_EXACT = {
     "greatgreytrust", "greatgraytrust",
 }
 
+# --- plan_mf_history_v3 cleanup denylist (2026-09-08/09) ------------------------------
+# Confirmed contaminants found by manual review of live plan_mf_history_v3, deleted from
+# that table directly. Added here so future extractions don't reintroduce the same rows.
+# Checked by exact norm() equality only (never substring) -- these are literal strings
+# observed in the data, not patterns.
+#
+# Bucket 1: pure boilerplate/accounting-language junk with no recoverable fund identity
+# (generic phrases that also happen to appear, verbatim, as "fund names" in bad extractions).
+V3_CLEANUP_BOILERPLATE_EXACT = {norm(n) for n in [
+    "Assets Investments at fair value Mutual funds",
+    "Reconciliation to the financial statements:",
+    "Fidelity Mutual funds - see attachment",
+    "Interest held in Master Trust at fair value Mutual funds",
+    "Adjustment going from Fair Value to Contract Value",
+    "otal Investments per the financial T statements",
+    "JPM DAILY MARKET VALUE SUNDRY",
+    "contract value",
+    "Brought forward",
+    "Investments brought forward",
+    "/ETFs (continued) Balance brought forward",
+    "AT FAIR VALUE Baird",
+    "Net assets available for benefits",
+    "Investments at fair value",
+    "Investments at fair market value",
+    "Net appreciation in fair value of investments",
+    "Carried Forward",
+    "Net assets available for benefits per the financial statements",
+    "per the financial statements",
+    "the financial statements",
+    "Investment contract at fair value",
+]}
+
+# Bucket 3: individual stocks manually confirmed present in plan_mf_history_v3 (a stock
+# is never a mutual fund; these are specific, provably-wrong names, not a general
+# stock-detection heuristic -- broader stock contamination is still an open, unresolved
+# problem tracked separately).
+V3_CLEANUP_STOCK_EXACT = {norm(n) for n in [
+    "BOEING CO",
+    "AbbVie Inc Com 4375",
+    "MARRIOTT INTERNATIONAL INC/MD",
+    "WELLS FARGO CO",
+    "SCHWAB CHARLES CORP",
+    "ARTHUR J GALLAGHAR AND CO",
+    "Webster Financial Corporation",
+    "Elliot International Ltd.",
+]}
+
 # Participant loans / notes receivable -- never a fund. Matched as a normalized substring
 # because the phrasing is bounded and never occurs inside a real fund name.
 _LOAN_RE = re.compile(
@@ -184,6 +231,13 @@ def is_junk_name(name: str) -> Tuple[bool, str, str]:
     # no letters at all (pure digits / punctuation) -> junk
     if not re.search(r"[a-z]", nn):
         return True, "no alphabetic content", "DELETE"
+    # plan_mf_history_v3 cleanup denylist (2026-09-08/09) -- checked before the prefix
+    # logic below, since some of these boilerplate strings share a prefix with a real
+    # fund-name pattern and would otherwise be wrongly classified PREFIX (protect).
+    if nn in V3_CLEANUP_BOILERPLATE_EXACT:
+        return True, "v3 cleanup: boilerplate/accounting phrase (confirmed 2026-09-08)", "DELETE"
+    if nn in V3_CLEANUP_STOCK_EXACT:
+        return True, "v3 cleanup: confirmed individual stock, not a fund (2026-09-08)", "DELETE"
     # Participant loans / notes receivable (bounded phrasing, safe as substring)
     if _LOAN_RE.search(nn):
         return True, "participant loan / notes receivable", "DELETE"
