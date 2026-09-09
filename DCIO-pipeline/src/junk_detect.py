@@ -136,6 +136,23 @@ V3_CLEANUP_BOILERPLATE_EXACT = {norm(n) for n in [
     "per the financial statements",
     "the financial statements",
     "Investment contract at fair value",
+    # Bucket 2 (2026-09-09): boilerplate + raw Treasury securities confirmed live in v3
+    # and deleted directly; plus a few preventive entries with no current live row
+    # (flagged by the user, kept here so a future extraction can't reintroduce them).
+    "Responsive",
+    "Allocated",
+    "account balance",
+    "Investments measured at NAV",
+    "accompanying Statements of Changes in Net Assets Available for Benefits were",
+    "accounts at fair value Vanguard",
+    "US TREASURY N/B",
+    "US Treasury",
+    "UNITED STATES OF AMER TREAS NOTES",
+    "UNITED STATES OF AMER TREAS NOTES 3875",  # preventive -- no live row under this exact string
+    "Investments at fair value per financial statements",  # preventive
+    "Forwarded",  # preventive
+    "Investments at contract value",  # preventive
+    "from 4.25 to 9.50 percent)",  # preventive
 ]}
 
 # Bucket 3: individual stocks manually confirmed present in plan_mf_history_v3 (a stock
@@ -151,7 +168,28 @@ V3_CLEANUP_STOCK_EXACT = {norm(n) for n in [
     "ARTHUR J GALLAGHAR AND CO",
     "Webster Financial Corporation",
     "Elliot International Ltd.",
+    # 2026-09-09: confirmed live, deleted from v3
+    "Ryder System, Inc.",
+    # 2026-09-09: preventive -- confirmed NOT currently live under these exact strings,
+    # added defensively since the user flagged them by name
+    "GENERAL MOTORS CO",
+    "EVERSOURCE ENERGY COM",
+    "GLACIER BANCORP INC MONTANA",
+    "DEVON ENERGY CORPORATION",
+    "MEDTRONIC PLC",
+    "DIAGEO PLC ADR",
+    "Abbott Laboratories common shares",
+    "McDonalds Corp Com",
+    "ATT INC",
 ]}
+
+# Bucket 2 shape patterns (2026-09-09): three families of extraction artifacts found by
+# regex sweep of live v3, none recoverable to a fund identity. Checked against nn
+# (norm() already strips spaces/punctuation, so "EIN 59", "EIN94", "EIN – 45-" all
+# collapse to the same "ein<digits>" shape).
+_EIN_FRAGMENT_RE = re.compile(r"^ein\d+$")               # isolated EIN digit-group, e.g. "EIN 59"
+_FORM_ID_CODE_RE = re.compile(r"^\d[a-z]\d{4}[a-z]$")     # form/schedule code, e.g. "1P1211A"
+_MULTI_SEDOL_RE = re.compile(r"sedol.*sedol")             # 2+ SEDOLs spliced into one "name"
 
 # Participant loans / notes receivable -- never a fund. Matched as a normalized substring
 # because the phrasing is bounded and never occurs inside a real fund name.
@@ -238,6 +276,12 @@ def is_junk_name(name: str) -> Tuple[bool, str, str]:
         return True, "v3 cleanup: boilerplate/accounting phrase (confirmed 2026-09-08)", "DELETE"
     if nn in V3_CLEANUP_STOCK_EXACT:
         return True, "v3 cleanup: confirmed individual stock, not a fund (2026-09-08)", "DELETE"
+    if _EIN_FRAGMENT_RE.match(nn):
+        return True, "v3 cleanup: isolated EIN digit-group (2026-09-09)", "DELETE"
+    if _FORM_ID_CODE_RE.match(nn):
+        return True, "v3 cleanup: form/schedule ID code, e.g. '1P1211A' (2026-09-09)", "DELETE"
+    if _MULTI_SEDOL_RE.search(nn):
+        return True, "v3 cleanup: multiple SEDOLs spliced into one name (2026-09-09)", "DELETE"
     # Participant loans / notes receivable (bounded phrasing, safe as substring)
     if _LOAN_RE.search(nn):
         return True, "participant loan / notes receivable", "DELETE"
