@@ -186,6 +186,16 @@ ROW_TYPE_PATTERNS = [
     (r'(?:non[\-\s]?)?benefit[\-\s]?responsive',       'Group Annuity Contract'),
     (r'ins(?:urance)?\s+(?:co(?:mpany)?[\s/]+)?general\s+accounts?', 'Insurance General Account'),
     (r'personal\s+choice\s+ret(?:ire)?ment\s+account',  'Self-Directed Brokerage Account'),
+    # abbreviated/one-word forms of self-directed brokerage that the full-phrase
+    # 'brokerage account' pattern below never catches: "SDBA"/"SDB" acronyms,
+    # "BrokerageLink" as a single word (Fidelity's product name, no space before
+    # "Link"), and "Self Directed ... Acct" using the "Acct" abbreviation instead
+    # of "Account". Found sitting blank in staging and getting fuzzy-matched into
+    # the mutual-fund promotion candidate pool instead of being excluded.
+    (r'\bSDBA\b',                                       'Self-Directed Brokerage Account'),
+    (r'\bSDB\b',                                        'Self-Directed Brokerage Account'),
+    (r'Brokerage\s*Link',                               'Self-Directed Brokerage Account'),
+    (r'self[\-\s]?direct(?:ed)?\s+acc?t\b',             'Self-Directed Brokerage Account'),
     (r'guaranteed\s+(?:investment\s+contract|income)', 'Stable Value Fund'),
     (r'stable\s+value',                                'Stable Value Fund'),
     # Variable annuities are now typed as their own non-MF vehicle (Variable Annuity Contract)
@@ -193,6 +203,10 @@ ROW_TYPE_PATTERNS = [
     # mutual fund. A prior 2500-plan run flagged -45 PASS when this was excluded; that was
     # accepted as a known tradeoff rather than reverting the classification.
     (r'variable\s+annuit(?:y|ies)',                    'Variable Annuity Contract'),
+    # insurer legal-entity name pattern for variable annuity issuers (e.g. "Prudential
+    # Retirement Insurance and Annuity Company") -- "annuity" and "variable" appear in
+    # the row but not adjacent, so the phrase pattern above misses it.
+    (r'insurance\s+(?:and|&)\s+annuity\s+compan(?:y|ies)', 'Variable Annuity Contract'),
     # fixed / guaranteed / GIC principal-preservation vehicles -> Stable Value (non-MF)
     (r'fixed\s+account',                               'Stable Value Fund'),
     (r'fixed\s+interest',                              'Stable Value Fund'),
@@ -227,14 +241,22 @@ ROW_TYPE_PATTERNS = [
     (r'(?:self[\-\s]?directed\s+)?brokerage\s+account', 'Self-Directed Brokerage Account'),
     (r'money\s+mkt',                                   'Money Market Fund'),   # "MONEY MKT" abbrev
     (r'\bmmrk\b',                                      'Money Market Fund'),   # "MMRK" abbrev
-    (r'common\s+stock',                                'Employer Stock'),
+    # "Common Stock" guarded against trailing "...Fund" -- some real, registered mutual
+    # funds are literally named "<Manager> Common Stock Fund" (e.g. FMI Common Stock Fund,
+    # ticker FMIMX). Without this guard those get mistyped as Employer Stock and excluded
+    # from plan_mf_history_v3. A genuine employer-stock line never has "Fund" trailing
+    # "Common Stock" -- it just ends at "... Common Stock" / "Common Stock, N shares".
+    (r'common\s+stock(?!\s+fund\b)',                   'Employer Stock'),
     (r'common\s+shares',                               'Employer Stock'),
     (r'\ber\s+stock',                                  'Employer Stock'),   # "... ER Stock Fund" (employer)
     # a corporate entity (Inc/Corp/PLC/Ltd) whose name ENDS in bare "stock" -> common stock
     (r'(?:\binc\b|\bcorp\b|corporation|\bplc\b|\bltd\b)\b.*\bstock\s*$', 'Employer Stock'),
     # a directly-held company security: a corporate-entity name carrying a share COUNT and no
-    # fund/trust/account vehicle word -> employer stock (a mutual fund is never named this way)
-    (r'(?:corporation|incorporated|\bcorp\b|\binc\b|\bplc\b|\bco\b|company)\b(?![^\d]*\b(fund|trust|account|portfolio|index)\b)[^\d]*\d[\d,]*\s*shares?', 'Employer Stock'),
+    # fund/trust/account vehicle word -> employer stock (a mutual fund is never named this way).
+    # Checked on BOTH sides of the share count: extraction boilerplate often reads "<Manager
+    # Corp> 1,161,701 shares of American Balanced Fund" -- the vehicle word trails the count,
+    # not leads it, so a real mutual fund's share count was slipping through as Employer Stock.
+    (r'(?:corporation|incorporated|\bcorp\b|\binc\b|\bplc\b|\bco\b|company)\b(?![^\d]*\b(?:fund|trust|account|portfolio|index)\b)[^\d]*\d[\d,]*\s*shares?\b(?!\s*(?:of\s+)?[A-Za-z0-9 &,.\-]{0,60}\b(?:fund|trust|portfolio|index)\b)', 'Employer Stock'),
     (r'mutual\s+funds?',                               'Mutual Fund'),
 ]
 
