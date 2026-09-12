@@ -261,6 +261,28 @@ def compute_extracted_mf_totals(rows: List[Dict],
     return dict(totals)
 
 
+def compute_extracted_all_types_totals(rows: List[Dict]) -> Dict[str, float]:
+    """Sum extracted value per pdf_stem across ALL asset types, not just MF types.
+
+    Mirrors build_mf_rows_df(rows, mf_only=False)'s population -- i.e. every row
+    that would land in plan_holdings_staging, regardless of asset_type (junk /
+    unparseable-value / no-name rows are still dropped by that same function).
+
+    This is the correct "extracted" side for the OCR-fallback under-capture
+    check: it must be compared against the certified amt_mutual_funds directly,
+    NOT against plan_mf_history_v3 (which is already asset_type-filtered).
+    Comparing against v3 would conflate a genuine extraction failure (OCR can
+    fix this) with a plan that extracted fine but has rows sitting in staging
+    with a blank/non-MF asset_type blocking promotion (a separate, deferred
+    problem that OCR cannot fix).
+    """
+    staging_df = build_mf_rows_df(rows, mf_only=False)
+    if staging_df.empty:
+        return {}
+    totals = staging_df.groupby("ack_id")["plan_investment_amt"].sum(min_count=1)
+    return {str(k): float(v) for k, v in totals.dropna().items()}
+
+
 # ---------------------------------------------------------------------------
 # Duplicate detection helpers (used by dedup_plan_rows)
 # ---------------------------------------------------------------------------
@@ -635,6 +657,16 @@ def build_mf_rows_df(rows: List[Dict],
         if mf_only and asset_type and asset_type not in mf_types:
             continue
         if not asset_type and _val is None:     # blank type with no value = junk, drop in both
+            continue
+        # mf_only=True has no staging table downstream to hold a blank-type row for later
+        # reclassification -- this branch is the row's only stop before plan_mf_history_v3.
+        # Letting a blank-type-with-value row through here writes an unclassified name
+        # (individual stocks, bonds, GIC/insurance contract text, "Interest in Master Trust"
+        # boilerplate, etc.) straight into the MF-only table with no vetting at all -- the
+        # root cause identified for the 2026-09-08 v3 contamination cleanup (2,403 names /
+        # $6.41B). mf_only=False keeps these rows deliberately (staging IS the reclassification
+        # holding area); mf_only=True must drop them instead.
+        if mf_only and not asset_type:
             continue
         _name = _strip_trailing_value_tokens(_normalize_mf_name(pick_fund_name(row.get("issuer_name"), row.get("investment_description"))))
         # Name-quality gate: drop blank / numeric-only (bond rates, share counts, mis-mapped

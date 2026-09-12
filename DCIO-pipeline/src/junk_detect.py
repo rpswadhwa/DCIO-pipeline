@@ -193,6 +193,119 @@ _EIN_FRAGMENT_RE = re.compile(r"^ein\d+$")               # isolated EIN digit-gr
 _FORM_ID_CODE_RE = re.compile(r"^\d[a-z]\d{4}[a-z]$")     # form/schedule code, e.g. "1P1211A"
 _MULTI_SEDOL_RE = re.compile(r"sedol.*sedol")             # 2+ SEDOLs spliced into one "name"
 
+# Bucket 4 (2026-09-11): non-MF vehicle types / wrong-asset-type content confirmed via the
+# full v3 cleanup session (431 names / 2,287 rows / $16.82B deleted from live plan_mf_history_v3,
+# reconciled against the full reference-name universe -- this predicate matched exactly those
+# 431 names and no others, out of ~370K distinct names then live in v3). Like Bucket 1-3, this
+# is real, correctly-extracted content -- Treasury/144A bonds, "Interest in Master Trust"/GIC
+# boilerplate, individual stocks, financial-statement narrative fragments -- that is simply the
+# wrong asset type for an MF-only table, not "never a holding" in junk_detect's original sense.
+# Checked against a whitespace-normalized (but NOT alnum-stripped) lowercase string, since these
+# patterns rely on word boundaries/anchors that norm()'s space-stripping would break.
+_WS_RE = re.compile(r"\s+")
+
+
+def _normsp(s: str) -> str:
+    return _WS_RE.sub(" ", (s or "").strip().lower())
+
+
+V3_WRONGTYPE_EXACT = {_normsp(n) for n in [
+    "other investments", "master trust interest in master trust", "forward",
+    "wells fargo co", "wells fargo", "assets available for benefits",
+    "net assets available for benefits per financial statements",
+    "investments at fair value: mutual fund", "corporate stock - common",
+    "general motors co", "investment portfolio", "aramark", "johnson johnson",
+    "johnson johnson stock", "interest in master trust", "deere & co.",
+    "abbott laboratories", "conocophillips", "boeing co", "boeing cothe",
+    "honeywell international inc com", "mcdonalds corp 53", "corporate stock",
+    "plan ein 31",
+    "savings plan master various investments", "savings plan",
+    "american express co", "mcdonalds corporation", "other investment",
+    "interest in mutual fund", "allocated shares", "see attached",
+    "value", "corporate stocks",
+    "transamerica life insurance company", "prudential insurance co",
+    "prudential insurance company",
+    "foreign bonds", "foreign debt",
+    "fund purchases", "fund sales", "purchases", "purchase", "sales", "sale",
+    "investment fund", "investment trust",
+    "companies -", "investment company -",
+    "fund fidelity brokerage",
+    "rates ranging from 325 to 1050", "total marketable securities", "financial statements",
+]}
+_V3_MASTER_TRUST_EXCEPTION = _normsp(
+    "value of interest in registered investment companies massachusetts investors trust class r2")
+_V3_MASTER_TRUST_RE = re.compile(r"master\s.*trust|trust\s.*master|interest in .*trust|trust interest")
+_V3_FIN_STMT_RE = re.compile(
+    r"assets held at end of year|tot al assets held|assets held for investment purposes|"
+    r"assets available for benefits|net assets available|investment contract at contract value|"
+    r"amount reported on the statement|statements? of net assets available for benefits|"
+    r"related to assets held for investment|unvested assets held in holding accounts|"
+    r"of all investments reported in the accompanying|"
+    r"rates? ranging from \d+ to \d+|total marketable securities|^through \d{4}$|financial statements|"
+    r"total registered investment companies"
+)
+_V3_INVESTMENT_CONTRACT_RE = re.compile(r"^investment contracts?\b")
+_V3_CORPORATE_STOCK_RE = re.compile(r"^corporate stocks?\b")
+_V3_INTEREST_IN_RE = re.compile(r"^interest in\b")
+_V3_BOND_144A_RE = re.compile(r"144a")
+_V3_US_TREASURY_RE = re.compile(r"^us treasury")
+_V3_FAIR_VALUE_PREFIX_RE = re.compile(r"^investments?,?\s*at\s*(net asset value|fair value)")
+_V3_TIAACREF_TYPO = _normsp("tiaacref financiaf services tiaa tradltional")
+_V3_VALUE_OF_INTEREST_RE = re.compile(
+    r"^value of interest in (registered investment companies|mutual fund|master trusts?)")
+V3_VALUE_OF_INTEREST_KEEP_AS_DELETE = {_normsp(n) for n in [
+    "value of interest in registered investment companies",
+    "value of interest in registered investment companies (mutual funds)",
+    "value of interest in mutual fund",
+    "value of interest in mutual funds",
+    "value of interest in registered investment companies taiwan - usd total taiwan - usd",
+    "value of interest in registered investment companies brazil - usd total brazil - usd",
+]}
+_V3_INTEREST_IN_REAL_FUND_EXCEPTIONS = {_normsp(n) for n in [
+    "interest in mutual funds blackrock high yield portfolio fund institutional",
+    "interest in mutual funds: american funds europacific growth fund class r-6",
+    "interest in registered investment companies continued mutual of america international fund",
+    "interest in registered investment companies lincoln financial group american funds growth",
+]}
+_V3_UPDATE_BUCKET_EXACT = {_normsp(n) for n in [
+    # boilerplate-prefixed REAL funds -- these get their name stripped (UPDATE), never deleted
+    "vanguard - total stock market index fund total registered investment companies",
+    "vanguard total world stock index admiral total registered investment companies",
+]}
+
+
+def _is_v3_wrong_asset_type(raw: str) -> bool:
+    """True if `raw` is real, correctly-extracted content that is simply the wrong asset
+    type for an MF-only table (Treasury/144A bonds, Master Trust/GIC/annuity interests,
+    individual stocks, financial-statement narrative) -- ported 1:1 from the SQL predicate
+    reconciled against live plan_mf_history_v3 in the 2026-09-11 cleanup session."""
+    low = _normsp(raw)
+    cond = (
+        low in V3_WRONGTYPE_EXACT
+        or (_V3_MASTER_TRUST_RE.search(low) and low != _V3_MASTER_TRUST_EXCEPTION)
+        or _V3_FIN_STMT_RE.search(low)
+        or _V3_INVESTMENT_CONTRACT_RE.search(low)
+        or _V3_CORPORATE_STOCK_RE.search(low)
+        or _V3_INTEREST_IN_RE.search(low)
+        or _V3_BOND_144A_RE.search(low)
+        or (_V3_US_TREASURY_RE.search(low) and not low.endswith("fund"))
+        or low in V3_VALUE_OF_INTEREST_KEEP_AS_DELETE
+    )
+    if not cond:
+        return False
+    if _V3_FAIR_VALUE_PREFIX_RE.search(low):
+        return False
+    if low == _V3_TIAACREF_TYPO:
+        return False
+    if low in _V3_UPDATE_BUCKET_EXACT:
+        return False
+    if _V3_VALUE_OF_INTEREST_RE.search(low) and low not in V3_VALUE_OF_INTEREST_KEEP_AS_DELETE:
+        return False
+    if low in _V3_INTEREST_IN_REAL_FUND_EXCEPTIONS:
+        return False
+    return True
+
+
 # Bucket 6 (2026-09-09): interest-rate-swap / CDS derivative contract legs, e.g.
 # "99S273OA7 SWU02FMZ1 IRS EUR P V 06MEURIB SWUV2FMZ3 CCPVANILLA". A dummy "99S..."
 # identifier prefix, a swap-leg counterparty code (BWU/SWU/BWPC/SWPC), and an IRS/CDS
@@ -287,6 +400,8 @@ def is_junk_name(name: str) -> Tuple[bool, str, str]:
         return True, "v3 cleanup: boilerplate/accounting phrase (confirmed 2026-09-08)", "DELETE"
     if nn in V3_CLEANUP_STOCK_EXACT:
         return True, "v3 cleanup: confirmed individual stock, not a fund (2026-09-08)", "DELETE"
+    if _is_v3_wrong_asset_type(raw):
+        return True, "v3 cleanup: non-MF vehicle / wrong asset type for MF table (2026-09-11)", "DELETE"
     if _EIN_FRAGMENT_RE.match(nn):
         return True, "v3 cleanup: isolated EIN digit-group (2026-09-09)", "DELETE"
     if _FORM_ID_CODE_RE.match(nn):

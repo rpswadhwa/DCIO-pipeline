@@ -164,6 +164,13 @@ ROW_TYPE_PATTERNS = [
     (r'insurance\s+company\s+separate\s+accounts?',    'Separately Managed Account'),
     (r'pooled\s+separate\s+(?:investment\s+)?accounts?', 'Separate Account'),
     (r'separate(?:ly)?\s+managed\s+accounts?',         'Separately Managed Account'),
+    # bare "separate account" fallback (no "pooled"/"insurance company"/"managed"
+    # qualifier) -- e.g. "International Separate Account", a variable-annuity
+    # sub-account name that carries none of the more specific phrases above.
+    # Placed after them so those still win when present; "separate account" is
+    # DOL/insurance vehicle terminology, never part of a real mutual fund's name,
+    # so a bare match here is safe. Closes a v3-cleanup tracker gap (2026-09-11).
+    (r'\bseparate\s+accounts?\b',                       'Separate Account'),
     (r'common\s*/?\s*collective\s+trusts?',            'Common/Collective Trust Fund'),
     (r'collective\s+investment\s+trusts?',             'Common/Collective Trust Fund'),
     (r'collective\s+investment',                       'Common/Collective Trust Fund'),
@@ -198,6 +205,10 @@ ROW_TYPE_PATTERNS = [
     (r'self[\-\s]?direct(?:ed)?\s+acc?t\b',             'Self-Directed Brokerage Account'),
     (r'guaranteed\s+(?:investment\s+contract|income)', 'Stable Value Fund'),
     (r'stable\s+value',                                'Stable Value Fund'),
+    # wrap/wrapper contracts -- the GIC-style principal-preservation overlay insurers
+    # sell against a plan's own bond portfolio (e.g. "Metropolitan Tower Life Ins Co
+    # Wrapper Contract"), non-MF. Closes a v3-cleanup tracker gap (2026-09-11).
+    (r'wrap(?:per)?\s+contracts?',                     'Stable Value Fund'),
     # Variable annuities are now typed as their own non-MF vehicle (Variable Annuity Contract)
     # per direct PDF review -- these ARE their own asset-type heading in the filing, not a
     # mutual fund. A prior 2500-plan run flagged -45 PASS when this was excluded; that was
