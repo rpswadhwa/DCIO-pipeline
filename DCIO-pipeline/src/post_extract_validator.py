@@ -538,6 +538,29 @@ _MF_PREFIX_RE = _re.compile(r'^\s*mutual\s+funds?\s*[-,:]?\s*', _re.IGNORECASE)
 _MF_NAME_FILLER_RE = _re.compile(
     r'(?i)\b(sub)?totals?\b|\bcontinued\b|\bshares\b|\bregistered\s+investment\s+compan\w*\b'
     r'|\binvestments?\b|\bn/?a\b|[^A-Za-z]')
+# "Investments at fair value: <fund>" / "Investments, at net asset value" / etc. --
+# a Schedule H column-(b) accounting label extraction boilerplate prepends to the
+# fund name (also seen with "determined by quoted market prices" / "as quoted by
+# the custodian" inserted before the colon). Ported from the 2026-09-11 v3-cleanup
+# reconciliation (282 names / $1.39B contaminated this way in plan_mf_history_v3).
+_FAIR_VALUE_PREFIX_RE = _re.compile(
+    r'(?i)^investments?,?\s*at\s*(?:fair\s+value|net\s+asset\s+value)'
+    r'(?:\s+determined\s+by\s+quoted\s+market\s+prices)?'
+    r'(?:\s+as\s+quoted\s+by\s+the\s+custodian)?'
+    r'\s*[:,\-]?\s*')
+# "Value of Interest in Registered Investment Companies/Mutual Fund(s)/Master Trust(s):
+# <fund>" (and the shorter "Interest in ..." variant without "Value of") -- a second
+# Schedule H accounting-label boilerplate family, often followed by a region/ticker
+# code fragment ("Global Region - USD MFO ...") or a "continued" page-break artifact
+# before the real fund name. Ported from the 2026-09-11 v3-cleanup reconciliation
+# (105 names / ~$1.85B contaminated this way in plan_mf_history_v3).
+_VALUE_OF_INTEREST_PREFIX_RE = _re.compile(
+    r'(?i)^(?:value\s+of\s+)?interest\s+in\s*'
+    r'(?:registered\s+investment\s+companies|mutual\s+funds?|master\s+trusts?)?'
+    r'\s*[:,\-]?\s*')
+_VOI_REGION_CODE_RE1 = _re.compile(r'(?i)^[a-z ]*region\s*-\s*usd\s*(?:mfc|mfo)?\s*')
+_VOI_REGION_CODE_RE2 = _re.compile(r'(?i)^[a-z ]*-\s*usd\s*(?:mfc|mfo)?\s*')
+_VOI_CONTINUED_RE = _re.compile(r'(?i)^continued\s+')
 _ANNUITY_VEHICLE_RE = _re.compile(
     r'(?i)(variable\s+annuit|annuity\s+(account|contract|compan|co\b)'
     r'|insurance\s+(and\s+)?annuity|traditional\s+annuity|\bCREF\b'
@@ -610,6 +633,33 @@ def _normalize_mf_name(name: str) -> str:
         stripped = _MF_PREFIX_RE.sub("", n).strip()
         residual = _MF_NAME_FILLER_RE.sub(" ", stripped)
         if not _re.search(r"[A-Za-z]", residual):
+            return ""
+        return stripped
+    if _FAIR_VALUE_PREFIX_RE.match(n):
+        stripped = _FAIR_VALUE_PREFIX_RE.sub("", n).strip()
+        stripped = _re.sub(r"^[\-:,\s]+", "", stripped)
+        # a bare "Mutual Fund" residual (e.g. "Investments at fair value: Mutual
+        # Fund") names no specific fund either -- drop it like any other
+        # subtotal/type-only row instead of writing the boilerplate itself.
+        if stripped.strip().lower() in ("mutual fund", "mutual funds"):
+            return ""
+        residual = _MF_NAME_FILLER_RE.sub(" ", stripped)
+        if not _re.search(r"[A-Za-z]", residual):
+            return ""
+        return stripped
+    if _VALUE_OF_INTEREST_PREFIX_RE.match(n):
+        stripped = _VALUE_OF_INTEREST_PREFIX_RE.sub("", n).strip()
+        stripped = _re.sub(r"^[\-:,\s]+", "", stripped)
+        stripped = _VOI_REGION_CODE_RE1.sub("", stripped)
+        stripped = _VOI_REGION_CODE_RE2.sub("", stripped)
+        stripped = _VOI_CONTINUED_RE.sub("", stripped).strip()
+        # a bare "(Mutual Funds)" / "Registered Investment Companies" residual names
+        # no specific fund -- drop it like any other subtotal/type-only row.
+        if _re.match(
+            r'(?i)^[\s\(\)]*(?:registered\s+investment\s+companies|mutual\s+funds?'
+            r'|master\s+trusts?)?[\s\(\)]*$', stripped):
+            return ""
+        if not _re.search(r"[A-Za-z]", stripped):
             return ""
         return stripped
     return n
