@@ -1,0 +1,360 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Starwood Exposure Snapshot</title>
+  <style>
+    :root {
+      --bg: linear-gradient(135deg, #04111f 0%, #0b1e35 58%, #10294a 100%);
+      --text: #e7eef8;
+      --muted: #aac0d7;
+      --card: rgba(8, 20, 38, 0.84);
+      --border: rgba(111, 189, 255, 0.22);
+      --accent: #68d6ff;
+      --accent-soft: rgba(104, 214, 255, 0.16);
+      --warn: #ffd36a;
+      --warn-soft: rgba(255, 211, 106, 0.14);
+      --good: #6ee7b7;
+      --radius: 18px;
+      --shadow: 0 18px 42px rgba(0, 0, 0, 0.28);
+    }
+
+    * { box-sizing: border-box; }
+    html, body {
+      margin: 0;
+      padding: 0;
+      background: var(--bg);
+      background-attachment: fixed;
+      color: var(--text);
+      font-family: "Segoe UI", Arial, sans-serif;
+      overflow-x: hidden;
+    }
+
+    .deck {
+      min-height: 100vh;
+      scroll-snap-type: y proximity;
+      overflow-y: auto;
+      height: 100vh;
+    }
+
+    .slide {
+      min-height: 100vh;
+      padding: clamp(28px, 4vw, 64px) clamp(24px, 7vw, 96px);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      border-bottom: 1px solid var(--border);
+      position: relative;
+      scroll-snap-align: start;
+    }
+
+    .slide-num {
+      position: absolute;
+      top: 28px;
+      right: 36px;
+      color: var(--muted);
+      font-size: 0.8rem;
+      letter-spacing: 0.06em;
+    }
+
+    .eyebrow {
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.14em;
+      font-size: 0.74rem;
+      font-weight: 700;
+      margin-bottom: 14px;
+    }
+
+    h1, h2 {
+      margin: 0;
+      line-height: 1.08;
+      letter-spacing: -0.02em;
+    }
+
+    h1 { font-size: clamp(2.1rem, 4.5vw, 3.8rem); max-width: 13ch; }
+    h2 { font-size: clamp(1.4rem, 2.7vw, 2.2rem); }
+
+    .subhead {
+      margin-top: 14px;
+      color: var(--muted);
+      font-size: clamp(1rem, 1.35vw, 1.15rem);
+      line-height: 1.6;
+      max-width: 64ch;
+    }
+
+    .stat-grid {
+      margin-top: 36px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 14px;
+    }
+
+    .stat, .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(6px);
+    }
+
+    .stat {
+      padding: 20px 22px;
+    }
+
+    .stat .num {
+      font-size: clamp(1.8rem, 3vw, 2.5rem);
+      color: var(--accent);
+      font-weight: 700;
+      line-height: 1.1;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .stat .label {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 0.84rem;
+      line-height: 1.45;
+    }
+
+    .card {
+      padding: 20px 22px;
+      margin-top: 20px;
+    }
+
+    .offer-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 14px;
+      margin-top: 24px;
+    }
+
+    .offer-name {
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 8px;
+    }
+
+    .pill {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 999px;
+      border: 1px solid var(--border);
+      color: var(--accent);
+      font-size: 0.72rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 10px;
+      font-weight: 700;
+      background: rgba(255, 255, 255, 0.03);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 18px;
+      font-size: 0.92rem;
+    }
+
+    th, td {
+      padding: 12px 14px;
+      border-bottom: 1px solid rgba(170, 192, 215, 0.14);
+      vertical-align: top;
+    }
+
+    th {
+      color: var(--accent);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      font-size: 0.72rem;
+      text-align: left;
+    }
+
+    .num-cell {
+      text-align: right;
+      font-variant-numeric: tabular-nums;
+      white-space: nowrap;
+    }
+
+    .confidence-high {
+      color: var(--good);
+      font-weight: 700;
+    }
+
+    .note-list {
+      display: grid;
+      gap: 14px;
+      margin-top: 24px;
+      max-width: 72ch;
+    }
+
+    .note {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-left: 4px solid var(--warn);
+      border-radius: 14px;
+      padding: 16px 18px;
+      box-shadow: var(--shadow);
+    }
+
+    .note strong {
+      display: block;
+      margin-bottom: 6px;
+      color: var(--text);
+    }
+
+    .note span {
+      color: var(--muted);
+      line-height: 1.55;
+    }
+
+    .footnote {
+      margin-top: 16px;
+      color: var(--muted);
+      font-size: 0.84rem;
+      line-height: 1.55;
+      max-width: 74ch;
+    }
+
+    @media (max-width: 700px) {
+      .slide-num { right: 24px; }
+      th:nth-child(2), td:nth-child(2) { display: none; }
+    }
+  </style>
+</head>
+<body>
+  <div class="deck">
+    <section class="slide">
+      <div class="eyebrow">Athena-Driven Exposure Snapshot</div>
+      <h1>Yes, I can do the full thing from Athena.</h1>
+      <p class="subhead">
+        This first-pass deck was built from direct Athena queries against the Starwood
+        holdings search, using normalized fund-name matching plus issuer-aware fields.
+        As of August 6, 2026, the high-confidence pass finds three distinct pension-plan
+        hits, three distinct offerings, and about $1.63M of known exposure.
+      </p>
+      <div class="stat-grid">
+        <div class="stat">
+          <div class="num">3</div>
+          <div class="label">High-confidence plan matches from Athena</div>
+        </div>
+        <div class="stat">
+          <div class="num">$1.63M</div>
+          <div class="label">Known exposure across those matched plans</div>
+        </div>
+        <div class="stat">
+          <div class="num">3</div>
+          <div class="label">Distinct Starwood offerings surfaced in the current pass</div>
+        </div>
+        <div class="stat">
+          <div class="num">1</div>
+          <div class="label">Row with clean issuer resolution to Starwood Capital Management</div>
+        </div>
+      </div>
+    </section>
+
+    <section class="slide">
+      <span class="slide-num">02 / 04</span>
+      <div class="eyebrow">Offering Mix</div>
+      <h2>What the Starwood exposure appears to be</h2>
+      <p class="subhead">
+        The current high-confidence results are not a broad fund shelf. They skew toward
+        one private real estate income vehicle and two property trust securities.
+      </p>
+      <div class="offer-grid">
+        <div class="card">
+          <div class="pill">Highest Exposure</div>
+          <div class="offer-name">STARWOOD REAL ESTATE INCOME TRUST</div>
+          <div class="subhead">1 plan | $1,219,079 | issuer field resolved to Starwood Capital Management</div>
+        </div>
+        <div class="card">
+          <div class="pill">Public REIT Security</div>
+          <div class="offer-name">STARWOOD PROPERTY TRUST INC REIT</div>
+          <div class="subhead">1 plan | $354,289 | issuer fields sparse, name match explicit</div>
+        </div>
+        <div class="card">
+          <div class="pill">Property Trust Line</div>
+          <div class="offer-name">STARWOOD PROPERTY TRUST, INC</div>
+          <div class="subhead">1 plan | $60,356 | raw sponsor field resolves to Starwood</div>
+        </div>
+      </div>
+      <p class="footnote">
+        The looser abbreviation pass can surface extra rows, but it also introduces noisy
+        matches. This snapshot intentionally sticks to the high-confidence set so the story
+        stays clean.
+      </p>
+    </section>
+
+    <section class="slide">
+      <span class="slide-num">03 / 04</span>
+      <div class="eyebrow">Matched Plans</div>
+      <h2>The plan-level rows that survived the strict screen</h2>
+      <div class="card">
+        <table>
+          <thead>
+            <tr>
+              <th>Plan</th>
+              <th>Offering</th>
+              <th>Issuer Signal</th>
+              <th>Confidence</th>
+              <th class="num-cell">Amount</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>MINNKOTA POWER COOPERATIVE, INC. EMPLOYEES PENSION PLAN -PLAN B</td>
+              <td>STARWOOD REAL ESTATE INCOME TRUST</td>
+              <td>STARWOOD CAPITAL MANAGEMENT</td>
+              <td class="confidence-high">HIGH</td>
+              <td class="num-cell">$1,219,079</td>
+            </tr>
+            <tr>
+              <td>TRUIST FINANCIAL CORPORATION PENSION PLAN</td>
+              <td>STARWOOD PROPERTY TRUST INC REIT</td>
+              <td>Explicit fund-name match</td>
+              <td class="confidence-high">HIGH</td>
+              <td class="num-cell">$354,289</td>
+            </tr>
+            <tr>
+              <td>BLUE CROSS AND BLUE SHIELD OF MINNESOTA PENSION PLAN</td>
+              <td>STARWOOD PROPERTY TRUST, INC</td>
+              <td>Raw sponsor field: STARWOOD</td>
+              <td class="confidence-high">HIGH</td>
+              <td class="num-cell">$60,356</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      <p class="footnote">
+        Source mix: one row from <em>plan_cit_history</em> and two from <em>plan_mf_history_v3</em>,
+        joined back to <em>plan_master</em> for clean plan names.
+      </p>
+    </section>
+
+    <section class="slide">
+      <span class="slide-num">04 / 04</span>
+      <div class="eyebrow">What This Proves</div>
+      <h2>This is the same workflow, just tighter and cleaner</h2>
+      <div class="note-list">
+        <div class="note">
+          <strong>Athena is in the loop.</strong>
+          <span>The numbers in this deck came from direct Athena queries, not hand-entered examples or mocked data.</span>
+        </div>
+        <div class="note">
+          <strong>The matching logic is configurable.</strong>
+          <span>We can run strict name-only matching, broader issuer-aware matching, or a review queue with confidence buckets.</span>
+        </div>
+        <div class="note">
+          <strong>The format is flexible.</strong>
+          <span>If you want the exact same long-form whitespace narrative as the reference deck, I can expand this into a richer sponsor-gap analysis and rebuild the slides around that story.</span>
+        </div>
+      </div>
+      <p class="footnote">
+        Next version options: add medium-confidence rows, broaden to sponsor-level whitespace logic,
+        or restyle this into a more executive presentation.
+      </p>
+    </section>
+  </div>
+</body>
+</html>

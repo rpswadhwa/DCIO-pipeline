@@ -511,6 +511,74 @@ Do not run these prod reloads without explicit go-ahead — add here, then wait.
   only. Revisit once an OCR-capable extraction path is built, then rerun
   scoped to this ack_id.
 
+## AXIENT 401(K) PLAN (AXIENT, LLC)
+- ack_id: `20251002171436NAL0001774450001`
+- Bug: **not a current-code bug — stale prod data from an old pipeline run.**
+  Live `plan_holdings_staging` has 52 rows: 48 real fund rows (45 uniformly
+  and wrongly stamped `asset_type = 'common/collective trust fund'`,
+  regardless of actual fund type — T. Rowe Price target-date, Vanguard
+  Institutional Index, Fidelity Balanced Z, etc.) plus 4 garbage rows leaked
+  from the filing's Statement-of-Net-Assets pages (`"Investments in the
+  Trust, at fair value"` $307,145,326, `"Assets Cash"` $1,623,129,
+  `"Employee contributions"` $395, a mangled column-header fragment).
+- Fix status: N/A — verified via isolated EC2 scratch pipeline run
+  (`python3.11 -m src.run_pipeline`, `SYNC_S3_INPUTS=0`, current working-tree
+  code, 2026-09-02): 48 real fund rows extract cleanly, 46 of 48 correctly
+  **blank** `asset_type` (only Standard Guaranteed Income Fund → Stable
+  Value Fund and U.S. Government Money Market → Money Market Fund get
+  typed, both correct), and **none** of the 4 garbage rows appear anywhere
+  in `investments_raw.csv`/`investments_clean.csv`/`removed_total_rows.csv`/
+  `junk_dropped_*.csv`. **Note: this plan's source PDF has no per-row
+  asset-type column at all (Schedule H, 4i table on pages 22-23 is just
+  issuer | description | `**` | current value) — blank `asset_type` on 46
+  of 48 rows is the CORRECT/expected result, not missing data.** Only
+  Standard Guaranteed Income Fund and U.S. Government Money Market
+  self-identify their type in the fund name itself. Traced why: `src/section_typing.py` (CIT-catch,
+  subtotal-drop, cross-page dedup) was only merged into the codebase
+  2026-08-12 (commit `fe89e621`), well after AXIENT's PDF was last loaded —
+  the plan's staging row is a leftover from an older pipeline version, not a
+  live defect. See `docs/parking_lot.md` AXIENT entry for full detail.
+- Rerun status: **not yet run** — needs a full pipeline + classification
+  rerun scoped to this ack_id, then a `load_plan()` reload of
+  `plan_holdings_staging`. Per [[feedback_dcio_load_plan_deletes_all_rows]],
+  confirm there's only one snapshot for this ack_id before reloading.
+  Expected recovery if run: 52 rows (45 mistyped, 4 garbage) → 48 rows, 46
+  correctly blank / 2 correctly typed, no garbage rows.
+
+## Presbyterian Healthcare Services 401(k) Plan
+- ack_id: `20250715090357NAL0001184387001`
+- Bug: **not a current-code bug — stale prod data from an old pipeline run.**
+  Live `plan_holdings_staging` has 29 rows, $952,109,593 total (certified
+  `amt_mutual_funds` = $904,086,154) with 26 of 29 real fund rows uniformly
+  and wrongly stamped `asset_type = 'participant loan'` (Vanguard
+  Institutional Index I, T. Rowe Price Instl Large Cap Core, the full
+  Vanguard Instl Target Retirement 2020-2065 series, American Funds, PIMCO,
+  Dodge & Cox, Invesco, Carillon, Fidelity Small Cap Value, etc.).
+- Fix status: N/A — verified via isolated EC2 scratch pipeline run
+  (`python3.11 -m src.run_pipeline`, `SYNC_S3_INPUTS=0`, current working-tree
+  code, 2026-09-02): 29 rows extract cleanly. `investments_raw.csv` shows the
+  raw extraction stage genuinely does pick up a stray "Participant Loan"
+  section-header bleed across all 29 rows on page 20 (sourced from the
+  filing's own Participant Loan sub-schedule elsewhere on the page), but the
+  pipeline's cleanup stage catches and blanks it correctly — final
+  `investments_clean.csv` shows all 27 real fund rows with **blank**
+  `asset_type` (correct — this PDF's Schedule H 4i table, like AXIENT's, has
+  no per-row type column) and the 2 legitimate rows correctly typed
+  (Vanguard Federal Money Market Fund → Money Market Fund, MetLife Fixed
+  Interest Account 3.00% → Stable Value Fund). Zero "Participant Loan"
+  mistags survive to clean output (`grep -i "participant loan"
+  investments_clean.csv` → no matches). Prod's staging row predates whatever
+  cleanup-stage fix now catches this bleed — same stale-data pattern as
+  AXIENT, not a live defect. See `docs/parking_lot.md` entry for full detail.
+- Rerun status: **not yet run** — needs a full pipeline + classification
+  rerun scoped to this ack_id, then a `load_plan()` reload of
+  `plan_holdings_staging`. Per [[feedback_dcio_load_plan_deletes_all_rows]],
+  confirm there's only one snapshot for this ack_id before reloading.
+  Expected recovery if run: 29 rows (26 mistyped "participant loan") → 29
+  rows, 27 correctly blank / 2 correctly typed, no mistags. Note: staged
+  total ($952,109,593) is ~5% over certified ($904,086,154) — not addressed
+  by this rerun, may need separate scoping check.
+
 ---
 
 Template for a new entry:

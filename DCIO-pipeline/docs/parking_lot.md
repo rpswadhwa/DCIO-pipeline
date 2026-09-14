@@ -1402,3 +1402,172 @@ wrap structure, not a literal bond fund — candidates are `Stable Value
 Fund` or `Insurance General Account` (both already canonical), needs a
 call before adding the pattern. No rerun queued — not a code fix yet.
 reconcile this plan's `plan_mf_history_v3` total to the certified figure.
+
+---
+
+## MSA Retirement Savings Plan — CONFIRMED: OCR gap
+
+- **Plan**: MSA Retirement Savings Plan (MSA Worldwide, LLC)
+- **ack_id**: `20251008102255NAL0002916339001`
+- **Certified**: $396,778,289 — **Staged**: $15,222 (one garbage row;
+  `plan_mf_history_v3` has 0 rows)
+
+23-page PDF. Table of contents (page 2) points to the "Supplemental
+Schedule of Assets (Held at End of Year)" on page 13. Confirmed via
+`pdfplumber`: page 13 (and its duplicate, page 14) has only 25 extractable
+characters (just the running header "Table of Contents / 13") and the
+entire schedule body is 6 stacked full-width raster images tiling the
+page — a scanned/flattened page with no text layer, same failure mode as
+Stanford/Avago/Con Edison (finding #1/#9/#11 above). The one garbage
+staging row ("Pittsburgh PA", $15,222) is a stray address/zip fragment
+picked up from elsewhere in the filing, not real schedule data — 0% real
+capture.
+
+**Fix candidate**: same as other OCR-gap plans — `USE_OCR=1` (or targeted
+per-page OCR fallback) needed before this schedule can be read at all; no
+text/column-mapping fix is possible here.
+
+**Not yet fixed** — logged only, per user decision (2026-09-02) to move on
+to the next plan.
+
+---
+
+## AXIENT 401(K) PLAN — CONFIRMED: garbage summary rows leaking into staging
+
+- **Plan**: AXIENT 401(K) PLAN (AXIENT, LLC)
+- **ack_id**: `20251002171436NAL0001774450001`
+- **Certified**: $301,626,956 (`amt_mutual_funds`) — **Staged**: 52 rows,
+  $623,451,814 total (real fund rows: 48 rows, $314,682,964)
+
+32-page PDF: pages 1-21 are audited financial statements, real Schedule H
+Line 4i "Schedule of Assets (Held at End of Year)" is on pages 22-23 (a
+clean, well-formed table: issuer | description | `**` | current value — no
+separate cost column since all investments are participant-directed).
+
+The 48 real fund rows extracted from pages 22-23 sum to $314,682,964, which
+matches the PDF's own printed schedule total ($317,149,950) once the
+$2,466,986 participant-loan line is accounted for — extraction of the real
+schedule is essentially complete and accurate. The ~$13M gap vs. the
+certified `amt_mutual_funds` figure ($301,626,956) is plausibly just scope
+(certified figure likely excludes the Standard Guaranteed Income Fund
+stable-value wrap ($7,537,638) and/or the Schwab self-directed brokerage
+window balances), not a capture bug.
+
+The real bug: **4 garbage rows leaked into `plan_holdings_staging` from
+elsewhere in the filing**, roughly doubling the apparent total:
+  - `"Investments in the Trust, at fair value"` — $307,145,326 (a
+    Statement-of-Net-Assets subtotal line, not a holding — suspiciously
+    close to the certified total itself)
+  - `"Assets Cash"` — $1,623,129 (balance sheet cash line)
+  - `"Employee contributions"` — $395 (financial-statement narrative)
+  - `"value"` / issuer `"lessor or similar party"` — a garbled fragment of
+    the schedule's own column headers, blank amount
+
+All 4 have blank `raw_sponsor_name` and blank `asset_type` in staging
+(visible in the CSV pull), unlike the 48 real fund rows which all carry a
+sponsor and an asset_type — a decent structural signal for filtering them
+out. Root cause of *why* these particular strings got pulled into staging
+(likely the balance-sheet/statement-of-net-assets pages being
+misclassified as schedule pages, or a page-boundary bleed during table
+extraction) not yet traced into `text_extract.py`.
+
+**Second bug on this plan — `asset_type` not trustworthy for any row**:
+of the 48 real fund rows, 45 are uniformly tagged `common/collective trust
+fund` regardless of actual fund type (T. Rowe Price Retirement Income
+target-date series, Vanguard Institutional Index, Fidelity Balanced Z,
+PIMCO Diversified Income, etc. — mostly mutual funds, not CCTs) — reads
+like a fallback/default value rather than a real classification. Only 2
+rows got a distinct, plausible tag (Standard Guaranteed Income Fund →
+`stable value fund`, U.S. Government Money Market → `money market fund`).
+The 4 garbage rows have blank `asset_type`.
+
+**ROOT CAUSE FOUND (2026-09-02) for both bugs above — stale staging data,
+not a live code bug.** Ran the real orchestrator (`python3.11 -m
+src.run_pipeline`, not standalone function calls) against this exact PDF in
+an isolated EC2 scratch dir (`INPUT_DIR=/tmp/axient_in
+OUTPUT_DIR=/tmp/axient_out SYNC_S3_INPUTS=0`, current working-tree code).
+Result: **48 real fund rows, 46 of 48 correctly BLANK `asset_type`** (only
+Standard Guaranteed Income Fund → Stable Value Fund and U.S. Government
+Money Market → Money Market Fund get typed, both correct), **and none of
+the 4 garbage rows appear anywhere in the output** — `investments_raw.csv`,
+`investments_clean.csv`, `removed_total_rows.csv`, and
+`junk_dropped_*.csv` were all inspected directly. The "Investments in the
+Trust, at fair value" $307,145,326 line and the "Assets Cash" / "Employee
+contributions" / mangled-header rows simply never get produced by the
+current code.
+
+Traced why prod's `plan_holdings_staging` still shows the bad data anyway:
+`src/section_typing.py` — the module that does the CIT-catch, subtotal-drop,
+and cross-page dedup that's responsible for cleaning up exactly this kind
+of leak — was only merged into the deployed codebase on 2026-08-12 (commit
+`fe89e621`, "pull in local masters mutual-fund/OCR fixes... add
+previously-uncommitted ditto_fix/junk_detect/mf_reconcile/section_typing/
+stage_report modules"), and the EC2 working tree has substantial further
+uncommitted fixes on top of that across `post_extract_validator.py`,
+`data_cleaner.py`, `text_extract.py`, and others. AXIENT's ack_id was
+never reprocessed since those fixes landed — its 52-row staging entry is a
+leftover from an older, buggier pipeline run (one of the 3 separate S3
+`batch_date` folders this PDF was ingested under: `2026-06-28`,
+`2026-08-23-undercapture130`, `2026-08-24-chunk09`).
+
+**Conclusion: this is not a code defect to fix — it's a rerun/reload.**
+Moved to `docs/rerun_queue.md` instead of staying parked here. No code
+change needed; a plain rerun of the current pipeline + `load_plan()` reload
+against this ack_id should produce clean staging data (48 rows, correct
+blank/typed `asset_type`, no garbage rows). Per [[feedback_dcio_load_plan_deletes_all_rows]],
+confirm there's only one snapshot for this ack_id before reloading.
+
+---
+
+## Presbyterian Healthcare Services 401(k) Plan — asset_type defaulting to "participant loan" on real fund rows
+
+- **Plan**: Presbyterian Healthcare Services (sponsor recorded in staging as
+  "Fidelity"/"MetLife" per recordkeeper, not the actual plan sponsor name)
+- **ack_id**: `20250715090357NAL0001184387001`
+- **Certified**: $904,086,154 (`amt_mutual_funds`) — **Staged**: 29 rows,
+  $952,109,593 total (~5% over certified — plausibly scope, not a capture
+  bug; not yet investigated)
+
+`plan_holdings_staging` pull: 29 rows, real named mutual funds throughout
+(Vanguard Institutional Index I, T. Rowe Price Institutional Large Cap
+Core, the full Vanguard Instl Target Retirement 2020-2065 series, American
+Funds, PIMCO, Dodge & Cox International Stock, Invesco Small Cap Growth,
+Carillon Eagle Mid Cap Growth, etc.) — **26 of 29 rows are uniformly tagged
+`asset_type = 'participant loan'`**, which is obviously wrong for a target-
+date/index/active mutual fund lineup. Only 2 rows escaped the default with
+a plausible tag (Vanguard Federal Money Market Fund → `money market fund`,
+MetLife Fixed Interest Account 3.00% → `stable value fund`); `Fidelity
+Small Cap Value` also shows `participant loan` despite being a real fund.
+`asset_class`/`asset_sub_class` are all `PENDING_AI` and
+`validation_status = MANUAL_REVIEW` across every row.
+
+**ROOT CAUSE FOUND (2026-09-02) — same pattern as AXIENT: stale staging
+data, not a live code bug.** Ran the real orchestrator (`python3.11 -m
+src.run_pipeline`, isolated EC2 scratch dir `INPUT_DIR=/tmp/presby_in
+OUTPUT_DIR=/tmp/presby_out SYNC_S3_INPUTS=0`, current working-tree code)
+against this exact PDF. Confirmed the raw extraction stage genuinely does
+pick up a stray "Participant Loan" section-header bleed on page 20
+(`investments_raw.csv` shows it stamped across all 29 rows there — sourced
+from the filing's Participant Loan sub-schedule elsewhere on the page),
+but the pipeline's cleanup stage catches and blanks it correctly: final
+`investments_clean.csv` shows all 27 real fund rows with **blank**
+`asset_type` (correct — this PDF's Schedule H 4i table, like AXIENT's, has
+no per-row type column) and the 2 legitimate rows correctly typed
+(Vanguard Federal Money Market Fund → Money Market Fund, MetLife Fixed
+Interest Account 3.00% → Stable Value Fund). **Zero "Participant Loan"
+mistags survive to clean output** — `grep -i "participant loan"
+investments_clean.csv` returns no matches.
+
+**Conclusion: this is not a code defect — it's a rerun/reload.** Moved to
+`docs/rerun_queue.md`. No code change needed; a rerun of the current
+pipeline + `load_plan()` reload against this ack_id should produce clean
+staging data (29 rows, 27 correctly blank / 2 correctly typed, no
+"Participant Loan" mistags). Per
+[[feedback_dcio_load_plan_deletes_all_rows]], confirm there's only one
+snapshot for this ack_id before reloading.
+
+(A speculative text_extract.py fix targeting a suspected page-17
+fair-value-footnote leak was drafted and then reverted uncommitted once
+this evidence showed page 17 isn't even classified as supplemental for
+this plan and the garbage row doesn't originate in extraction at all — that
+theory was wrong.)

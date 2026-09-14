@@ -1,0 +1,195 @@
+{
+    "Table": {
+        "Name": "plan_mf_history_v3",
+        "DatabaseName": "default",
+        "CreateTime": "2026-04-05T11:37:10-07:00",
+        "UpdateTime": "2026-08-12T02:12:58-07:00",
+        "Retention": 0,
+        "StorageDescriptor": {
+            "Columns": [
+                {
+                    "Name": "ack_id",
+                    "Type": "string",
+                    "Parameters": {
+                        "iceberg.field.current": "true",
+                        "iceberg.field.id": "1",
+                        "iceberg.field.optional": "true"
+                    }
+                },
+                {
+                    "Name": "raw_entity_name",
+                    "Type": "string",
+                    "Parameters": {
+                        "iceberg.field.current": "true",
+                        "iceberg.field.id": "2",
+                        "iceberg.field.optional": "true"
+                    }
+                },
+                {
+                    "Name": "raw_sponsor_name",
+                    "Type": "string",
+                    "Parameters": {
+                        "iceberg.field.current": "true",
+                        "iceberg.field.id": "3",
+                        "iceberg.field.optional": "true"
+                    }
+                },
+                {
+                    "Name": "plan_investment_amt",
+                    "Type": "decimal(18,2)",
+                    "Parameters": {
+                        "iceberg.field.current": "true",
+                        "iceberg.field.id": "4",
+                        "iceberg.field.optional": "true"
+                    }
+                },
+                {
+                    "Name": "asset_class",
+                    "Type": "string",
+                    "Parameters": {
+                        "iceberg.field.current": "true",
+                        "iceberg.field.id": "5",
+                        "iceberg.field.optional": "true"
+                    }
+                },
+                {
+                    "Name": "asset_sub_class",
+                    "Type": "string",
+                    "Parameters": {
+                        "iceberg.field.current": "true",
+                        "iceberg.field.id": "6",
+                        "iceberg.field.optional": "true"
+                    }
+                },
+                {
+                    "Name": "is_passive",
+                    "Type": "boolean",
+                    "Parameters": {
+                        "iceberg.field.current": "true",
+                        "iceberg.field.id": "7",
+                        "iceberg.field.optional": "true"
+                    }
+                },
+                {
+                    "Name": "fund_ticker",
+                    "Type": "string",
+                    "Parameters": {
+                        "iceberg.field.current": "true",
+                        "iceberg.field.id": "8",
+                        "iceberg.field.optional": "true"
+                    }
+                },
+                {
+                    "Name": "normalized_sponsor_name",
+                    "Type": "string",
+                    "Parameters": {
+                        "iceberg.field.current": "true",
+                        "iceberg.field.id": "9",
+                        "iceberg.field.optional": "true"
+                    }
+                },
+                {
+                    "Name": "sponsor_match_status",
+                    "Type": "string",
+                    "Parameters": {
+                        "iceberg.field.current": "true",
+                        "iceberg.field.id": "10",
+                        "iceberg.field.optional": "true"
+                    }
+                },
+                {
+                    "Name": "sponsor_match_confidence",
+                    "Type": "decimal(5,4)",
+                    "Parameters": {
+                        "iceberg.field.current": "true",
+                        "iceberg.field.id": "11",
+                        "iceberg.field.optional": "true"
+                    }
+                },
+                {
+                    "Name": "sponsor_match_token",
+                    "Type": "string",
+                    "Parameters": {
+                        "iceberg.field.current": "true",
+                        "iceberg.field.id": "12",
+                        "iceberg.field.optional": "true"
+                    }
+                },
+                {
+                    "Name": "sponsor_match_source",
+                    "Type": "string",
+                    "Parameters": {
+                        "iceberg.field.current": "true",
+                        "iceberg.field.id": "13",
+                        "iceberg.field.optional": "true"
+                    }
+                },
+                {
+                    "Name": "sponsor_match_risk_level",
+                    "Type": "string",
+                    "Parameters": {
+                        "iceberg.field.current": "true",
+                        "iceberg.field.id": "14",
+                        "iceberg.field.optional": "true"
+                    }
+                },
+                {
+                    "Name": "sponsor_matched_by",
+                    "Type": "string",
+                    "Parameters": {
+                        "iceberg.field.current": "true",
+                        "iceberg.field.id": "15",
+                        "iceberg.field.optional": "true"
+                    }
+                },
+                {
+                    "Name": "sponsor_cleaned_at",
+                    "Type": "timestamp",
+                    "Parameters": {
+                        "iceberg.field.current": "true",
+                        "iceberg.field.id": "16",
+                        "iceberg.field.optional": "true"
+                    }
+                },
+                {
+                    "Name": "needs_sponsor_cleaning_flag",
+                    "Type": "boolean",
+                    "Parameters": {
+                        "iceberg.field.current": "true",
+                        "iceberg.field.id": "17",
+                        "iceberg.field.optional": "true"
+                    }
+                },
+                {
+                    "Name": "validation_status",
+                    "Type": "string",
+                    "Parameters": {
+                        "iceberg.field.current": "true",
+                        "iceberg.field.id": "18",
+                        "iceberg.field.optional": "true"
+                    }
+                }
+            ],
+            "Location": "s3://retirementinsights-silver/iceberg-warehouse/plan_mf_history_v3",
+            "AdditionalLocations": [
+                "s3://retirementinsights-silver/iceberg-warehouse/plan_mf_history_v3/data"
+            ],
+            "Compressed": false,
+            "NumberOfBuckets": 0,
+            "SortColumns": [],
+            "StoredAsSubDirectories": false
+        },
+        "TableType": "EXTERNAL_TABLE",
+        "Parameters": {
+            "metadata_location": "s3://retirementinsights-silver/iceberg-warehouse/plan_mf_history_v3/metadata/04725-5544acc3-7458-4546-9d9c-43a55bdfe495.metadata.json",
+            "previous_metadata_location": "s3://retirementinsights-silver/iceberg-warehouse/plan_mf_history_v3/metadata/04724-607eff8d-6b92-4bde-abbe-e922319e6b34.metadata.json",
+            "table_type": "ICEBERG"
+        },
+        "CreatedBy": "arn:aws:iam::677276112057:user/rishiyad@gmail.com",
+        "IsRegisteredWithLakeFormation": false,
+        "CatalogId": "677276112057",
+        "VersionId": "4725",
+        "IsMultiDialectView": false,
+        "IsMaterializedView": false
+    }
+}
