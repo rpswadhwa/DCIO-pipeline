@@ -75,7 +75,7 @@ def _bucket_row_into_cells(row: List[Dict], bounds: List[int]) -> List[Dict]:
         y1 = min(w["y"] for w in cell_words)
         x2 = max(w["x"] + w["w"] for w in cell_words)
         y2 = max(w["y"] + w["h"] for w in cell_words)
-        cells.append({"bbox": [x1, y1, x2, y2], "text": text, "confidence": conf})
+        cells.append({"bbox": [x1, y1, x2, y2], "text": text, "confidence": conf, "col_idx": col_idx})
     return cells
 
 

@@ -6,6 +6,7 @@ from openai import OpenAI
 from rapidfuzz import process, fuzz
 
 from .utils import load_yaml, normalize_whitespace, sort_cells_to_rows
+from .text_extract import _page_value_scale_factor, _scale_currency_string
 
 
 def _best_header_match(header: str, synonyms: Dict[str, List[str]]) -> Tuple[str, int]:
@@ -80,17 +81,37 @@ def map_rows_with_llm(pages: List[Dict], schema_yml: str, model: str, use_llm: b
         header_idx = _detect_header_row(rows)
         header = rows[header_idx]
         header_text = [normalize_whitespace(c.get("text", "")) for c in header]
+        # Word-clustering pages (no ruled grid) tag each cell with the true
+        # column band it was bucketed into via col_idx; a column whose cell
+        # is blank for a given row is simply absent from that row's cell
+        # list, so list position alone doesn't tell you which column a cell
+        # belongs to (it drifts left with every earlier blank column). Cells
+        # from the ruled-grid path have no col_idx, so fall back to list
+        # position there, matching the previous (still-correct) behavior.
+        header_col_idx = [c.get("col_idx", i) for i, c in enumerate(header)]
 
         column_map = {}
         for i, h in enumerate(header_text):
             field, score = _best_header_match(h, synonyms)
             if field and score >= 70:
-                column_map[i] = field
+                column_map[header_col_idx[i]] = field
 
         if use_llm and client is not None:
             llm_map = _llm_normalize_headers(client, model, header_text, fields)
             for k, v in llm_map.items():
-                column_map[k] = v
+                column_map[header_col_idx[k]] = v
+
+        # OCR pages have no single full-page text blob the way the primary
+        # text-extraction path does, so build one from what's already been
+        # OCR'd for other purposes: classify_pages' top-of-page keyword scan
+        # (header_text) plus every word run_ocr already pulled off this page
+        # (ocr_cells). Reuses text_extract.py's own "in thousands"/"in
+        # millions" detection rather than duplicating that regex.
+        scale_probe_text = " ".join([
+            page.get("header_text", ""),
+            " ".join(c.get("text", "") for c in page.get("ocr_cells", [])),
+        ])
+        scale_factor = _page_value_scale_factor(scale_probe_text)
 
         mapped_rows = []
         for row_idx, row in enumerate(rows[header_idx + 1 :], start=1):
@@ -98,16 +119,20 @@ def map_rows_with_llm(pages: List[Dict], schema_yml: str, model: str, use_llm: b
             row_data["page_number"] = page["page_number"]
             row_data["row_id"] = row_idx
 
-            for col_idx, cell in enumerate(row):
+            for i, cell in enumerate(row):
                 text = normalize_whitespace(cell.get("text", ""))
                 if not text:
                     continue
+                col_idx = cell.get("col_idx", i)
                 field = column_map.get(col_idx)
                 if field:
                     if row_data[field]:
                         row_data[field] = normalize_whitespace(row_data[field] + " " + text)
                     else:
                         row_data[field] = text
+
+            if scale_factor != 1 and row_data.get("current_value"):
+                row_data["current_value"] = _scale_currency_string(row_data["current_value"], scale_factor)
 
             mapped_rows.append(row_data)
 
