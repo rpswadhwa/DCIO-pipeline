@@ -833,6 +833,8 @@ def classify_pages_text(pdf_path: str, keywords_yml: str) -> List[Dict]:
     identity_re = re.compile(r'identity\s+of\s+issue|borrower,?\s+lessor', re.IGNORECASE)
     description_re = re.compile(r'description\s+of\s+investments?', re.IGNORECASE)
 
+    use_robust_extraction = _pdf_stem_from_path(pdf_path) in _GARBLED_UPRIGHT_ACK_IDS
+
     pages = []
     with pdfplumber.open(pdf_path) as pdf:
         for i, page in enumerate(pdf.pages, start=1):
