@@ -1,40 +1,15 @@
 from typing import Dict, List
 
 import cv2
-import pytesseract
-from pytesseract import Output
 
+from . import paddle_ocr_engine
 from .utils import normalize_whitespace
 
 _HEADER_KEYWORDS = ("identity", "description", "current", "value", "issuer")
-_OCR_TIMEOUT_S = 30
 
 
 def _words_from_image(img) -> List[Dict]:
-    try:
-        data = pytesseract.image_to_data(img, output_type=Output.DICT, timeout=_OCR_TIMEOUT_S)
-    except RuntimeError:
-        # Tesseract hung/timed out on a pathological cell image -- treat as no words
-        # rather than blocking the whole pipeline run on one bad image.
-        return []
-    words = []
-    for i in range(len(data["text"])):
-        text = data["text"][i].strip()
-        if not text:
-            continue
-        try:
-            conf = float(data["conf"][i])
-        except (TypeError, ValueError):
-            conf = -1.0
-        words.append({
-            "text": text,
-            "x": data["left"][i],
-            "y": data["top"][i],
-            "w": data["width"][i],
-            "h": data["height"][i],
-            "conf": conf,
-        })
-    return words
+    return paddle_ocr_engine.image_to_words(img)
 
 
 def _cluster_words_to_rows(words: List[Dict]) -> List[List[Dict]]:
@@ -125,26 +100,8 @@ def _cluster_words_to_cells(img) -> List[Dict]:
 
 
 def _ocr_cell(img):
-    try:
-        data = pytesseract.image_to_data(img, output_type=Output.DICT, timeout=_OCR_TIMEOUT_S)
-    except RuntimeError:
-        return "", 0.0
-    words = []
-    confs = []
-    for text, conf in zip(data["text"], data["conf"]):
-        text = text.strip()
-        if not text:
-            continue
-        words.append(text)
-        try:
-            c = float(conf)
-        except (TypeError, ValueError):
-            continue
-        if c >= 0:
-            confs.append(c)
-    text = normalize_whitespace(" ".join(words))
-    conf = (sum(confs) / len(confs) / 100.0) if confs else 0.0
-    return text, conf
+    text, conf = paddle_ocr_engine.image_to_cell_text(img)
+    return normalize_whitespace(text), conf
 
 
 def run_ocr(pages: List[Dict[str, str]]) -> List[Dict[str, str]]:

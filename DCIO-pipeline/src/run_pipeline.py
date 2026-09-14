@@ -248,6 +248,9 @@ def main():
 
     if use_ocr:
         print("\n[STEP 1] OCR extraction")
+        # classify_pages.py's per-page keyword scan stays on tesseract (fast, already
+        # good enough for coarse keyword matching); only ocr_passes.py's row/cell
+        # extraction on the small number of flagged pages uses PaddleOCR.
         tesseract_cmd = read_env("TESSERACT_CMD", "")
         if tesseract_cmd:
             pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
@@ -494,6 +497,111 @@ def main():
 
     print("\n[STEP 3] Raw extraction export")
     raw_rows = _collect_extracted_rows(supplemental_pages, plan_info_map, plan_year)
+
+    # STEP 3.5: OCR fallback escalation. DEFAULT OFF (OCR_FALLBACK_ENABLED=0) so this
+    # never changes behavior of any run that doesn't explicitly opt in. Only applies
+    # when this run itself used text extraction (use_ocr=0) -- an OCR-mode run has
+    # nothing further to escalate to. See src/ocr_fallback.py for the trigger design:
+    # compares this run's own fresh, all-asset-types extraction total (NOT
+    # plan_mf_history_v3) against certified amt_mutual_funds, under-capture direction only.
+    if read_env("OCR_FALLBACK_ENABLED", "0") == "1" and not use_ocr:
+        print("\n[STEP 3.5] OCR fallback escalation (under-capture check)")
+        ocr_fallback_dry_run = read_env("OCR_FALLBACK_DRY_RUN", "1") != "0"
+        try:
+            from .ocr_fallback import identify_undercapture_pdfs
+            from .post_extract_validator import load_reference
+
+            ref_glue_db = read_env("VALIDATION_REF_GLUE_DB", read_env("VALIDATION_GLUE_DB", "default"))
+            ref_table = read_env("VALIDATION_REF_TABLE", "")
+            ref_workgroup = read_env("ATHENA_WORKGROUP", "primary")
+            ref_s3_staging = read_env("ATHENA_STAGING_S3", "")
+
+            if not ref_table or not ref_s3_staging:
+                print("  Skipped: VALIDATION_REF_TABLE / ATHENA_STAGING_S3 not set")
+            else:
+                reference = load_reference(ref_glue_db, ref_table, ref_workgroup, ref_s3_staging)
+                # Only escalate to OCR when a PDF captured less than 25% of its
+                # certified total (i.e. missed more than 75% of it) -- a high bar
+                # so this doesn't fire on ordinary classification-level gaps.
+                tolerance = float(read_env("OCR_FALLBACK_TOLERANCE", "0.75"))
+                flagged = identify_undercapture_pdfs(raw_rows, reference, tolerance=tolerance)
+                flagged_with_pdf = {
+                    stem: info for stem, info in flagged.items()
+                    if os.path.exists(os.path.join(input_dir, f"{stem}.pdf"))
+                }
+                print(f"  Under-capturing PDFs flagged: {len(flagged)} "
+                      f"(of which {len(flagged_with_pdf)} have a local PDF available)")
+                for stem, info in flagged_with_pdf.items():
+                    print(f"    {stem}: extracted={info['extracted_total']:.0f} "
+                          f"certified={info['certified']:.0f} gap_pct={info['gap_pct']:.1%}")
+
+                if ocr_fallback_dry_run:
+                    _write_csv(
+                        os.path.join(output_dir, "ocr_fallback_candidates.csv"),
+                        [dict(pdf_stem=stem, **info) for stem, info in flagged_with_pdf.items()],
+                    )
+                    print("  DRY RUN (OCR_FALLBACK_DRY_RUN=1): candidates written to "
+                          "ocr_fallback_candidates.csv; no OCR run, no rows merged")
+                else:
+                    per_pdf_timeout_sec = int(read_env("PER_PDF_TIMEOUT_SEC", "300"))
+                    for stem, info in flagged_with_pdf.items():
+                        pdf_path = os.path.join(input_dir, f"{stem}.pdf")
+                        print(f"    OCR escalation: {stem}")
+                        pdf_images_dir = os.path.join(images_dir, stem)
+                        result_path = os.path.join(output_dir, f"_ocr_fallback_result_{stem}.pkl")
+                        try:
+                            os.remove(result_path)
+                        except OSError:
+                            pass
+
+                        proc = multiprocessing.Process(
+                            target=_ocr_pdf_worker,
+                            args=(pdf_path, stem, pdf_images_dir, dpi, keywords_yml,
+                                  schema_yml, model, use_llm, result_path),
+                        )
+                        proc.start()
+                        proc.join(per_pdf_timeout_sec)
+
+                        if proc.is_alive():
+                            print(f"      TIMEOUT after {per_pdf_timeout_sec}s -- skipping {stem}")
+                            proc.terminate()
+                            proc.join(10)
+                            if proc.is_alive():
+                                proc.kill()
+                                proc.join()
+                            try:
+                                os.remove(result_path)
+                            except OSError:
+                                pass
+                            continue
+
+                        if proc.exitcode != 0 or not os.path.exists(result_path):
+                            print(f"      ERROR: OCR fallback worker failed for {stem} "
+                                  f"(exitcode={proc.exitcode})")
+                            continue
+
+                        with open(result_path, "rb") as fh:
+                            ocr_result = pickle.load(fh)
+                        os.remove(result_path)
+
+                        if "error" in ocr_result:
+                            print(f"      ERROR: {ocr_result['error']}")
+                            continue
+
+                        ocr_supp = ocr_result.get("pdf_supp", [])
+                        for page in ocr_supp:
+                            for row in page.get("mapped_rows", []):
+                                row["extraction_method"] = "ocr"
+                        ocr_new_rows = _collect_extracted_rows(ocr_supp, plan_info_map, plan_year)
+                        print(f"      OCR extracted {len(ocr_new_rows)} rows for {stem}")
+
+                        # Merge back into the normal row-processing flow so every downstream
+                        # step (cleanup, DB load, LLM enhancement, validation) applies unchanged.
+                        raw_rows.extend(ocr_new_rows)
+                        supplemental_pages.extend(ocr_supp)
+        except Exception as _ocr_fb_exc:
+            print(f"  [ocr-fallback] stage skipped due to error: {_ocr_fb_exc}")
+
     _write_csv(
         raw_csv_path,
         raw_rows,
