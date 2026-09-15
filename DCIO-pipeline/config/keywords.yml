@@ -17,5 +17,7 @@ negative_keywords:
   - "SUMMARY"
   - "INCOME STATEMENT"
   - "BALANCE SHEET"
+  - "OTHER MATTER"
+  - "REQUIRED BY ERISA"
 min_keyword_hits: 1
 header_scan_max_lines: 12
