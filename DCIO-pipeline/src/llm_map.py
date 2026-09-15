@@ -37,17 +37,33 @@ def _llm_normalize_headers(provider: str, model: str, headers: List[str], schema
     prompt = {
         "headers": headers,
         "schema_fields": schema_fields,
-        "instruction": "Map each header to the best matching schema field or null. Return JSON with keys as header index and value as schema field or null."
+        "instruction": "Map each header to the best matching schema field or null. Return JSON with keys as the header's 0-based index (as a string, e.g. \"0\") in the headers list, and value as schema field or null."
     }
     try:
         text = call_llm_json(prompt, provider, model)
         data = json.loads(text)
-        return {
-            int(k): v for k, v in data.items()
-            if v and v in schema_fields
-        }
     except Exception:
         return {}
+
+    # Not every provider reliably returns integer-index keys as instructed
+    # (Gemini has been observed echoing the header text itself as the key
+    # instead) -- fall back to matching the key against the headers list by
+    # text so a differently-shaped-but-still-valid response isn't silently
+    # discarded.
+    result = {}
+    for k, v in data.items():
+        if not v or v not in schema_fields:
+            continue
+        idx = None
+        if isinstance(k, str) and k.isdigit():
+            idx = int(k)
+        elif isinstance(k, int):
+            idx = k
+        elif k in headers:
+            idx = headers.index(k)
+        if idx is not None and 0 <= idx < len(headers):
+            result[idx] = v
+    return result
 
 
 def map_rows_with_llm(pages: List[Dict], schema_yml: str, model: str, use_llm: bool = True, provider: str = "openai") -> List[Dict]:
