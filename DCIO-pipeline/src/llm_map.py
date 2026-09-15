@@ -2,9 +2,9 @@ import json
 from typing import Dict, List, Tuple
 
 from dotenv import load_dotenv
-from openai import OpenAI
 from rapidfuzz import process, fuzz
 
+from .llm_provider import call_llm_json
 from .utils import load_yaml, normalize_whitespace, sort_cells_to_rows
 from .text_extract import _page_value_scale_factor, _scale_currency_string
 
@@ -33,27 +33,14 @@ def _detect_header_row(rows: List[List[Dict]]) -> int:
     return 0
 
 
-def _llm_normalize_headers(client: OpenAI, model: str, headers: List[str], schema_fields: List[str]) -> Dict[int, str]:
+def _llm_normalize_headers(provider: str, model: str, headers: List[str], schema_fields: List[str]) -> Dict[int, str]:
     prompt = {
         "headers": headers,
         "schema_fields": schema_fields,
         "instruction": "Map each header to the best matching schema field or null. Return JSON with keys as header index and value as schema field or null."
     }
-    response = client.chat.completions.create(
-        model=model,
-        messages=[
-            {
-                "role": "system",
-                "content": "You are a data mapping assistant. Return valid JSON only, no extra text."
-            },
-            {
-                "role": "user",
-                "content": json.dumps(prompt)
-            }
-        ],
-    )
-    text = response.choices[0].message.content
     try:
+        text = call_llm_json(prompt, provider, model)
         data = json.loads(text)
         return {
             int(k): v for k, v in data.items()
@@ -63,12 +50,10 @@ def _llm_normalize_headers(client: OpenAI, model: str, headers: List[str], schem
         return {}
 
 
-def map_rows_with_llm(pages: List[Dict], schema_yml: str, model: str, use_llm: bool = True) -> List[Dict]:
+def map_rows_with_llm(pages: List[Dict], schema_yml: str, model: str, use_llm: bool = True, provider: str = "openai") -> List[Dict]:
     cfg = load_yaml(schema_yml)
     fields = cfg["schema"]["fields"]
     synonyms = cfg["schema"]["header_synonyms"]
-
-    client = OpenAI() if use_llm else None
 
     out = []
     for page in pages:
@@ -111,8 +96,8 @@ def map_rows_with_llm(pages: List[Dict], schema_yml: str, model: str, use_llm: b
             if field and score >= 70:
                 column_map[header_col_idx[i]] = field
 
-        if use_llm and client is not None:
-            llm_map = _llm_normalize_headers(client, model, header_text, fields)
+        if use_llm:
+            llm_map = _llm_normalize_headers(provider, model, header_text, fields)
             for k, v in llm_map.items():
                 column_map[header_col_idx[k]] = v
 

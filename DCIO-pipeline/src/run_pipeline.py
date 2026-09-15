@@ -128,6 +128,7 @@ def _ocr_pdf_worker(
     schema_yml: str,
     model: str,
     use_llm: bool,
+    llm_provider: str,
     result_path: str,
 ) -> None:
     """Runs one PDF through the OCR branch in a child process.
@@ -157,7 +158,7 @@ def _ocr_pdf_worker(
         pdf_supp = normalize_pages(pdf_supp)
         pdf_supp = detect_tables(pdf_supp)
         pdf_supp = run_ocr(pdf_supp)
-        pdf_supp = map_rows_with_llm(pdf_supp, schema_yml, model, use_llm=use_llm)
+        pdf_supp = map_rows_with_llm(pdf_supp, schema_yml, model, use_llm=use_llm, provider=llm_provider)
 
     for img_path in image_paths:
         for path in (img_path, img_path.replace(".png", "_norm.png")):
@@ -216,6 +217,14 @@ def main():
     dpi = int(read_env("DPI", "350"))
     model = read_env("OPENAI_MODEL", "gpt-4.1-mini")
     use_llm = read_env("USE_LLM", "1") != "0"
+    # OCR row-mapping (map_rows_with_llm) can use a different provider than the
+    # rest of the pipeline -- kept separate so switching it (e.g. to Gemini while
+    # OpenAI credits are out) doesn't touch extract_tables_and_map's OpenAI calls.
+    ocr_llm_provider = read_env("OCR_LLM_PROVIDER", "gemini")
+    ocr_model = read_env(
+        "GEMINI_MODEL" if ocr_llm_provider == "gemini" else "OPENAI_MODEL",
+        "gemini-2.5-flash" if ocr_llm_provider == "gemini" else model,
+    )
     use_post_llm = read_env("USE_POST_LLM", "1") != "0"
     use_ocr = read_env("USE_OCR", "0") == "1"
     llm_batch_size = int(read_env("POST_LLM_BATCH_SIZE", "10"))
@@ -294,8 +303,9 @@ def main():
                     dpi,
                     keywords_yml,
                     schema_yml,
-                    model,
+                    ocr_model,
                     use_llm,
+                    ocr_llm_provider,
                     result_path,
                 ),
             )
@@ -557,7 +567,7 @@ def main():
                         proc = multiprocessing.Process(
                             target=_ocr_pdf_worker,
                             args=(pdf_path, stem, pdf_images_dir, dpi, keywords_yml,
-                                  schema_yml, model, use_llm, result_path),
+                                  schema_yml, ocr_model, use_llm, ocr_llm_provider, result_path),
                         )
                         proc.start()
                         proc.join(per_pdf_timeout_sec)
