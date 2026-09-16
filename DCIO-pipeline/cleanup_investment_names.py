@@ -57,10 +57,15 @@ def parse_issuer_and_investment(issuer_name, investment_desc, asset_type):
 
     Returns: (issuer, description)
     """
-    if not issuer_name:
+    # issuer_name (Form 5500 col (a), "identity of issuer") is routinely left
+    # blank for US Treasury securities -- the filer only fills in col (b)'s
+    # description ("US Treasury Bill"). Only bail out when there is truly
+    # nothing to work with in either column; a blank issuer_name with a real
+    # description should not null out the description too.
+    if not issuer_name and not investment_desc:
         return (None, None)
 
-    issuer_name = issuer_name.strip()
+    issuer_name = (issuer_name or '').strip()
     raw_desc = investment_desc.strip() if investment_desc else ""
     # Strip "X shares of" prefix from description only — keep everything else intact
     original_desc = _SHARES_OF_RE.sub("", raw_desc).strip()
@@ -70,8 +75,11 @@ def parse_issuer_and_investment(issuer_name, investment_desc, asset_type):
 
     # When col B is just an asset type category label (e.g. "Mutual Fund",
     # "Collective Investment Fund", "Target Date Fund"), the real fund name
-    # lives in col A — use it before we standardize the issuer below.
-    if (not desc.strip(' "\'`*.-:;,')) or _is_asset_type_label(desc):
+    # lives in col A — use it before we standardize the issuer below. Only
+    # do this when col A actually has content: falling back to a blank
+    # issuer_name would overwrite a real (if label-like) description with
+    # nothing, orphaning the row for downstream blank-row filters.
+    if issuer_name.strip() and ((not desc.strip(' "\'`*.-:;,')) or _is_asset_type_label(desc)):
         desc = issuer_name
 
     if issuer_name.upper().startswith('VANGUARD') or issuer_name.upper().startswith('VANG'):

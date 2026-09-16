@@ -88,26 +88,13 @@ VALID_ASSET_TYPES = {
 
 
 def infer_morningstar_ticker(issuer: str, description: str, asset_type: str) -> str:
-    issuer_text = (issuer or '').lower()
-    desc_text = (description or '').lower()
-
-    if asset_type in {'Mutual Fund', 'Target Date Fund'}:
-        # Heuristic: use issuer abbreviation + first words of fund name
-        key = ''
-        if 'vanguard' in issuer_text:
-            key = 'VFIAX' if '500' in desc_text or '500 index' in desc_text else 'VTSAX'
-        elif 'fidelity' in issuer_text:
-            key = 'FSKAX' if 'index' in desc_text else 'FCNTX'
-        elif 'pimco' in issuer_text:
-            key = 'PODIX'
-        elif 'blackrock' in issuer_text:
-            key = 'AOKIX'
-        else:
-            key = ''
-
-        # If this heuristic is of low confidence, leave blank
-        return key
-
+    # Previously guessed a ticker from the issuer family alone (e.g. any
+    # "vanguard" issuer -> VTSAX unless "500" appeared in the description).
+    # That stamped a real, specific ticker onto whatever Vanguard fund was on
+    # the row regardless of which fund it actually was -- a fabricated value
+    # that looks authoritative. There is no fund-name-to-ticker crosswalk
+    # available in this pipeline, so leave this blank until one is wired in
+    # (see the v3 clean fund names reference library) rather than guess.
     return ''
 
 
@@ -586,10 +573,17 @@ def export_enhanced_csv(db_path, output_path, verbose=True):
             row_data['pdf_stem'] = _os.path.splitext(_os.path.basename(source_pdf))[0] if source_pdf else ''
 
             # Fund name selection: use investment_description if meaningful,
-            # otherwise fall back to issuer_name
+            # otherwise fall back to issuer_name. Some filings (e.g. Treasury
+            # bill holdings) leave issuer_name blank and only populate a
+            # generic-but-real description like "US Treasury Bill", which
+            # is_meaningful_description() correctly flags as a bare asset-type
+            # label. Falling back to a blank issuer_name in that case would
+            # null out the only real content the row has, orphaning it for
+            # downstream blank-row filters -- only fall back when issuer
+            # actually has something to offer.
             desc = (row_data.get('investment_description') or '').strip()
             issuer = (row_data.get('issuer_name') or '').strip()
-            if not is_meaningful_description(desc):
+            if not is_meaningful_description(desc) and issuer:
                 row_data['investment_description'] = issuer
 
             # Ensure asset_type is always present and standardized

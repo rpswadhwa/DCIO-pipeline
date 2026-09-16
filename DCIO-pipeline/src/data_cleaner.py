@@ -391,8 +391,13 @@ def remove_metadata_rows(rows, preserve_loans=True, verbose=True):
         ).strip()
         combined = (issuer + " " + description_for_check).lower()
 
-        # Check if this is a participant loan entry
-        is_loan = ('loan' in combined and 'participant' in combined) if preserve_loans else False
+        # Check if this is a participant loan entry. Some filings label these
+        # "Notes receivable from participants" instead of using the word
+        # "loan" at all -- without this, the "notes receivable" entry in
+        # excluded_keywords below deletes the real holding outright.
+        is_loan = (
+            'participant' in combined and ('loan' in combined or 'notes receivable' in combined)
+        ) if preserve_loans else False
 
         # Skip metadata rows (unless it's a loan)
         if any(keyword in combined for keyword in excluded_keywords):
@@ -479,7 +484,7 @@ def remove_duplicates(rows, verbose=True):
 
 def remove_cross_page_duplicates(rows, value_threshold=10000, verbose=True):
     """
-    Secondary dedup: same (pdf, description) → keep smallest value (larger is a subtotal).
+    Secondary dedup: same (pdf, description, value) → true duplicate, drop the repeat.
 
     NOTE: this used to also dedup by (pdf, value) alone, on the theory that the same
     fund could appear on multiple pages with different field layouts. Removed
@@ -496,12 +501,29 @@ def remove_cross_page_duplicates(rows, value_threshold=10000, verbose=True):
     ($13,967,000) to 'SEI Diversified Bond Fund - Opportunities Income', both same-page,
     same-value coincidences, not duplicates. value_threshold kept as a param for signature
     compatibility; no longer used.
+
+    The (pdf, description)-only pass below had the same class of bug: it treated ANY two
+    same-description rows as a duplicate+subtotal pair and dropped whichever had the larger
+    value -- but "same description" also happens when one issuer reports two distinct
+    securities under an identical description (e.g. AT&T Inc stock and an AT&T Inc CD both
+    labeled "AT&T Inc", or two different-maturity "United States Treas Nts"). That silently
+    discarded the larger, legitimately different holding every time. A real cross-page
+    duplicate (the same row genuinely repeated, e.g. from a duplicated source page) has an
+    identical value too -- so only collapse when the value ALSO matches; when it differs,
+    both rows are kept.
     """
     from collections import defaultdict
 
     indices_to_remove = set()
 
-    # Same (pdf, description) → keep smallest value (larger is a subtotal)
+    def get_val(i):
+        v = str(rows[i].get('current_value', '') or '').replace('$', '').replace(',', '').strip()
+        try:
+            return round(float(v), 2)
+        except ValueError:
+            return None
+
+    # Same (pdf, description) → only a true duplicate if the value matches too
     desc_groups = defaultdict(list)
     for i, row in enumerate(rows):
         pdf_key = row.get('pdf_stem', '') or row.get('pdf_name', '')
@@ -515,17 +537,17 @@ def remove_cross_page_duplicates(rows, value_threshold=10000, verbose=True):
         # > 2 occurrences = generic category column value, not a fund name -> skip dedup
         if len(idxs) > 2:
             continue
-        def get_val(i):
-            v = str(rows[i].get('current_value', '') or '').replace('$','').replace(',','').strip()
-            try: return float(v)
-            except: return 0.0
-        scored = sorted(idxs, key=get_val)
-        for idx in scored[1:]:
-            if verbose:
-                r = rows[idx]
-                print(f"  SAME-DESC DEDUP: keeping smaller, dropping val={r.get('current_value')} "
-                      f"desc={r.get('investment_description','')[:50]!r}")
-            indices_to_remove.add(idx)
+        v0, v1 = get_val(idxs[0]), get_val(idxs[1])
+        if v0 is None or v1 is None or v0 != v1:
+            # Different (or unparseable) values -> two distinct holdings that happen to
+            # share a description, not a duplicate. Keep both.
+            continue
+        dup_idx = idxs[1]
+        if verbose:
+            r = rows[dup_idx]
+            print(f"  SAME-DESC EXACT DUP: dropping repeated row val={r.get('current_value')} "
+                  f"desc={r.get('investment_description', '')[:50]!r}")
+        indices_to_remove.add(dup_idx)
 
     result = [row for i, row in enumerate(rows) if i not in indices_to_remove]
     if verbose and indices_to_remove:
