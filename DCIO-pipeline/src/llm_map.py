@@ -1,4 +1,5 @@
 import json
+import re
 from typing import Dict, List, Tuple
 
 from dotenv import load_dotenv
@@ -7,6 +8,32 @@ from rapidfuzz import process, fuzz
 from .llm_provider import call_llm_json
 from .utils import load_yaml, normalize_whitespace, sort_cells_to_rows
 from .text_extract import _page_value_scale_factor, _scale_currency_string
+
+_HEADER_FRAGMENT_KEYWORDS = [
+    "issue", "issuer", "borrower", "lessor", "similar party", "identity",
+    "description", "investment", "maturity date",
+    "number of units", "units", "shares", "par",
+    "cost", "current value", "value", "rate of interest",
+]
+_HEADER_LABEL_RE = re.compile(r"^\(?[a-e]\)?$", re.IGNORECASE)
+
+
+def _is_header_fragment_row(row: List[Dict]) -> bool:
+    row_text = normalize_whitespace(" ".join(c.get("text", "") for c in row)).strip()
+    if not row_text:
+        return False
+    lowered = row_text.lower()
+    if _HEADER_LABEL_RE.match(lowered):
+        return True
+    if any(k in lowered for k in _HEADER_FRAGMENT_KEYWORDS):
+        # A header fragment names a column, not a specific holding -- bail
+        # out if the row also carries a dollar amount or a long digit run,
+        # which marks it as an actual data row that merely mentions a
+        # header word in passing.
+        if re.search(r"\$\s?\d", row_text) or re.search(r"\d{4,}", row_text):
+            return False
+        return True
+    return False
 
 
 def _best_header_match(header: str, synonyms: Dict[str, List[str]]) -> Tuple[str, int]:
@@ -31,6 +58,24 @@ def _detect_header_row(rows: List[List[Dict]]) -> int:
         if any(k in row_text for k in ["issuer", "description", "current value", "value", "cost"]):
             return i
     return 0
+
+
+def _collect_header_row_range(rows: List[List[Dict]], anchor_idx: int) -> Tuple[int, int]:
+    # Wrapped column headers often OCR as several separate word-clustered
+    # rows above and below the row _detect_header_row() happens to anchor on
+    # (e.g. "(a)", "(b) Identity of issue, borrower, lessor or similar
+    # party", "(c) Description of investment...", "Number of units", "(d)(e)
+    # Current", "Cost**", "value"). Expand outward from the anchor in both
+    # directions while neighboring rows still look like header fragments, so
+    # every physical line of a multi-line header gets merged into one
+    # logical header block instead of only the single anchor row.
+    start = anchor_idx
+    while start - 1 >= 0 and _is_header_fragment_row(rows[start - 1]):
+        start -= 1
+    end = anchor_idx
+    while end + 1 < len(rows) and _is_header_fragment_row(rows[end + 1]):
+        end += 1
+    return start, end
 
 
 def _llm_normalize_headers(provider: str, model: str, headers: List[str], schema_fields: List[str]) -> Dict[int, str]:
@@ -79,24 +124,10 @@ def map_rows_with_llm(pages: List[Dict], schema_yml: str, model: str, use_llm: b
             out.append(page)
             continue
 
-        header_idx = _detect_header_row(rows)
-        header = rows[header_idx]
-        header_text = [normalize_whitespace(c.get("text", "")) for c in header]
+        anchor_idx = _detect_header_row(rows)
+        header_start, header_end = _collect_header_row_range(rows, anchor_idx)
+        first_data_idx = header_end + 1
 
-        # Wrapped headers often print across two visual lines (e.g. "Identity
-        # of issue, borrower," on one line and "lessor or similar party" on
-        # the next, with "Cost"/"Current Value" trailing on that second
-        # line). The word-clustering path returns each visual line as its
-        # own row, so without this check that second header line becomes a
-        # bogus first "data" row. If the row right after the detected header
-        # still reads like header text, treat it as the header's
-        # continuation and skip it instead of mapping it as data.
-        first_data_idx = header_idx + 1
-        if first_data_idx < len(rows):
-            continuation_text = " ".join(c.get("text", "") for c in rows[first_data_idx]).lower()
-            if any(k in continuation_text for k in
-                   ["issuer", "description", "current value", "value", "cost", "lessor", "similar party"]):
-                first_data_idx += 1
         # Word-clustering pages (no ruled grid) tag each cell with the true
         # column band it was bucketed into via col_idx; a column whose cell
         # is blank for a given row is simply absent from that row's cell
@@ -104,7 +135,24 @@ def map_rows_with_llm(pages: List[Dict], schema_yml: str, model: str, use_llm: b
         # belongs to (it drifts left with every earlier blank column). Cells
         # from the ruled-grid path have no col_idx, so fall back to list
         # position there, matching the previous (still-correct) behavior.
-        header_col_idx = [c.get("col_idx", i) for i, c in enumerate(header)]
+        # A multi-line header can spread a single column's label across
+        # several physical rows (e.g. "(c) Description of investment" then
+        # "including maturity date" on the next line) -- merge every
+        # fragment that shares a col_idx into one combined label, in
+        # top-to-bottom reading order, so fuzzy-matching sees the whole
+        # label instead of whichever fragment happened to land in a given
+        # row.
+        merged_by_col: Dict[int, List[str]] = {}
+        for row in rows[header_start:header_end + 1]:
+            for i, cell in enumerate(row):
+                text = normalize_whitespace(cell.get("text", ""))
+                if not text:
+                    continue
+                col_idx = cell.get("col_idx", i)
+                merged_by_col.setdefault(col_idx, []).append(text)
+
+        header_col_idx = sorted(merged_by_col.keys())
+        header_text = [" ".join(merged_by_col[c]) for c in header_col_idx]
 
         column_map = {}
         for i, h in enumerate(header_text):

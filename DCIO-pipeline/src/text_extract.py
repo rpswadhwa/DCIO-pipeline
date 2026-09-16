@@ -5,7 +5,7 @@ from typing import Dict, List, Tuple, Optional
 
 import camelot
 import pdfplumber
-from openai import OpenAI
+from .llm_provider import call_llm_json
 from rapidfuzz import process, fuzz
 
 import pandas as pd
@@ -1139,34 +1139,38 @@ def extract_ein_from_pdf(pdf_path: str, schedule_h_pages: List[int]) -> Optional
     return None
 
 
-def _llm_normalize_headers(client: OpenAI, model: str, headers: List[str], schema_fields: List[str]) -> Dict[int, str]:
+def _llm_normalize_headers(provider: str, model: str, headers: List[str], schema_fields: List[str]) -> Dict[int, str]:
     prompt = {
         "headers": headers,
         "schema_fields": schema_fields,
         "instruction": "Map each header to the best matching schema field or null. Return JSON with keys as header index and value as schema field or null.",
     }
-    
-    response = client.chat.completions.create(
-        model=model,
-        messages=[
-            {
-                "role": "system",
-                "content": "You are a data mapping assistant. Return valid JSON only, no extra text."
-            },
-            {
-                "role": "user",
-                "content": json.dumps(prompt)
-            }
-        ],
-        temperature=0.3,
-    )
-    
-    text = response.choices[0].message.content
+
     try:
+        text = call_llm_json(prompt, provider, model)
         data = json.loads(text)
-        return {int(k): v for k, v in data.items() if v}
     except Exception:
         return {}
+
+    # Not every provider reliably returns integer-index keys as instructed
+    # (Gemini has been observed echoing the header text itself as the key
+    # instead) -- fall back to matching the key against the headers list by
+    # text so a differently-shaped-but-still-valid response isn't silently
+    # discarded. Mirrors llm_map.py's _llm_normalize_headers.
+    result: Dict[int, str] = {}
+    for k, v in data.items():
+        if not v or v not in schema_fields:
+            continue
+        idx = None
+        if isinstance(k, str) and k.isdigit():
+            idx = int(k)
+        elif isinstance(k, int):
+            idx = k
+        elif k in headers:
+            idx = headers.index(k)
+        if idx is not None and 0 <= idx < len(headers):
+            result[idx] = v
+    return result
 
 
 def _extract_gm_column_format(text: str, page_num: int) -> List[Dict]:
@@ -2647,6 +2651,7 @@ def extract_tables_and_map(
     schema_yml: str,
     model: str,
     use_llm: bool = True,
+    provider: str = "openai",
 ) -> Tuple[Optional[Dict[str, str]], List[Dict]]:
     cfg = load_yaml(schema_yml)
     fields = cfg["schema"]["fields"]
@@ -2860,10 +2865,10 @@ def extract_tables_and_map(
     tables = sorted(tables, key=lambda t: int(t.page))
 
     if use_llm:
-        api_key = os.getenv("OPENAI_API_KEY")
-        client = OpenAI(api_key=api_key) if api_key else None
+        required_key = "GEMINI_API_KEY" if provider == "gemini" else "OPENAI_API_KEY"
+        llm_ready = bool(os.getenv(required_key))
     else:
-        client = None
+        llm_ready = False
     mapped_pages: Dict[int, List[Dict]] = {}
     
     # Track which pages had tables extracted
@@ -3242,8 +3247,8 @@ def extract_tables_and_map(
                 if field and score >= 70:
                     column_map[i] = field
 
-            if use_llm and client is not None:
-                llm_map = _llm_normalize_headers(client, model, header, fields)
+            if use_llm and llm_ready:
+                llm_map = _llm_normalize_headers(provider, model, header, fields)
                 for k, v in llm_map.items():
                     column_map[k] = v
 
@@ -3292,8 +3297,8 @@ def extract_tables_and_map(
                 if field and score >= 70:
                     column_map[i] = field
 
-            if use_llm and client is not None:
-                llm_map = _llm_normalize_headers(client, model, header, fields)
+            if use_llm and llm_ready:
+                llm_map = _llm_normalize_headers(provider, model, header, fields)
                 for k, v in llm_map.items():
                     column_map[k] = v
 

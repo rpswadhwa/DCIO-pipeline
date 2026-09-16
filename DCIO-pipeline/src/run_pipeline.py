@@ -215,15 +215,22 @@ def main():
     ensure_dir(images_dir)
 
     dpi = int(read_env("DPI", "350"))
-    model = read_env("OPENAI_MODEL", "gpt-4.1-mini")
+    # LLM_PROVIDER switches extract_tables_and_map's header-normalization calls
+    # (e.g. to Gemini while OpenAI credits are out) independent of the OCR
+    # row-mapping provider below.
+    llm_provider = read_env("LLM_PROVIDER", "openai")
+    model = read_env(
+        "GEMINI_MODEL" if llm_provider == "gemini" else "OPENAI_MODEL",
+        "gemini-2.5-flash" if llm_provider == "gemini" else "gpt-4.1-mini",
+    )
     use_llm = read_env("USE_LLM", "1") != "0"
-    # OCR row-mapping (map_rows_with_llm) can use a different provider than the
-    # rest of the pipeline -- kept separate so switching it (e.g. to Gemini while
-    # OpenAI credits are out) doesn't touch extract_tables_and_map's OpenAI calls.
+    # OCR row-mapping (map_rows_with_llm) can use a different provider from
+    # LLM_PROVIDER above -- kept as its own toggle so the OCR path and the main
+    # text-extraction path can each pick OpenAI or Gemini independently.
     ocr_llm_provider = read_env("OCR_LLM_PROVIDER", "gemini")
     ocr_model = read_env(
         "GEMINI_MODEL" if ocr_llm_provider == "gemini" else "OPENAI_MODEL",
-        "gemini-2.5-flash" if ocr_llm_provider == "gemini" else model,
+        "gemini-2.5-flash" if ocr_llm_provider == "gemini" else "gpt-4.1-mini",
     )
     use_post_llm = read_env("USE_POST_LLM", "1") != "0"
     use_ocr = read_env("USE_OCR", "0") == "1"
@@ -393,6 +400,7 @@ def main():
                 schema_yml,
                 model,
                 use_llm=use_llm,
+                provider=llm_provider,
             )
             if plan_info:
                 plan_info_map[pdf_stem] = plan_info
@@ -408,6 +416,7 @@ def main():
                         schema_yml,
                         model,
                         use_llm=use_llm,
+                        provider=llm_provider,
                     )
                     if fallback_plan_info and not plan_info:
                         plan_info = fallback_plan_info
@@ -431,6 +440,7 @@ def main():
                         schema_yml,
                         model,
                         use_llm=use_llm,
+                        provider=llm_provider,
                     )
                     if fallback_plan_info and not plan_info:
                         plan_info = fallback_plan_info
@@ -458,6 +468,7 @@ def main():
                     print(f"    Attachment pages found: {attachment_nums}")
                     _, attach_data = extract_tables_and_map(
                         pdf_path, attachment_nums, schema_yml, model, use_llm=use_llm,
+                        provider=llm_provider,
                     )
                     # Drop the summary "see attachment" rows — detail is now in attach_data
                     for page in page_data:
