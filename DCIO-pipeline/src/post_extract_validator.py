@@ -1124,17 +1124,22 @@ def _route_alternatives_from_staging(glue_db: str, staging_table: str, target_ta
     s3 = os.getenv("ATHENA_STAGING_S3")
     ids = ", ".join("'" + str(a).replace("'", "''") + "'" for a in ack_ids)
     excluded = ", ".join("'" + t + "'" for t in sorted(ALT_EXCLUDED_ASSET_TYPES | ALT_NOISE_ASSET_TYPES))
+    manager_case = _alt_manager_case_sql()
 
     select_sql = f"""
         SELECT
             ack_id, raw_entity_name, raw_sponsor_name, plan_investment_amt,
-            asset_sub_class, validation_status,
-            {_alt_case_sql(1)} AS asset_type,
+            {_alt_case_sql(2)} AS asset_sub_class,
+            validation_status,
+            {_alt_vehicle_case_sql()} AS asset_type,
             {_alt_case_sql(3)} AS classification_confidence,
             {_alt_case_sql(4)} AS classification_method,
             true AS manual_review_required,
             current_timestamp AS routed_at,
-            {_alt_case_sql(2)} AS asset_class
+            'Alternatives' AS asset_class,
+            {manager_case} AS matched_manager_name,
+            CASE WHEN {manager_case} IS NOT NULL THEN 'HIGH' ELSE NULL END AS manager_match_confidence,
+            CASE WHEN {manager_case} IS NOT NULL THEN 'brand_regex_v1' ELSE NULL END AS manager_match_method
         FROM {glue_db}.{staging_table}
         WHERE ack_id IN ({ids})
           AND lower(trim(asset_type)) NOT IN ({excluded})
@@ -1143,8 +1148,9 @@ def _route_alternatives_from_staging(glue_db: str, staging_table: str, target_ta
         f"INSERT INTO {glue_db}.{target_table} "
         "(ack_id, raw_entity_name, raw_sponsor_name, plan_investment_amt, asset_sub_class, "
         "validation_status, asset_type, classification_confidence, classification_method, "
-        "manual_review_required, routed_at, asset_class) "
-        f"SELECT * FROM ({select_sql}) t WHERE t.asset_type IS NOT NULL"
+        "manual_review_required, routed_at, asset_class, "
+        "matched_manager_name, manager_match_confidence, manager_match_method) "
+        f"SELECT * FROM ({select_sql}) t WHERE t.asset_sub_class IS NOT NULL"
     )
     stmts = [
         f"DELETE FROM {glue_db}.{target_table} WHERE ack_id IN ({ids})",
@@ -1238,6 +1244,33 @@ ALT_BRAND_TERM_OVERRIDES: Dict[str, str] = {
     "onex": "strpos(lower(raw_entity_name), 'onex partners') > 0",
 }
 
+# Terms that need a word-boundary match rather than plain substring -- "gso"
+# is a substring of unrelated names ("Kingsoft", "GSODLN" swap tickers,
+# "GSOF"-named LLCs unrelated to GSO Capital Partners). Found via the
+# 2026-09-21 backfill verification (3 confirmed false positives: a HK-listed
+# stock and an interest rate swap had been routed in as GSO Capital Partners
+# private credit); fixed here so it can't recur on newly processed PDFs.
+ALT_BRAND_WORD_BOUNDARY_TERMS = {"gso"}
+
+
+def _alt_brand_term_cond(term: str) -> str:
+    """Shared condition-builder for one ALT_BRAND_PATTERNS/ALT_MANAGER_NAMES
+    term: word-boundary regex for terms in ALT_BRAND_WORD_BOUNDARY_TERMS,
+    plain substring otherwise, ANDed with ALT_BRAND_TERM_OVERRIDES when
+    present. Centralizing this keeps asset_type/asset_class/classification_
+    method/matched_manager_name from ever drifting out of sync on which rows
+    a given brand term matches."""
+    term_sql = term.replace("'", "''")
+    if term in ALT_BRAND_WORD_BOUNDARY_TERMS:
+        cond = f"regexp_like(lower(trim(raw_entity_name)), '\\b{term_sql}\\b')"
+    else:
+        cond = f"strpos(lower(trim(raw_entity_name)), '{term_sql}') > 0"
+    override = ALT_BRAND_TERM_OVERRIDES.get(term)
+    if override:
+        cond = f"({cond} AND {override})"
+    return cond
+
+
 # A brand-name match only counts as an alternatives holding if the name also
 # carries a private-fund structural marker, OR the staging asset_type is
 # already one we trust for alts -- same two-sided gate validated against
@@ -1294,11 +1327,7 @@ def _alt_brand_case_sql(value_index: int) -> str:
     side."""
     lines = ["CASE"]
     for term, asset_type, asset_class in ALT_BRAND_PATTERNS:
-        term_sql = term.replace("'", "''")
-        cond = f"strpos(lower(trim(raw_entity_name)), '{term_sql}') > 0"
-        override = ALT_BRAND_TERM_OVERRIDES.get(term)
-        if override:
-            cond = f"({cond} AND {override})"
+        cond = _alt_brand_term_cond(term)
         val = (asset_type if value_index == 1 else asset_class).replace("'", "''")
         lines.append(f"        WHEN {cond} THEN '{val}'")
     lines.append("        ELSE NULL END")
@@ -1311,17 +1340,76 @@ def _alt_brand_method_case_sql() -> str:
     from the term itself (not a stored column), unlike asset_type/asset_class."""
     lines = ["CASE"]
     for term, _asset_type, _asset_class in ALT_BRAND_PATTERNS:
-        term_sql = term.replace("'", "''")
-        cond = f"strpos(lower(trim(raw_entity_name)), '{term_sql}') > 0"
-        override = ALT_BRAND_TERM_OVERRIDES.get(term)
-        if override:
-            cond = f"({cond} AND {override})"
+        cond = _alt_brand_term_cond(term)
         suffix = (
             term.replace(" ", "_").replace(",", "").replace("&", "and")
                 .replace(".", "").replace("'", "")
         )
         lines.append(f"        WHEN {cond} THEN 'manual:brand_match:{suffix}'")
     lines.append("        ELSE NULL END")
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Manager/sponsor crosswalk for alternatives rows. Distinct from asset_class/
+# asset_type classification: applies to ANY routed row (keyword- or brand-
+# matched), so a row like "Frazier Healthcare Growth Buyout Fund VIII LP"
+# (caught by the keyword router via "buyout fund", never touching
+# ALT_BRAND_PATTERNS) still gets a manager label if the brand name is present.
+# Reuses the same 55-manager term list as ALT_BRAND_PATTERNS so the two never
+# drift apart on which brands are recognized.
+# ---------------------------------------------------------------------------
+ALT_MANAGER_NAMES: Dict[str, str] = {
+    term: {
+        "gso": "GSO Capital Partners",
+        "onex": "Onex Partners",
+        "landmark": "Landmark Partners",
+        "tennenbaum": "Tennenbaum Capital",
+        "owl rock": "Owl Rock Capital",
+    }.get(term, term.title())
+    for term, _asset_type, _asset_class in ALT_BRAND_PATTERNS
+}
+
+
+def _alt_manager_case_sql() -> str:
+    """Build the matched_manager_name CASE from ALT_MANAGER_NAMES, using the
+    same term-matching rules (word-boundary/override) as the brand router."""
+    lines = ["CASE"]
+    for term, manager in ALT_MANAGER_NAMES.items():
+        cond = _alt_brand_term_cond(term)
+        val = manager.replace("'", "''")
+        lines.append(f"        WHEN {cond} THEN '{val}'")
+    lines.append("        ELSE NULL END")
+    return "\n".join(lines)
+
+
+# Legal vehicle/wrapper for the routed row -- this is what asset_type holds
+# under the current taxonomy (asset_class='Alternatives' constant,
+# asset_sub_class=alt category, asset_type=wrapper). Checked against real
+# name-suffix coverage in the 2026-09-21 backfill: LP/LLC/offshore markers
+# and the REIT/BDC/CIT/Separate Account keywords account for ~29% of rows;
+# everything else defaults to 'Unknown' rather than guessing.
+ALT_VEHICLE_RULES: List[Tuple[str, str]] = [
+    (r"\breit\b", "REIT"),
+    (r"\bbdc\b", "BDC"),
+    (r"\bcit\b|collective investment trust", "CIT"),
+    (r"separate account", "Separate Account"),
+    (r"\bltd\b|\bplc\b|cayman|luxembourg|sicav|bermuda|ireland", "Offshore Private Fund"),
+    (r"\bl\.?l\.?c\.?\b", "Private Fund - LLC"),
+    (r"\bl\.?p\.?\b", "Private Fund - LP"),
+]
+
+
+def _alt_vehicle_case_sql() -> str:
+    """Build the asset_type (legal vehicle/wrapper) CASE from ALT_VEHICLE_RULES,
+    defaulting to 'Unknown' rather than NULL -- unlike the category/manager
+    CASEs, this one must never be used as a match/no-match signal since every
+    routed row gets some asset_type value."""
+    lines = ["CASE"]
+    for pattern, label in ALT_VEHICLE_RULES:
+        pat_sql = pattern.replace("'", "''")
+        lines.append(f"        WHEN regexp_like(lower(raw_entity_name), '{pat_sql}') THEN '{label}'")
+    lines.append("        ELSE 'Unknown' END")
     return "\n".join(lines)
 
 
@@ -1358,17 +1446,22 @@ def _route_alt_brands_from_staging(glue_db: str, staging_table: str, target_tabl
         % (a.replace("'", "''"), n.replace("'", "''"))
         for a, n in ALT_BRAND_CONFIRMED_EXCLUSIONS
     )
+    manager_case = _alt_manager_case_sql()
 
     select_sql = f"""
         SELECT
             ack_id, raw_entity_name, raw_sponsor_name, plan_investment_amt,
-            asset_sub_class, validation_status,
-            {_alt_brand_case_sql(1)} AS asset_type,
+            {_alt_brand_case_sql(2)} AS asset_sub_class,
+            validation_status,
+            {_alt_vehicle_case_sql()} AS asset_type,
             'MEDIUM' AS classification_confidence,
             {_alt_brand_method_case_sql()} AS classification_method,
             true AS manual_review_required,
             current_timestamp AS routed_at,
-            {_alt_brand_case_sql(2)} AS asset_class
+            'Alternatives' AS asset_class,
+            {manager_case} AS matched_manager_name,
+            CASE WHEN {manager_case} IS NOT NULL THEN 'HIGH' ELSE NULL END AS manager_match_confidence,
+            CASE WHEN {manager_case} IS NOT NULL THEN 'brand_regex_v1' ELSE NULL END AS manager_match_method
         FROM {glue_db}.{staging_table}
         WHERE ack_id IN ({ids})
           AND (lower(trim(asset_type)) IS NULL OR lower(trim(asset_type)) NOT IN ({excluded}))
@@ -1388,8 +1481,9 @@ def _route_alt_brands_from_staging(glue_db: str, staging_table: str, target_tabl
         f"INSERT INTO {glue_db}.{target_table} "
         "(ack_id, raw_entity_name, raw_sponsor_name, plan_investment_amt, asset_sub_class, "
         "validation_status, asset_type, classification_confidence, classification_method, "
-        "manual_review_required, routed_at, asset_class) "
-        f"SELECT * FROM ({select_sql}) t WHERE t.asset_class IS NOT NULL"
+        "manual_review_required, routed_at, asset_class, "
+        "matched_manager_name, manager_match_confidence, manager_match_method) "
+        f"SELECT * FROM ({select_sql}) t WHERE t.asset_sub_class IS NOT NULL"
     )
     qid = wr.athena.start_query_execution(sql=insert_sql, database=glue_db, workgroup=wg, s3_output=s3)
     wr.athena.wait_query(query_execution_id=qid)
