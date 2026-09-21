@@ -1157,6 +1157,246 @@ def _route_alternatives_from_staging(glue_db: str, staging_table: str, target_ta
 
 
 # ---------------------------------------------------------------------------
+# Brand/manager-name matching -- second alternatives pass, complementary to
+# ALT_FUND_PATTERNS above. ALT_FUND_PATTERNS only matches a generic phrase
+# ("private equity", "real estate") in raw_entity_name; it structurally
+# cannot catch a row whose name is *only* a manager brand with no such
+# phrase (e.g. "AEA Investors Fund VII LP", "Silver Lake Alpine II"). This
+# list is the vocabulary of known alt-manager brands, built 2026-09-20 from
+# the 5,623 already-classified plan_alternatives_history rows and verified
+# against a 714-row candidate pool pulled from staging before this router
+# existed (see project_dcio_alternatives_router memory for the methodology
+# and false-positive/duplicate-position findings that shaped the filters
+# below). Grows over time as new managers are confirmed, the same way
+# ALT_FUND_PATTERNS grows.
+# (brand term, asset_type, asset_class)
+ALT_BRAND_PATTERNS: List[Tuple[str, str, str]] = [
+    ("aea investors", "Private Equity Fund", "Private Equity"),
+    ("alcentra", "Private Credit Fund", "Private Credit"),
+    ("ares management", "Private Credit Fund", "Private Credit"),
+    ("basalt", "Infrastructure Fund", "Infrastructure"),
+    ("blue owl", "Private Credit Fund", "Private Credit"),
+    ("clayton, dubilier & rice", "Private Equity Fund", "Private Equity"),
+    ("clearlake capital", "Private Equity Fund", "Private Equity"),
+    ("clover", "Private Equity Fund", "Private Equity"),
+    ("corbin capital", "Hedge Fund", "Hedge Fund"),
+    ("crescent capital", "Private Credit Fund", "Private Credit"),
+    ("eagle point", "Private Credit Fund", "Private Credit"),
+    ("enervest", "Infrastructure Fund", "Infrastructure"),
+    ("frazier", "Private Equity Fund", "Private Equity"),
+    ("gcm grosvenor", "Private Equity Fund", "Private Equity"),
+    ("general atlantic", "Private Equity Fund", "Private Equity"),
+    ("genstar capital", "Private Equity Fund", "Private Equity"),
+    ("gi partners", "Infrastructure Fund", "Infrastructure"),
+    ("goldpoint partners", "Private Credit Fund", "Private Credit"),
+    ("gso", "Private Credit Fund", "Private Credit"),
+    ("hamilton lane", "Private Equity Fund", "Private Equity"),
+    ("hancock natural resource group", "Infrastructure Fund", "Infrastructure"),
+    ("harbourvest partners", "Private Equity Fund", "Private Equity"),
+    ("harrison street", "Real Estate Fund", "Real Estate"),
+    ("harvest partners", "Private Equity Fund", "Private Equity"),
+    ("insight partners", "Private Equity Fund", "Private Equity"),
+    ("intercontinental", "Real Estate Fund", "Real Estate"),  # overridden below
+    ("kayne anderson", "Infrastructure Fund", "Infrastructure"),
+    ("landmark", "Private Equity Fund", "Private Equity"),
+    ("mc credit", "Private Credit Fund", "Private Credit"),
+    ("mcmorgan", "Real Estate Fund", "Real Estate"),
+    ("mesirow", "Private Equity Fund", "Private Equity"),
+    ("neuberger berman", "Private Equity Fund", "Private Equity"),
+    ("nylcap", "Private Credit Fund", "Private Credit"),
+    ("oaktree capital", "Private Credit Fund", "Private Credit"),
+    ("onex", "Private Equity Fund", "Private Equity"),  # overridden below
+    ("owl rock", "Private Credit Fund", "Private Credit"),
+    ("pantheon", "Private Equity Fund", "Private Equity"),
+    ("partners group", "Private Equity Fund", "Private Equity"),
+    ("perella weinberg partners", "Private Equity Fund", "Private Equity"),
+    ("pomona capital", "Private Equity Fund", "Private Equity"),
+    ("rockpoint", "Real Estate Fund", "Real Estate"),
+    ("segal marco", "Private Equity Fund", "Private Equity"),
+    ("sentinel capital partners", "Private Equity Fund", "Private Equity"),
+    ("siguler guff", "Private Equity Fund", "Private Equity"),
+    ("silver lake", "Private Equity Fund", "Private Equity"),
+    ("stonepeak", "Infrastructure Fund", "Infrastructure"),
+    ("summit partners", "Private Equity Fund", "Private Equity"),
+    ("tennenbaum", "Private Credit Fund", "Private Credit"),
+    ("thoma bravo", "Private Equity Fund", "Private Equity"),
+    ("trilantic capital partners", "Private Equity Fund", "Private Equity"),
+    ("ullico", "Infrastructure Fund", "Infrastructure"),
+    ("warburg pincus", "Private Equity Fund", "Private Equity"),
+    ("white oak global advisors", "Private Credit Fund", "Private Credit"),
+    ("whitehorse liquidity partners", "Private Credit Fund", "Private Credit"),
+    ("windjammer capital", "Private Equity Fund", "Private Equity"),
+]
+
+# Per-term extra restriction, ANDed onto that term's match only. Both entries
+# were confirmed false-positive-prone during 2026-09-20 verification: bare
+# "intercontinental" mostly matches Intercontinental Exchange Inc (ICE) stock/
+# bonds and InterContinental Hotels; bare "onex" coincidentally substring-
+# matches Euronext, StoneX, Socionext.
+ALT_BRAND_TERM_OVERRIDES: Dict[str, str] = {
+    "intercontinental": "regexp_like(lower(raw_entity_name), 'reif|real estate')",
+    "onex": "strpos(lower(raw_entity_name), 'onex partners') > 0",
+}
+
+# A brand-name match only counts as an alternatives holding if the name also
+# carries a private-fund structural marker, OR the staging asset_type is
+# already one we trust for alts -- same two-sided gate validated against
+# 5,623 ground-truth plan_alternatives_history rows. Without this, "Ares
+# Management" would also match "Ares Management Corp Class A" (NYSE common
+# stock) since the brand is a substring of the public company's own name too.
+ALT_BRAND_STRUCTURAL_MARKER_REGEX = (
+    r"\b(l\.?p\.?|llc|fund|partners?|trust|ltd|joint\s+venture|\bjv\b|"
+    r"capital\s+partners|feeder|offshore|reif)\b"
+)
+ALT_BRAND_TRUSTED_ASSET_TYPES = frozenset({
+    "hedge fund", "joint venture", "real estate", "private equity funds",
+    "103-12 investment entity", "partnership interest",
+    "partnership/joint venture interest",
+})
+
+# Reject public-market instrument patterns even if a brand term and a
+# structural marker both happen to match -- an independent safety net on top
+# of the structural-marker gate above.
+ALT_BRAND_NOISE_REGEX = (
+    r"%|\bsr\.?\s+unsecured\b|\bcallable\s+notes?\b|\bdue\s+\d|"
+    r"\bcorp\.?\s+debt\b|\bcorporate\s+(bond|debt)\b|\bcom\b|\badr\b|"
+    r"\bcusip\b|\bsedol\b|\bnew\s+issue\b|\bcorporation\b\s*$"
+)
+
+# Additional asset_type exclusions beyond ALT_EXCLUDED_ASSET_TYPES |
+# ALT_NOISE_ASSET_TYPES above -- public bond/equity instrument types that are
+# more likely to slip through a bare brand-name match than a generic-phrase
+# match, so they weren't needed on the keyword router but are here.
+ALT_BRAND_EXTRA_EXCLUDED_ASSET_TYPES = frozenset({
+    "corporate stock - common", "bond", "corp. debt instr. - all other",
+    "equities", "corporate stock- preferred",
+})
+
+# Specific (ack_id, raw_entity_name) pairs confirmed as false positives
+# despite passing every filter above -- found via row-level verification
+# against ground truth, not (yet) inferable from any general rule. Kept as
+# explicit exclusions rather than folded into a regex, to avoid over-fitting
+# a one-off data-quality artifact into a general-purpose filter.
+ALT_BRAND_CONFIRMED_EXCLUSIONS: List[Tuple[str, str]] = [
+    # NYSE-listed Ares Management Corp Class A common stock, mistagged
+    # asset_type='real estate' in one plan's raw filing data (duplicated
+    # staging row: one copy blank asset_type, one copy mistagged). See
+    # project_dcio_alternatives_router memory, 2026-09-20 verification.
+    ("20250813090708NAL0008939265001", "ares management corp cl a"),
+]
+
+
+def _alt_brand_case_sql(value_index: int) -> str:
+    """Build a CASE expression picking ALT_BRAND_PATTERNS[*][value_index]
+    (1=asset_type, 2=asset_class) for the first brand term found in
+    raw_entity_name, honoring ALT_BRAND_TERM_OVERRIDES. Mirrors
+    _alt_case_sql() above so the two stay easy to compare/audit side by
+    side."""
+    lines = ["CASE"]
+    for term, asset_type, asset_class in ALT_BRAND_PATTERNS:
+        term_sql = term.replace("'", "''")
+        cond = f"strpos(lower(trim(raw_entity_name)), '{term_sql}') > 0"
+        override = ALT_BRAND_TERM_OVERRIDES.get(term)
+        if override:
+            cond = f"({cond} AND {override})"
+        val = (asset_type if value_index == 1 else asset_class).replace("'", "''")
+        lines.append(f"        WHEN {cond} THEN '{val}'")
+    lines.append("        ELSE NULL END")
+    return "\n".join(lines)
+
+
+def _alt_brand_method_case_sql() -> str:
+    """Build the classification_method CASE for ALT_BRAND_PATTERNS. Kept
+    separate from _alt_brand_case_sql since the method string is derived
+    from the term itself (not a stored column), unlike asset_type/asset_class."""
+    lines = ["CASE"]
+    for term, _asset_type, _asset_class in ALT_BRAND_PATTERNS:
+        term_sql = term.replace("'", "''")
+        cond = f"strpos(lower(trim(raw_entity_name)), '{term_sql}') > 0"
+        override = ALT_BRAND_TERM_OVERRIDES.get(term)
+        if override:
+            cond = f"({cond} AND {override})"
+        suffix = (
+            term.replace(" ", "_").replace(",", "").replace("&", "and")
+                .replace(".", "").replace("'", "")
+        )
+        lines.append(f"        WHEN {cond} THEN 'manual:brand_match:{suffix}'")
+    lines.append("        ELSE NULL END")
+    return "\n".join(lines)
+
+
+def _route_alt_brands_from_staging(glue_db: str, staging_table: str, target_table: str, ack_ids: list) -> None:
+    """Second alternatives-routing pass: brand/manager-name matching via
+    ALT_BRAND_PATTERNS, for rows the keyword pass (_route_alternatives_from_
+    staging, using ALT_FUND_PATTERNS) doesn't catch because the name has no
+    generic alt-fund phrase, only a manager brand. Must run AFTER
+    _route_alternatives_from_staging for the same ack_ids so the NOT EXISTS
+    check below correctly skips rows the keyword pass already inserted.
+    INSERT-only, no DELETE: every row this matches is, by construction, not
+    yet in target_table for its (ack_id, raw_entity_name), so there is
+    nothing to safely clear first -- a scoped DELETE here would risk wiping
+    out unrelated rows already routed for the same ack_id.
+    classification_confidence is unconditionally MEDIUM (a manager-level
+    judgment call, one asset class per brand, not a per-record tiering) and
+    manual_review_required is unconditionally true, matching
+    _route_alternatives_from_staging's existing behavior."""
+    import awswrangler as wr
+    import os
+    if not ack_ids:
+        return
+    wg = os.getenv("ATHENA_WORKGROUP", "primary")
+    s3 = os.getenv("ATHENA_STAGING_S3")
+    ids = ", ".join("'" + str(a).replace("'", "''") + "'" for a in ack_ids)
+    excluded = ", ".join(
+        "'" + t + "'" for t in sorted(
+            ALT_EXCLUDED_ASSET_TYPES | ALT_NOISE_ASSET_TYPES | ALT_BRAND_EXTRA_EXCLUDED_ASSET_TYPES
+        )
+    )
+    trusted = ", ".join("'" + t + "'" for t in sorted(ALT_BRAND_TRUSTED_ASSET_TYPES))
+    exclusion_clause = " ".join(
+        "AND NOT (ack_id = '%s' AND lower(trim(raw_entity_name)) = '%s')"
+        % (a.replace("'", "''"), n.replace("'", "''"))
+        for a, n in ALT_BRAND_CONFIRMED_EXCLUSIONS
+    )
+
+    select_sql = f"""
+        SELECT
+            ack_id, raw_entity_name, raw_sponsor_name, plan_investment_amt,
+            asset_sub_class, validation_status,
+            {_alt_brand_case_sql(1)} AS asset_type,
+            'MEDIUM' AS classification_confidence,
+            {_alt_brand_method_case_sql()} AS classification_method,
+            true AS manual_review_required,
+            current_timestamp AS routed_at,
+            {_alt_brand_case_sql(2)} AS asset_class
+        FROM {glue_db}.{staging_table}
+        WHERE ack_id IN ({ids})
+          AND (lower(trim(asset_type)) IS NULL OR lower(trim(asset_type)) NOT IN ({excluded}))
+          AND NOT EXISTS (
+              SELECT 1 FROM {glue_db}.{target_table} t
+              WHERE t.ack_id = {glue_db}.{staging_table}.ack_id
+                AND t.raw_entity_name = {glue_db}.{staging_table}.raw_entity_name
+          )
+          AND (
+              regexp_like(lower(raw_entity_name), '{ALT_BRAND_STRUCTURAL_MARKER_REGEX}')
+              OR lower(trim(asset_type)) IN ({trusted})
+          )
+          AND NOT regexp_like(lower(raw_entity_name), '{ALT_BRAND_NOISE_REGEX}')
+          {exclusion_clause}
+    """
+    insert_sql = (
+        f"INSERT INTO {glue_db}.{target_table} "
+        "(ack_id, raw_entity_name, raw_sponsor_name, plan_investment_amt, asset_sub_class, "
+        "validation_status, asset_type, classification_confidence, classification_method, "
+        "manual_review_required, routed_at, asset_class) "
+        f"SELECT * FROM ({select_sql}) t WHERE t.asset_class IS NOT NULL"
+    )
+    qid = wr.athena.start_query_execution(sql=insert_sql, database=glue_db, workgroup=wg, s3_output=s3)
+    wr.athena.wait_query(query_execution_id=qid)
+    logger.info("Routed brand-matched alternatives rows %s -> %s for %d acks", staging_table, target_table, len(ack_ids))
+
+
+# ---------------------------------------------------------------------------
 # Orchestrator
 # ---------------------------------------------------------------------------
 
@@ -1391,8 +1631,9 @@ def run_post_extract_validation(
                                    combined["ack_id"].dropna().unique().tolist())
             alt_table = _os.getenv("ALTERNATIVES_TABLE", "").strip()
             if alt_table:
-                _route_alternatives_from_staging(validated_glue_db, staging_table, alt_table,
-                                                 combined["ack_id"].dropna().unique().tolist())
+                alt_ack_ids = combined["ack_id"].dropna().unique().tolist()
+                _route_alternatives_from_staging(validated_glue_db, staging_table, alt_table, alt_ack_ids)
+                _route_alt_brands_from_staging(validated_glue_db, staging_table, alt_table, alt_ack_ids)
         else:
             write_iceberg_via_athena(combined, validated_glue_db, validated_table)
 
