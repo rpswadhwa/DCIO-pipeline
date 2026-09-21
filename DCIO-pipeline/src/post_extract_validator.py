@@ -168,6 +168,14 @@ def pick_fund_name(issuer_name, investment_description):
 logger = logging.getLogger(__name__)
 
 MF_ASSET_TYPES = frozenset({"mutual fund", "index fund", "etf", "target date fund"})
+# Rollup/placeholder line items that are sometimes mistagged with an MF asset_type but are
+# NOT a real holding -- summing them double-counts money already captured by the plan's real
+# itemized fund rows (e.g. Loyola University Chicago, 2026-09-20: a single "See Attached" row
+# equal to the plan's entire certified mutual-fund total, sitting alongside the real per-fund
+# breakdown). "see attached" already exists in junk_detect.py's V3_WRONGTYPE_EXACT denylist,
+# but _route_mf_from_staging is a raw-SQL router that never calls junk_detect -- this filters
+# the same known-junk names directly in the routing query so they can't be reintroduced here.
+MF_ROUTING_EXCLUDE_NAMES = frozenset({"see attached"})
 BAD_REFERENCE_COMPARISON_OVERRIDES = frozenset({
     ("20251010135251NAL0018754754001", "202777218-002"),
 })
@@ -1005,18 +1013,147 @@ def _route_mf_from_staging(glue_db: str, staging_table: str, target_table: str, 
     s3 = os.getenv("ATHENA_STAGING_S3")
     ids = ", ".join("'" + str(a).replace("'", "''") + "'" for a in ack_ids)
     mf = ", ".join("'" + t + "'" for t in sorted(MF_ASSET_TYPES))
+    excl = ", ".join("'" + t + "'" for t in sorted(MF_ROUTING_EXCLUDE_NAMES))
     stmts = [
         f"DELETE FROM {glue_db}.{target_table} WHERE ack_id IN ({ids})",
         ("INSERT INTO {gd}.{tt} "
          "(ack_id, raw_entity_name, raw_sponsor_name, plan_investment_amt, asset_class, asset_sub_class, validation_status) "
          "SELECT ack_id, raw_entity_name, raw_sponsor_name, plan_investment_amt, asset_class, asset_sub_class, validation_status "
-         "FROM {gd}.{st} WHERE ack_id IN ({ids}) AND lower(trim(asset_type)) IN ({mf})"
-         ).format(gd=glue_db, tt=target_table, st=staging_table, ids=ids, mf=mf),
+         "FROM {gd}.{st} WHERE ack_id IN ({ids}) AND lower(trim(asset_type)) IN ({mf}) "
+         "AND lower(trim(raw_entity_name)) NOT IN ({excl})"
+         ).format(gd=glue_db, tt=target_table, st=staging_table, ids=ids, mf=mf, excl=excl),
     ]
     for sql in stmts:
         qid = wr.athena.start_query_execution(sql=sql, database=glue_db, workgroup=wg, s3_output=s3)
         wr.athena.wait_query(query_execution_id=qid)
     logger.info("Routed MF rows %s -> %s for %d acks", staging_table, target_table, len(ack_ids))
+
+
+# ---------------------------------------------------------------------------
+# Alternatives routing (real estate / private credit / private equity /
+# infrastructure / hedge fund). Unlike the MF router, this does NOT trust the
+# file-derived asset_type field to identify matches -- it's unreliable/
+# inconsistent for non-MF rows. Classification is keyword-matched against
+# raw_entity_name instead. Inclusion-only: a row with no keyword match is left
+# in staging untouched, same as any other unrouted non-MF/non-CIT row -- there
+# is no catch-all bucket here.
+# ---------------------------------------------------------------------------
+
+# (keyword, asset_type, asset_class, confidence, classification_method).
+# HIGH-tier phrases are listed before MEDIUM-tier ones and a CASE takes the
+# first match, so a specific phrase always wins over a shorter/more ambiguous
+# one regardless of category.
+ALT_FUND_PATTERNS: List[Tuple[str, str, str, str, str]] = [
+    ("private equity fund", "Private Equity Fund", "Private Equity", "HIGH", "keyword:private_equity_fund"),
+    ("private equity partners", "Private Equity Fund", "Private Equity", "HIGH", "keyword:private_equity_partners"),
+    ("buyout fund", "Private Equity Fund", "Private Equity", "HIGH", "keyword:buyout_fund"),
+    ("venture capital fund", "Private Equity Fund", "Private Equity", "HIGH", "keyword:venture_capital_fund"),
+    ("private credit fund", "Private Credit Fund", "Private Credit", "HIGH", "keyword:private_credit_fund"),
+    ("direct lending fund", "Private Credit Fund", "Private Credit", "HIGH", "keyword:direct_lending_fund"),
+    ("senior secured loan fund", "Private Credit Fund", "Private Credit", "HIGH", "keyword:senior_secured_loan_fund"),
+    ("real estate investment trust", "Real Estate Fund", "Real Estate", "HIGH", "keyword:reit_full"),
+    ("real estate fund", "Real Estate Fund", "Real Estate", "HIGH", "keyword:real_estate_fund"),
+    ("infrastructure fund", "Infrastructure Fund", "Infrastructure", "HIGH", "keyword:infrastructure_fund"),
+    ("hedge fund", "Hedge Fund", "Hedge Fund", "HIGH", "keyword:hedge_fund"),
+    ("private equity", "Private Equity Fund", "Private Equity", "MEDIUM", "keyword:private_equity"),
+    ("buyout", "Private Equity Fund", "Private Equity", "MEDIUM", "keyword:buyout"),
+    ("venture capital", "Private Equity Fund", "Private Equity", "MEDIUM", "keyword:venture_capital"),
+    ("private credit", "Private Credit Fund", "Private Credit", "MEDIUM", "keyword:private_credit"),
+    ("direct lending", "Private Credit Fund", "Private Credit", "MEDIUM", "keyword:direct_lending"),
+    ("senior loan", "Private Credit Fund", "Private Credit", "MEDIUM", "keyword:senior_loan"),
+    ("mezzanine debt", "Private Credit Fund", "Private Credit", "MEDIUM", "keyword:mezzanine_debt"),
+    ("real estate", "Real Estate Fund", "Real Estate", "MEDIUM", "keyword:real_estate"),
+    ("infrastructure", "Infrastructure Fund", "Infrastructure", "MEDIUM", "keyword:infrastructure"),
+]
+
+# Reliable, well-populated literal asset_type values that belong to other
+# routers -- excluded here so alternatives never collides with MF or the two
+# dominant, unambiguous CIT literal values. NOT a full CIT taxonomy: the long
+# tail of asset_type strings is too inconsistent to trust for anything beyond
+# these two, which is exactly why this router keys off raw_entity_name instead.
+ALT_EXCLUDED_ASSET_TYPES = MF_ASSET_TYPES | frozenset({
+    "common/collective trust fund", "commingled fund",
+})
+
+# Asset-type strings that reliably indicate an individual public security (a
+# stock or ETF ticker) rather than a fund holding. Confirmed against real
+# false positives sampled from production staging: "Invesco Senior Loan Etf"
+# and "Vanguard Real Estate ETF" filed as exchange-traded funds, "Sterling
+# Infrastructure Inc" filed as common stock -- all caught by the loose
+# MEDIUM-tier keywords ("real estate", "infrastructure", "senior loan"). This
+# is a different bar than ALT_EXCLUDED_ASSET_TYPES above: it's not used to
+# identify what a row IS (asset_type is too unreliable for that), only to
+# veto a keyword match on the narrow set of security types that can never be
+# an alternative-fund unit. It's a partial mitigation, not a full fix --
+# asset_type is often NULL/inconsistent for the same security across rows, so
+# some public-security noise still gets through; that's why manual_review_
+# required stays hardcoded true for every routed row in this first version.
+ALT_NOISE_ASSET_TYPES = frozenset({
+    "common stock", "employer stock", "exchange traded funds", "stocks",
+})
+
+
+def _alt_case_sql(value_index: int) -> str:
+    """Build a CASE expression picking ALT_FUND_PATTERNS[*][value_index] for the
+    first keyword (index 0) found in raw_entity_name. Generating all four CASEs
+    (asset_type/asset_class/confidence/method) from this one function keeps them
+    from ever drifting out of sync with each other."""
+    lines = ["CASE"]
+    for pattern in ALT_FUND_PATTERNS:
+        kw = pattern[0].replace("'", "''")
+        val = pattern[value_index].replace("'", "''")
+        lines.append(f"        WHEN lower(trim(raw_entity_name)) LIKE '%{kw}%' THEN '{val}'")
+    lines.append("        ELSE NULL END")
+    return "\n".join(lines)
+
+
+def _route_alternatives_from_staging(glue_db: str, staging_table: str, target_table: str, ack_ids: list) -> None:
+    """Populate the alternatives table from staging: keyword-matches raw_entity_name
+    against ALT_FUND_PATTERNS (real estate / private credit / private equity /
+    infrastructure / hedge fund). Deletes the run's acks from target first
+    (idempotent), then inserts only the matched subset -- non-matching rows are
+    left in staging, not swept into a catch-all bucket.
+    manual_review_required is unconditionally true for now: these patterns are
+    unproven against real data, so every routed row should get a first look
+    before this flips to a confidence-based rule."""
+    import awswrangler as wr
+    import os
+    if not ack_ids:
+        return
+    wg = os.getenv("ATHENA_WORKGROUP", "primary")
+    s3 = os.getenv("ATHENA_STAGING_S3")
+    ids = ", ".join("'" + str(a).replace("'", "''") + "'" for a in ack_ids)
+    excluded = ", ".join("'" + t + "'" for t in sorted(ALT_EXCLUDED_ASSET_TYPES | ALT_NOISE_ASSET_TYPES))
+
+    select_sql = f"""
+        SELECT
+            ack_id, raw_entity_name, raw_sponsor_name, plan_investment_amt,
+            asset_sub_class, validation_status,
+            {_alt_case_sql(1)} AS asset_type,
+            {_alt_case_sql(3)} AS classification_confidence,
+            {_alt_case_sql(4)} AS classification_method,
+            true AS manual_review_required,
+            current_timestamp AS routed_at,
+            {_alt_case_sql(2)} AS asset_class
+        FROM {glue_db}.{staging_table}
+        WHERE ack_id IN ({ids})
+          AND lower(trim(asset_type)) NOT IN ({excluded})
+    """
+    insert_sql = (
+        f"INSERT INTO {glue_db}.{target_table} "
+        "(ack_id, raw_entity_name, raw_sponsor_name, plan_investment_amt, asset_sub_class, "
+        "validation_status, asset_type, classification_confidence, classification_method, "
+        "manual_review_required, routed_at, asset_class) "
+        f"SELECT * FROM ({select_sql}) t WHERE t.asset_type IS NOT NULL"
+    )
+    stmts = [
+        f"DELETE FROM {glue_db}.{target_table} WHERE ack_id IN ({ids})",
+        insert_sql,
+    ]
+    for sql in stmts:
+        qid = wr.athena.start_query_execution(sql=sql, database=glue_db, workgroup=wg, s3_output=s3)
+        wr.athena.wait_query(query_execution_id=qid)
+    logger.info("Routed alternatives rows %s -> %s for %d acks", staging_table, target_table, len(ack_ids))
 
 
 # ---------------------------------------------------------------------------
@@ -1252,6 +1389,10 @@ def run_post_extract_validation(
             write_iceberg_via_athena(combined, validated_glue_db, staging_table, include_asset_type=True)
             _route_mf_from_staging(validated_glue_db, staging_table, validated_table,
                                    combined["ack_id"].dropna().unique().tolist())
+            alt_table = _os.getenv("ALTERNATIVES_TABLE", "").strip()
+            if alt_table:
+                _route_alternatives_from_staging(validated_glue_db, staging_table, alt_table,
+                                                 combined["ack_id"].dropna().unique().tolist())
         else:
             write_iceberg_via_athena(combined, validated_glue_db, validated_table)
 

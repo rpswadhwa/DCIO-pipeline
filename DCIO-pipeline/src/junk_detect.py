@@ -381,6 +381,23 @@ _MATURING_RE = re.compile(r"maturing (at various|through|on)", re.I)
 _GENERIC_WORDS = {"statements", "investments", "total", "other", "various", "cash",
                   "notes", "misc", "miscellaneous", "fund", "funds", "account", "accounts"}
 
+# --- 733-plan MF-staging review (2026-09-17) -------------------------------------------
+# Four bond/fragment shapes confirmed safe by testing against ALL 401,194 distinct live
+# plan_mf_history_v3 names (post-cleaning reference universe): zero real funds matched.
+# Two sibling shapes considered in the same review -- a bare alnum ticker code, and OCR
+# letter-spaced text -- were REJECTED: both fired on real funds in that same test (a stray
+# leading digit glued onto a real ticker like "1VFIAX", and real names like "JPMORGAN
+# SMARTRETIREMENT 2060 R6" with garbled boilerplate glued on as a suffix) and are left out
+# on purpose. Do not add them here as DELETE without first designing a PREFIX-style
+# strip-and-protect fix (see is_junk_name's PREFIX disposition).
+_BOND_SCHEDULE_LINE_RE = re.compile(
+    r"^\$[\d,]+;\s*maturity\s+\d{1,2}/\d{1,2}/\d{2,4};\s*[\d.]+%\s*interest", re.I)
+_BOND_COUPON_DATE_RE = re.compile(r"\d+(\.\d+)?%.*\d{1,2}/\d{1,2}/(19|20)?\d{2}")
+_FUND_WORD_GUARD_RE = re.compile(
+    r"\b(fund|index|target date|r[1-6]\b|admiral|institutional|shares)\b", re.I)
+_BARE_UNITS_NA_RE = re.compile(r"^\d+\s+(units|na)$", re.I)
+_X_CUSIP_PREFIX_RE = re.compile(r"^x\s+[0-9A-Z]{6,9}$", re.I)
+
 
 def is_junk_name(name: str) -> Tuple[bool, str, str]:
     """Return (is_junk, reason, disposition).
@@ -434,6 +451,15 @@ def is_junk_name(name: str) -> Tuple[bool, str, str]:
         return True, "date parsed as fund", "DELETE"
     if _BOND_FRAG_RE.match(raw) or _MATURING_RE.search(raw):
         return True, "bond/maturity fragment", "DELETE"
+    # 733-plan MF-staging review (2026-09-17), confirmed against full live v3 name universe
+    if _BOND_SCHEDULE_LINE_RE.search(raw):
+        return True, "bond amortization schedule line ($X; maturity ...; X% interest)", "DELETE"
+    if _BARE_UNITS_NA_RE.match(raw):
+        return True, "bare unit-count/NA fragment, no fund name", "DELETE"
+    if _X_CUSIP_PREFIX_RE.match(raw):
+        return True, "checkbox-marker glued to a bare CUSIP, no fund name", "DELETE"
+    if _BOND_COUPON_DATE_RE.search(raw) and not _FUND_WORD_GUARD_RE.search(raw):
+        return True, "individual bond (coupon% + maturity date, no fund wording)", "DELETE"
     # user-reviewed junk forms (2026-07-15)
     if _CID_RE.search(nn):
         return True, "OCR glyph artifact (cidNN)", "DELETE"

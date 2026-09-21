@@ -1877,6 +1877,15 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
             'interest bearing cash': 'Money Market Fund',
             'mmrk': 'Money Market Fund',
             'common stock': 'Employer Stock',
+            # Matches the same 'Institutional Funds?' -> 'Mutual Fund' rule already used
+            # by the Camelot table-extraction path (asset_type_patterns.py). Previously
+            # unrecognized here, so on this text-based fallback path the prior section's
+            # 'Employer Stock' type bled forward onto all rows under an "Institutional
+            # Funds" heading instead (seen on Duke Energy Retirement Savings Plan's
+            # Schedule of Assets, where Camelot's table detection fails and this fallback
+            # runs instead) -- a later demotion pass then converted that to 'Common Stock'.
+            'institutional fund': 'Mutual Fund',
+            'institutional funds': 'Mutual Fund',
             'commingled fund': 'Commingled Fund',
             'collective fund': 'Commingled Fund',
             'commingled and other funds': 'Commingled Fund',

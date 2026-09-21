@@ -1,0 +1,47 @@
+CREATE TABLE IF NOT EXISTS default.plan_alternative_history (
+  ack_id string,
+  plan_id string,
+  filing_year int,
+  source_table string,
+  source_asset_type string,
+  source_asset_class string,
+  source_asset_sub_class string,
+  validation_status string,
+  raw_entity_name string,
+  raw_sponsor_name string,
+  raw_entity_name_norm string,
+  raw_sponsor_name_norm string,
+  normalized_manager string,
+  plan_investment_amt decimal(18, 2),
+  vehicle_type string,
+  asset_class_family string,
+  asset_class string,
+  asset_sub_class string,
+  classification_confidence string,
+  match_method string,
+  match_reason string,
+  dedupe_status string,
+  dedupe_match_table string,
+  dedupe_match_method string,
+  dedupe_match_raw_entity_name string,
+  dedupe_match_raw_sponsor_name string,
+  dedupe_match_amount decimal(18, 2),
+  cit_alt_exists_for_ack boolean,
+  mf_alt_exists_for_ack boolean,
+  review_status string,
+  reviewed_manager string,
+  reviewed_vehicle_type string,
+  reviewed_asset_class string,
+  reviewed_asset_sub_class string,
+  reviewer_notes string,
+  source_row_fingerprint string,
+  created_at timestamp,
+  updated_at timestamp
+)
+PARTITIONED BY (`asset_class`)
+LOCATION 's3://retirementinsights-silver/iceberg-warehouse/plan_alternative_history'
+TBLPROPERTIES (
+  'table_type'='iceberg',
+  'write_compression'='zstd',
+  'format'='parquet'
+);
