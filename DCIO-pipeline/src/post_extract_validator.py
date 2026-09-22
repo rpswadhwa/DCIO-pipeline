@@ -1066,6 +1066,22 @@ ALT_FUND_PATTERNS: List[Tuple[str, str, str, str, str]] = [
     ("infrastructure", "Infrastructure Fund", "Infrastructure", "MEDIUM", "keyword:infrastructure"),
 ]
 
+# Rollup/pointer line items -- same trap as MF_ROUTING_EXCLUDE_NAMES above, on the
+# alternatives side. A Schedule H line like "Limited Partnerships and Other Private
+# Equity See Appendix X" is a POINTER to an itemized appendix elsewhere in the filing,
+# not a real single holding -- but it contains "private equity" (a MEDIUM-tier keyword
+# above), so the router auto-classified and loaded it as one $14.58B "fund" (Western
+# Conference of Teamsters, ack_id 20250930114328NAL0016441459001; found 2026-09-20,
+# fixed via a one-off manual DELETE + hand-decomposition of the appendix at the time --
+# see project_dcio_alternatives_router memory). "See Appendix"/"See Attached"/"See
+# Schedule" phrasing is bounded and never occurs inside a real fund name (same
+# reasoning as junk_detect.py's "Fidelity Mutual funds - see attachment" entry and
+# MF_ROUTING_EXCLUDE_NAMES's "see attached"), so it's safe to exclude unconditionally
+# rather than case-by-case. This router is raw-SQL and never calls junk_detect (same
+# caveat as MF_ROUTING_EXCLUDE_NAMES above), so the guard is applied directly in
+# _route_alternatives_from_staging's WHERE clause.
+ALT_ROLLUP_POINTER_REGEX = r"see\s+appendix|see\s+attach(ed|ment)?\b|see\s+schedule\b"
+
 # Reliable, well-populated literal asset_type values that belong to other
 # routers -- excluded here so alternatives never collides with MF or the two
 # dominant, unambiguous CIT literal values. NOT a full CIT taxonomy: the long
@@ -1143,6 +1159,7 @@ def _route_alternatives_from_staging(glue_db: str, staging_table: str, target_ta
         FROM {glue_db}.{staging_table}
         WHERE ack_id IN ({ids})
           AND lower(trim(asset_type)) NOT IN ({excluded})
+          AND NOT regexp_like(lower(raw_entity_name), '{ALT_ROLLUP_POINTER_REGEX}')
     """
     insert_sql = (
         f"INSERT INTO {glue_db}.{target_table} "
