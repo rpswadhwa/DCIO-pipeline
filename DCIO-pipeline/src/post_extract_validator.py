@@ -1132,9 +1132,10 @@ _ALT_INSERT_COLUMNS = (
 
 
 def _route_alternatives_from_staging(glue_db: str, staging_table: str, target_table: str, ack_ids: list) -> None:
-    """Populate the alternatives table from staging in a single pass with two
-    match strategies, phrase first then brand, combined in one query so there
-    is no second statement and no ordering dependency between them:
+    """Populate the alternatives table from staging in a single pass with
+    three match strategies, phrase then brand then sponsor, combined in one
+    query so there is no second statement and no ordering dependency between
+    them:
 
     1. Phrase match: keyword-matches raw_entity_name against ALT_FUND_PATTERNS
        (real estate / private credit / private equity / infrastructure /
@@ -1148,12 +1149,24 @@ def _route_alternatives_from_staging(glue_db: str, staging_table: str, target_ta
        (ack_id, raw_entity_name) already covered by the phrase pass via a
        NOT EXISTS against that pass's own CTE, so a name matched by phrase
        never also gets a second, weaker-confidence brand row.
+    3. Sponsor match (added 2026-09-24, round 3): for rows neither pass above
+       covers -- typically a generic placeholder raw_entity_name ("Partnership/
+       joint venture interests", "N/A Limited Partnerships") that hides the
+       real manager name in raw_sponsor_name instead -- reruns the same
+       ALT_BRAND_PATTERNS vocabulary against raw_sponsor_name. Confidence is
+       LOW (below brand match's MEDIUM): sponsor free text is noisier and, per
+       ALT_SPONSOR_EXCLUDE_REGEX, just as likely to name a custodian bank or
+       traditional (non-alternative) manager as an alt brand. Also excludes
+       self-referential sponsors (sponsor name is just the entity name plus a
+       trailing numeric id, i.e. no new information) and anything the phrase
+       or brand pass already claimed.
 
     Non-matching rows are left in staging, not swept into a catch-all bucket.
-    Deletes the run's acks from target first (idempotent), then inserts both
-    subsets in one INSERT. manual_review_required is unconditionally true for
-    now: these patterns are unproven against real data, so every routed row
-    should get a first look before this flips to a confidence-based rule."""
+    Deletes the run's acks from target first (idempotent), then inserts all
+    three subsets in one INSERT. manual_review_required is unconditionally
+    true for now: these patterns are unproven against real data, so every
+    routed row should get a first look before this flips to a
+    confidence-based rule."""
     import awswrangler as wr
     import os
     if not ack_ids:
@@ -1163,6 +1176,8 @@ def _route_alternatives_from_staging(glue_db: str, staging_table: str, target_ta
     ids = ", ".join("'" + str(a).replace("'", "''") + "'" for a in ack_ids)
     manager_case = _alt_manager_case_sql()
     vehicle_case = _alt_vehicle_case_sql()
+    manager_case_sponsor = _alt_manager_case_sql("raw_sponsor_name")
+    vehicle_case_sponsor = _alt_vehicle_case_sql("raw_sponsor_name")
 
     phrase_excluded = ", ".join("'" + t + "'" for t in sorted(ALT_EXCLUDED_ASSET_TYPES | ALT_NOISE_ASSET_TYPES))
     brand_excluded = ", ".join(
@@ -1230,10 +1245,46 @@ def _route_alternatives_from_staging(glue_db: str, staging_table: str, target_ta
         ),
         brand_matched_rows AS (
             SELECT * FROM brand_matches WHERE asset_sub_class IS NOT NULL
+        ),
+        sponsor_matches AS (
+            SELECT
+                s.ack_id, s.raw_entity_name, s.raw_sponsor_name, s.plan_investment_amt,
+                {_alt_brand_case_sql(2, "raw_sponsor_name")} AS asset_sub_class,
+                s.validation_status,
+                {vehicle_case_sponsor} AS asset_type,
+                'LOW' AS classification_confidence,
+                {_alt_brand_method_case_sql("raw_sponsor_name", "manual:sponsor_brand_match:")} AS classification_method,
+                true AS manual_review_required,
+                current_timestamp AS routed_at,
+                'Alternatives' AS asset_class,
+                {manager_case_sponsor} AS matched_manager_name,
+                CASE WHEN {manager_case_sponsor} IS NOT NULL THEN 'HIGH' ELSE NULL END AS manager_match_confidence,
+                CASE WHEN {manager_case_sponsor} IS NOT NULL THEN 'sponsor_brand_regex_v1' ELSE NULL END AS manager_match_method
+            FROM {glue_db}.{staging_table} s
+            WHERE s.ack_id IN ({ids})
+              AND s.raw_sponsor_name IS NOT NULL AND trim(s.raw_sponsor_name) <> ''
+              AND (lower(trim(s.asset_type)) IS NULL OR lower(trim(s.asset_type)) NOT IN ({brand_excluded}))
+              AND regexp_like(lower(s.raw_sponsor_name), '{ALT_BRAND_STRUCTURAL_MARKER_REGEX}')
+              AND NOT regexp_like(lower(s.raw_sponsor_name), '{ALT_BRAND_NOISE_REGEX}')
+              AND NOT regexp_like(lower(s.raw_sponsor_name), '{ALT_SPONSOR_EXCLUDE_REGEX}')
+              AND lower(trim(regexp_replace(s.raw_sponsor_name, '[0-9\\s]+$', ''))) <> lower(trim(s.raw_entity_name))
+              AND NOT EXISTS (
+                  SELECT 1 FROM phrase_matched_rows p
+                  WHERE p.ack_id = s.ack_id AND p.raw_entity_name = s.raw_entity_name
+              )
+              AND NOT EXISTS (
+                  SELECT 1 FROM brand_matched_rows b
+                  WHERE b.ack_id = s.ack_id AND b.raw_entity_name = s.raw_entity_name
+              )
+        ),
+        sponsor_matched_rows AS (
+            SELECT * FROM sponsor_matches WHERE asset_sub_class IS NOT NULL
         )
         SELECT {_ALT_INSERT_COLUMNS} FROM phrase_matched_rows
         UNION ALL
         SELECT {_ALT_INSERT_COLUMNS} FROM brand_matched_rows
+        UNION ALL
+        SELECT {_ALT_INSERT_COLUMNS} FROM sponsor_matched_rows
     """
     insert_sql = f"INSERT INTO {glue_db}.{target_table} ({_ALT_INSERT_COLUMNS}) {combined_sql}"
     stmts = [
@@ -1357,6 +1408,12 @@ ALT_BRAND_PATTERNS: List[Tuple[str, str, str]] = [
     ("pretium", "Real Estate Fund", "Real Estate"),
     ("balyasny", "Hedge Fund", "Hedge Fund"),
     ("primavera capital", "Private Equity Fund", "Private Equity"),
+    # "washington capital reef" ordered ahead of the broader "washington
+    # capital" term below -- CASE picks the first matching WHEN, and the REEF
+    # product line is Real Estate while the manager's other product defaults
+    # to Private Credit (confirmed via 2026-09-24 research; see
+    # project_dcio_alternatives_router memory).
+    ("washington capital reef", "Real Estate Fund", "Real Estate"),
     ("washington capital", "Private Credit Fund", "Private Credit"),
     ("grosvenor wilmore", "Hedge Fund", "Hedge Fund"),
     ("foxhaven", "Hedge Fund", "Hedge Fund"),
@@ -1378,6 +1435,15 @@ ALT_BRAND_PATTERNS: List[Tuple[str, str, str]] = [
     ("sycamore partners", "Private Equity Fund", "Private Equity"),
     ("gtcr", "Private Equity Fund", "Private Equity"),
     ("cendana", "Private Equity Fund", "Private Equity"),
+    # Added 2026-09-24 (round 3) from sponsor-name research on 50 "unclear"
+    # generic-entity-name groups (see project_dcio_alternatives_router memory).
+    # Specific terms ordered ahead of any broader/colliding term below so the
+    # first-match-wins CASE picks the more specific category first.
+    ("golden tree", "Private Credit Fund", "Private Credit"),  # space variant of "goldentree"
+    ("peak rock capital credit", "Private Credit Fund", "Private Credit"),  # ordered before "peak rock capital"
+    ("peak rock capital", "Private Equity Fund", "Private Equity"),
+    ("tcw direct lending", "Private Credit Fund", "Private Credit"),  # scoped narrow: TCW Group overall
+    # is multi-strategy (confirmed via 2026-09-24 research), so no bare "tcw" term is added.
 ]
 
 # Per-term extra restriction, ANDed onto that term's match only. Both entries
@@ -1405,19 +1471,49 @@ ALT_BRAND_TERM_OVERRIDES: Dict[str, str] = {
 # private credit); fixed here so it can't recur on newly processed PDFs.
 ALT_BRAND_WORD_BOUNDARY_TERMS = {"gso"}
 
+# Sponsor-name fallback pass (added 2026-09-24, round 3): raw_sponsor_name
+# carries the real manager/fund name for rows where raw_entity_name is a
+# generic placeholder ("Partnership/joint venture interests", "N/A Limited
+# Partnerships", "Limited Liability Company") -- confirmed against 786 rows
+# across 50 such placeholder groups (see project_dcio_alternatives_router
+# memory). Reuses ALT_BRAND_PATTERNS/ALT_MANAGER_NAMES against raw_sponsor_
+# name instead, but a sponsor field just as often names a custodian bank or
+# traditional (non-alternative) manager rather than an alt brand, so those
+# must be excluded here even though they'd never appear in ALT_BRAND_PATTERNS
+# in the first place -- this is a different failure mode (false "this row IS
+# an alt, just under the wrong category" vs. false "this row is an alt at
+# all"). List sourced from this round's manual candidate-extraction exclusion
+# filter, verified against real data before promoting the 141-row round-3
+# batch.
+ALT_SPONSOR_EXCLUDE_REGEX = (
+    r"dodge|pimco|blackrock|jp\s*morgan|fidelity|brandywine|"
+    r"boston trust walden|bny mellon|amalgamated bank|dimensional fund advisors|"
+    r"john hancock|franklin|putnam|invesco|lord abbett|american funds|"
+    r"eaton vance|federated|brown brothers harriman|alliance bernstein|"
+    r"tiaa|calvert|amana|aon hewitt|aon enhanced|guaranteed investment contract"
+)
 
-def _alt_brand_term_cond(term: str) -> str:
+
+def _alt_brand_term_cond(term: str, column: str = "raw_entity_name") -> str:
     """Shared condition-builder for one ALT_BRAND_PATTERNS/ALT_MANAGER_NAMES
     term: word-boundary regex for terms in ALT_BRAND_WORD_BOUNDARY_TERMS,
     plain substring otherwise, ANDed with ALT_BRAND_TERM_OVERRIDES when
     present. Centralizing this keeps asset_type/asset_class/classification_
     method/matched_manager_name from ever drifting out of sync on which rows
-    a given brand term matches."""
+    a given brand term matches.
+
+    `column` defaults to raw_entity_name (the original, higher-trust match
+    target) but accepts raw_sponsor_name too, for the sponsor-name fallback
+    pass added 2026-09-24 -- ALT_BRAND_TERM_OVERRIDES conditions themselves
+    still reference raw_entity_name literally since every existing override
+    was written/verified against that column; the sponsor-name pass doesn't
+    use per-term overrides today, but this keeps the override behavior
+    unchanged if it ever does."""
     term_sql = term.replace("'", "''")
     if term in ALT_BRAND_WORD_BOUNDARY_TERMS:
-        cond = f"regexp_like(lower(trim(raw_entity_name)), '\\b{term_sql}\\b')"
+        cond = f"regexp_like(lower(trim({column})), '\\b{term_sql}\\b')"
     else:
-        cond = f"strpos(lower(trim(raw_entity_name)), '{term_sql}') > 0"
+        cond = f"strpos(lower(trim({column})), '{term_sql}') > 0"
     override = ALT_BRAND_TERM_OVERRIDES.get(term)
     if override:
         cond = f"({cond} AND {override})"
@@ -1472,33 +1568,34 @@ ALT_BRAND_CONFIRMED_EXCLUSIONS: List[Tuple[str, str]] = [
 ]
 
 
-def _alt_brand_case_sql(value_index: int) -> str:
+def _alt_brand_case_sql(value_index: int, column: str = "raw_entity_name") -> str:
     """Build a CASE expression picking ALT_BRAND_PATTERNS[*][value_index]
     (1=asset_type, 2=asset_class) for the first brand term found in
-    raw_entity_name, honoring ALT_BRAND_TERM_OVERRIDES. Mirrors
-    _alt_case_sql() above so the two stay easy to compare/audit side by
-    side."""
+    `column`, honoring ALT_BRAND_TERM_OVERRIDES. Mirrors _alt_case_sql()
+    above so the two stay easy to compare/audit side by side."""
     lines = ["CASE"]
     for term, asset_type, asset_class in ALT_BRAND_PATTERNS:
-        cond = _alt_brand_term_cond(term)
+        cond = _alt_brand_term_cond(term, column)
         val = (asset_type if value_index == 1 else asset_class).replace("'", "''")
         lines.append(f"        WHEN {cond} THEN '{val}'")
     lines.append("        ELSE NULL END")
     return "\n".join(lines)
 
 
-def _alt_brand_method_case_sql() -> str:
+def _alt_brand_method_case_sql(column: str = "raw_entity_name", method_prefix: str = "manual:brand_match:") -> str:
     """Build the classification_method CASE for ALT_BRAND_PATTERNS. Kept
     separate from _alt_brand_case_sql since the method string is derived
-    from the term itself (not a stored column), unlike asset_type/asset_class."""
+    from the term itself (not a stored column), unlike asset_type/asset_class.
+    `method_prefix` lets the sponsor-name fallback pass tag its rows
+    distinctly (manual:sponsor_brand_match:*) from entity-name brand matches."""
     lines = ["CASE"]
     for term, _asset_type, _asset_class in ALT_BRAND_PATTERNS:
-        cond = _alt_brand_term_cond(term)
+        cond = _alt_brand_term_cond(term, column)
         suffix = (
             term.replace(" ", "_").replace(",", "").replace("&", "and")
                 .replace(".", "").replace("'", "")
         )
-        lines.append(f"        WHEN {cond} THEN 'manual:brand_match:{suffix}'")
+        lines.append(f"        WHEN {cond} THEN '{method_prefix}{suffix}'")
     lines.append("        ELSE NULL END")
     return "\n".join(lines)
 
@@ -1536,17 +1633,23 @@ ALT_MANAGER_NAMES: Dict[str, str] = {
         "ta realty": "TA Realty",
         "gtcr": "GTCR LLC",
         "hellman": "Hellman & Friedman",
+        "golden tree": "GoldenTree Asset Management",
+        "washington capital reef": "Washington Capital Management",
+        "washington capital": "Washington Capital Management",
+        "peak rock capital credit": "Peak Rock Capital",
+        "peak rock capital": "Peak Rock Capital",
+        "tcw direct lending": "TCW Group",
     }.get(term, term.title())
     for term, _asset_type, _asset_class in ALT_BRAND_PATTERNS
 }
 
 
-def _alt_manager_case_sql() -> str:
+def _alt_manager_case_sql(column: str = "raw_entity_name") -> str:
     """Build the matched_manager_name CASE from ALT_MANAGER_NAMES, using the
     same term-matching rules (word-boundary/override) as the brand router."""
     lines = ["CASE"]
     for term, manager in ALT_MANAGER_NAMES.items():
-        cond = _alt_brand_term_cond(term)
+        cond = _alt_brand_term_cond(term, column)
         val = manager.replace("'", "''")
         lines.append(f"        WHEN {cond} THEN '{val}'")
     lines.append("        ELSE NULL END")
@@ -1570,15 +1673,20 @@ ALT_VEHICLE_RULES: List[Tuple[str, str]] = [
 ]
 
 
-def _alt_vehicle_case_sql() -> str:
+def _alt_vehicle_case_sql(column: str = "raw_entity_name") -> str:
     """Build the asset_type (legal vehicle/wrapper) CASE from ALT_VEHICLE_RULES,
     defaulting to 'Unknown' rather than NULL -- unlike the category/manager
     CASEs, this one must never be used as a match/no-match signal since every
-    routed row gets some asset_type value."""
+    routed row gets some asset_type value.
+
+    `column` defaults to raw_entity_name; the sponsor-name fallback pass
+    (2026-09-24) passes raw_sponsor_name instead, since for those rows the
+    real fund name and its LP/LLC/offshore suffix lives in the sponsor
+    field, not the (generic placeholder) entity name."""
     lines = ["CASE"]
     for pattern, label in ALT_VEHICLE_RULES:
         pat_sql = pattern.replace("'", "''")
-        lines.append(f"        WHEN regexp_like(lower(raw_entity_name), '{pat_sql}') THEN '{label}'")
+        lines.append(f"        WHEN regexp_like(lower({column}), '{pat_sql}') THEN '{label}'")
     lines.append("        ELSE 'Unknown' END")
     return "\n".join(lines)
 
