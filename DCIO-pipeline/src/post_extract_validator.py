@@ -1338,6 +1338,46 @@ ALT_BRAND_PATTERNS: List[Tuple[str, str, str]] = [
     ("spf securitized products", "Private Credit Fund", "Private Credit"),
     ("strategic portfolios", "Hedge Fund", "Hedge Fund"),
     ("weatherlow", "Hedge Fund", "Hedge Fund"),
+    # Added 2026-09-24 (round 2) from the same sourced 300-row candidate
+    # research -- 117 of 127 open_gap rows confirmed high-confidence
+    # alternatives via independent web research (not just taxonomy text) on
+    # every boundary case. Held back as data-insert-only, NOT added here:
+    # "arrowstreet" (Alpha Extension is a 130/30-style equity extension, not
+    # an alternative -- see plan_alternatives_history round-2 notes),
+    # "crestline"/"viking global"/"cerberus" (each spans multiple asset_sub_
+    # class categories across their own confirmed rows -- Cerberus alone hits
+    # real estate, two different credit strategies, and PE -- so no single
+    # fixed category is safe to force onto future rows).
+    ("entrustpermal", "Hedge Fund", "Hedge Fund"),
+    ("kirkoswald", "Hedge Fund", "Hedge Fund"),
+    ("bridgewater", "Hedge Fund", "Hedge Fund"),  # overridden below
+    ("horsley bridge", "Private Equity Fund", "Private Equity"),
+    ("digitalbridge", "Infrastructure Fund", "Infrastructure"),
+    ("towerbrook", "Private Equity Fund", "Private Equity"),
+    ("pretium", "Real Estate Fund", "Real Estate"),
+    ("balyasny", "Hedge Fund", "Hedge Fund"),
+    ("primavera capital", "Private Equity Fund", "Private Equity"),
+    ("washington capital", "Private Credit Fund", "Private Credit"),
+    ("grosvenor wilmore", "Hedge Fund", "Hedge Fund"),
+    ("foxhaven", "Hedge Fund", "Hedge Fund"),
+    ("whitebox", "Hedge Fund", "Hedge Fund"),
+    ("systematica", "Hedge Fund", "Hedge Fund"),
+    ("alphadyne", "Hedge Fund", "Hedge Fund"),
+    ("brevan howard", "Hedge Fund", "Hedge Fund"),
+    ("francisco partners", "Private Equity Fund", "Private Equity"),
+    ("vitruvian", "Private Equity Fund", "Private Equity"),
+    ("goldentree", "Private Credit Fund", "Private Credit"),
+    ("encap", "Private Equity Fund", "Private Equity"),
+    ("ta realty", "Real Estate Fund", "Real Estate"),
+    ("boyd watterson", "Real Estate Fund", "Real Estate"),
+    ("trident capital", "Private Equity Fund", "Private Equity"),
+    ("waud capital", "Private Equity Fund", "Private Equity"),
+    ("patriot financial", "Private Equity Fund", "Private Equity"),
+    ("boyu capital", "Private Equity Fund", "Private Equity"),
+    ("hellman", "Private Equity Fund", "Private Equity"),
+    ("sycamore partners", "Private Equity Fund", "Private Equity"),
+    ("gtcr", "Private Equity Fund", "Private Equity"),
+    ("cendana", "Private Equity Fund", "Private Equity"),
 ]
 
 # Per-term extra restriction, ANDed onto that term's match only. Both entries
@@ -1348,6 +1388,13 @@ ALT_BRAND_PATTERNS: List[Tuple[str, str, str]] = [
 ALT_BRAND_TERM_OVERRIDES: Dict[str, str] = {
     "intercontinental": "regexp_like(lower(raw_entity_name), 'reif|real estate')",
     "onex": "strpos(lower(raw_entity_name), 'onex partners') > 0",
+    # Bridgewater's All Weather product is officially packaged today as a
+    # multi-asset allocation strategy, not an alternative (confirmed via web
+    # research 2026-09-24) -- 5 All Weather share classes were held back from
+    # the round-2 promotion for this reason. This keeps the "bridgewater" term
+    # valid for legitimate future matches (Pure Alpha etc.) while permanently
+    # blocking any future All Weather row from auto-routing the same way.
+    "bridgewater": "NOT regexp_like(lower(raw_entity_name), 'all weather')",
 }
 
 # Terms that need a word-boundary match rather than plain substring -- "gso"
@@ -1479,6 +1526,16 @@ ALT_MANAGER_NAMES: Dict[str, str] = {
         "madison core property": "NYL Investors",
         "davidson kempner": "Davidson Kempner Capital Management",
         "farallon": "Farallon Capital Management",
+        "entrustpermal": "EnTrust Global",
+        "bridgewater": "Bridgewater Associates",
+        "digitalbridge": "DigitalBridge",
+        "towerbrook": "TowerBrook Capital Partners",
+        "grosvenor wilmore": "GCM Grosvenor",
+        "goldentree": "GoldenTree Asset Management",
+        "encap": "EnCap Investments",
+        "ta realty": "TA Realty",
+        "gtcr": "GTCR LLC",
+        "hellman": "Hellman & Friedman",
     }.get(term, term.title())
     for term, _asset_type, _asset_class in ALT_BRAND_PATTERNS
 }
