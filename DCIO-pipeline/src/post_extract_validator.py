@@ -1123,15 +1123,37 @@ def _alt_case_sql(value_index: int) -> str:
     return "\n".join(lines)
 
 
+_ALT_INSERT_COLUMNS = (
+    "ack_id, raw_entity_name, raw_sponsor_name, plan_investment_amt, "
+    "asset_sub_class, validation_status, asset_type, classification_confidence, "
+    "classification_method, manual_review_required, routed_at, asset_class, "
+    "matched_manager_name, manager_match_confidence, manager_match_method"
+)
+
+
 def _route_alternatives_from_staging(glue_db: str, staging_table: str, target_table: str, ack_ids: list) -> None:
-    """Populate the alternatives table from staging: keyword-matches raw_entity_name
-    against ALT_FUND_PATTERNS (real estate / private credit / private equity /
-    infrastructure / hedge fund). Deletes the run's acks from target first
-    (idempotent), then inserts only the matched subset -- non-matching rows are
-    left in staging, not swept into a catch-all bucket.
-    manual_review_required is unconditionally true for now: these patterns are
-    unproven against real data, so every routed row should get a first look
-    before this flips to a confidence-based rule."""
+    """Populate the alternatives table from staging in a single pass with two
+    match strategies, phrase first then brand, combined in one query so there
+    is no second statement and no ordering dependency between them:
+
+    1. Phrase match: keyword-matches raw_entity_name against ALT_FUND_PATTERNS
+       (real estate / private credit / private equity / infrastructure /
+       hedge fund).
+    2. Brand match: for staging rows the phrase pass doesn't cover (no generic
+       alt-fund phrase in the name, e.g. "AEA Investors Fund VII LP"), matches
+       against the ALT_BRAND_PATTERNS manager-brand vocabulary instead. Gated
+       tighter than the phrase pass (structural marker or trusted asset_type
+       required, extra noise/asset_type exclusions) since a bare brand name is
+       a weaker signal than an explicit category phrase. Excludes any
+       (ack_id, raw_entity_name) already covered by the phrase pass via a
+       NOT EXISTS against that pass's own CTE, so a name matched by phrase
+       never also gets a second, weaker-confidence brand row.
+
+    Non-matching rows are left in staging, not swept into a catch-all bucket.
+    Deletes the run's acks from target first (idempotent), then inserts both
+    subsets in one INSERT. manual_review_required is unconditionally true for
+    now: these patterns are unproven against real data, so every routed row
+    should get a first look before this flips to a confidence-based rule."""
     import awswrangler as wr
     import os
     if not ack_ids:
@@ -1139,36 +1161,81 @@ def _route_alternatives_from_staging(glue_db: str, staging_table: str, target_ta
     wg = os.getenv("ATHENA_WORKGROUP", "primary")
     s3 = os.getenv("ATHENA_STAGING_S3")
     ids = ", ".join("'" + str(a).replace("'", "''") + "'" for a in ack_ids)
-    excluded = ", ".join("'" + t + "'" for t in sorted(ALT_EXCLUDED_ASSET_TYPES | ALT_NOISE_ASSET_TYPES))
     manager_case = _alt_manager_case_sql()
+    vehicle_case = _alt_vehicle_case_sql()
 
-    select_sql = f"""
-        SELECT
-            ack_id, raw_entity_name, raw_sponsor_name, plan_investment_amt,
-            {_alt_case_sql(2)} AS asset_sub_class,
-            validation_status,
-            {_alt_vehicle_case_sql()} AS asset_type,
-            {_alt_case_sql(3)} AS classification_confidence,
-            {_alt_case_sql(4)} AS classification_method,
-            true AS manual_review_required,
-            current_timestamp AS routed_at,
-            'Alternatives' AS asset_class,
-            {manager_case} AS matched_manager_name,
-            CASE WHEN {manager_case} IS NOT NULL THEN 'HIGH' ELSE NULL END AS manager_match_confidence,
-            CASE WHEN {manager_case} IS NOT NULL THEN 'brand_regex_v1' ELSE NULL END AS manager_match_method
-        FROM {glue_db}.{staging_table}
-        WHERE ack_id IN ({ids})
-          AND lower(trim(asset_type)) NOT IN ({excluded})
-          AND NOT regexp_like(lower(raw_entity_name), '{ALT_ROLLUP_POINTER_REGEX}')
-    """
-    insert_sql = (
-        f"INSERT INTO {glue_db}.{target_table} "
-        "(ack_id, raw_entity_name, raw_sponsor_name, plan_investment_amt, asset_sub_class, "
-        "validation_status, asset_type, classification_confidence, classification_method, "
-        "manual_review_required, routed_at, asset_class, "
-        "matched_manager_name, manager_match_confidence, manager_match_method) "
-        f"SELECT * FROM ({select_sql}) t WHERE t.asset_sub_class IS NOT NULL"
+    phrase_excluded = ", ".join("'" + t + "'" for t in sorted(ALT_EXCLUDED_ASSET_TYPES | ALT_NOISE_ASSET_TYPES))
+    brand_excluded = ", ".join(
+        "'" + t + "'" for t in sorted(
+            ALT_EXCLUDED_ASSET_TYPES | ALT_NOISE_ASSET_TYPES | ALT_BRAND_EXTRA_EXCLUDED_ASSET_TYPES
+        )
     )
+    trusted = ", ".join("'" + t + "'" for t in sorted(ALT_BRAND_TRUSTED_ASSET_TYPES))
+    brand_confirmed_exclusion_clause = " ".join(
+        "AND NOT (s.ack_id = '%s' AND lower(trim(s.raw_entity_name)) = '%s')"
+        % (a.replace("'", "''"), n.replace("'", "''"))
+        for a, n in ALT_BRAND_CONFIRMED_EXCLUSIONS
+    )
+
+    combined_sql = f"""
+        WITH phrase_matches AS (
+            SELECT
+                ack_id, raw_entity_name, raw_sponsor_name, plan_investment_amt,
+                {_alt_case_sql(2)} AS asset_sub_class,
+                validation_status,
+                {vehicle_case} AS asset_type,
+                {_alt_case_sql(3)} AS classification_confidence,
+                {_alt_case_sql(4)} AS classification_method,
+                true AS manual_review_required,
+                current_timestamp AS routed_at,
+                'Alternatives' AS asset_class,
+                {manager_case} AS matched_manager_name,
+                CASE WHEN {manager_case} IS NOT NULL THEN 'HIGH' ELSE NULL END AS manager_match_confidence,
+                CASE WHEN {manager_case} IS NOT NULL THEN 'brand_regex_v1' ELSE NULL END AS manager_match_method
+            FROM {glue_db}.{staging_table}
+            WHERE ack_id IN ({ids})
+              AND lower(trim(asset_type)) NOT IN ({phrase_excluded})
+              AND NOT regexp_like(lower(raw_entity_name), '{ALT_ROLLUP_POINTER_REGEX}')
+        ),
+        phrase_matched_rows AS (
+            SELECT * FROM phrase_matches WHERE asset_sub_class IS NOT NULL
+        ),
+        brand_matches AS (
+            SELECT
+                s.ack_id, s.raw_entity_name, s.raw_sponsor_name, s.plan_investment_amt,
+                {_alt_brand_case_sql(2)} AS asset_sub_class,
+                s.validation_status,
+                {vehicle_case} AS asset_type,
+                'MEDIUM' AS classification_confidence,
+                {_alt_brand_method_case_sql()} AS classification_method,
+                true AS manual_review_required,
+                current_timestamp AS routed_at,
+                'Alternatives' AS asset_class,
+                {manager_case} AS matched_manager_name,
+                CASE WHEN {manager_case} IS NOT NULL THEN 'HIGH' ELSE NULL END AS manager_match_confidence,
+                CASE WHEN {manager_case} IS NOT NULL THEN 'brand_regex_v1' ELSE NULL END AS manager_match_method
+            FROM {glue_db}.{staging_table} s
+            WHERE s.ack_id IN ({ids})
+              AND (lower(trim(s.asset_type)) IS NULL OR lower(trim(s.asset_type)) NOT IN ({brand_excluded}))
+              AND (
+                  regexp_like(lower(s.raw_entity_name), '{ALT_BRAND_STRUCTURAL_MARKER_REGEX}')
+                  OR lower(trim(s.asset_type)) IN ({trusted})
+              )
+              AND NOT regexp_like(lower(s.raw_entity_name), '{ALT_BRAND_NOISE_REGEX}')
+              AND NOT EXISTS (
+                  SELECT 1 FROM phrase_matched_rows p
+                  WHERE p.ack_id = s.ack_id AND p.raw_entity_name = s.raw_entity_name
+              )
+              {brand_confirmed_exclusion_clause}
+        ),
+        brand_matched_rows AS (
+            SELECT * FROM brand_matches WHERE asset_sub_class IS NOT NULL
+        )
+        SELECT {_ALT_INSERT_COLUMNS} FROM phrase_matched_rows
+        UNION ALL
+        SELECT {_ALT_INSERT_COLUMNS} FROM brand_matched_rows
+    """
+    insert_sql = f"INSERT INTO {glue_db}.{target_table} ({_ALT_INSERT_COLUMNS}) {combined_sql}"
     stmts = [
         f"DELETE FROM {glue_db}.{target_table} WHERE ack_id IN ({ids})",
         insert_sql,
@@ -1180,7 +1247,8 @@ def _route_alternatives_from_staging(glue_db: str, staging_table: str, target_ta
 
 
 # ---------------------------------------------------------------------------
-# Brand/manager-name matching -- second alternatives pass, complementary to
+# Brand/manager-name matching -- fallback match strategy inside
+# _route_alternatives_from_staging's brand_matches CTE, complementary to
 # ALT_FUND_PATTERNS above. ALT_FUND_PATTERNS only matches a generic phrase
 # ("private equity", "real estate") in raw_entity_name; it structurally
 # cannot catch a row whose name is *only* a manager brand with no such
@@ -1249,6 +1317,27 @@ ALT_BRAND_PATTERNS: List[Tuple[str, str, str]] = [
     ("white oak global advisors", "Private Credit Fund", "Private Credit"),
     ("whitehorse liquidity partners", "Private Credit Fund", "Private Credit"),
     ("windjammer capital", "Private Equity Fund", "Private Equity"),
+    # Added 2026-09-24 from user's sourced 300-row candidate research (ADV/Form D/
+    # 5500 filings) -- see project_dcio_alternatives_router memory. "ara"/"ipi" kept
+    # scoped to multi-word phrases rather than bare terms: "ARA Core Property"
+    # (American Realty Advisors) and "ARA Fund II LP" (Ara Partners) are two
+    # unrelated managers that would otherwise collide on the same 3-letter substring.
+    ("american core realty", "Real Estate Fund", "Real Estate"),
+    ("ara core property", "Real Estate Fund", "Real Estate"),
+    ("camden bonds plus", "Private Credit Fund", "Private Credit"),
+    ("copperwood", "Private Equity Fund", "Private Equity"),
+    ("crake", "Hedge Fund", "Hedge Fund"),
+    ("davidson kempner", "Hedge Fund", "Hedge Fund"),
+    ("falcon credit", "Private Credit Fund", "Private Credit"),
+    ("farallon", "Hedge Fund", "Hedge Fund"),
+    ("ipi data center", "Infrastructure Fund", "Infrastructure"),
+    ("ironwood", "Private Credit Fund", "Private Credit"),
+    ("madison core property", "Real Estate Fund", "Real Estate"),
+    ("redwood opportunity", "Hedge Fund", "Hedge Fund"),
+    ("saracen energy", "Private Equity Fund", "Private Equity"),
+    ("spf securitized products", "Private Credit Fund", "Private Credit"),
+    ("strategic portfolios", "Hedge Fund", "Hedge Fund"),
+    ("weatherlow", "Hedge Fund", "Hedge Fund"),
 ]
 
 # Per-term extra restriction, ANDed onto that term's match only. Both entries
@@ -1383,6 +1472,13 @@ ALT_MANAGER_NAMES: Dict[str, str] = {
         "landmark": "Landmark Partners",
         "tennenbaum": "Tennenbaum Capital",
         "owl rock": "Owl Rock Capital",
+        "ipi data center": "IPI Partners",
+        "spf securitized products": "SPF Investment Management",
+        "ara core property": "American Realty Advisors",
+        "american core realty": "American Realty Advisors",
+        "madison core property": "NYL Investors",
+        "davidson kempner": "Davidson Kempner Capital Management",
+        "farallon": "Farallon Capital Management",
     }.get(term, term.title())
     for term, _asset_type, _asset_class in ALT_BRAND_PATTERNS
 }
@@ -1428,83 +1524,6 @@ def _alt_vehicle_case_sql() -> str:
         lines.append(f"        WHEN regexp_like(lower(raw_entity_name), '{pat_sql}') THEN '{label}'")
     lines.append("        ELSE 'Unknown' END")
     return "\n".join(lines)
-
-
-def _route_alt_brands_from_staging(glue_db: str, staging_table: str, target_table: str, ack_ids: list) -> None:
-    """Second alternatives-routing pass: brand/manager-name matching via
-    ALT_BRAND_PATTERNS, for rows the keyword pass (_route_alternatives_from_
-    staging, using ALT_FUND_PATTERNS) doesn't catch because the name has no
-    generic alt-fund phrase, only a manager brand. Must run AFTER
-    _route_alternatives_from_staging for the same ack_ids so the NOT EXISTS
-    check below correctly skips rows the keyword pass already inserted.
-    INSERT-only, no DELETE: every row this matches is, by construction, not
-    yet in target_table for its (ack_id, raw_entity_name), so there is
-    nothing to safely clear first -- a scoped DELETE here would risk wiping
-    out unrelated rows already routed for the same ack_id.
-    classification_confidence is unconditionally MEDIUM (a manager-level
-    judgment call, one asset class per brand, not a per-record tiering) and
-    manual_review_required is unconditionally true, matching
-    _route_alternatives_from_staging's existing behavior."""
-    import awswrangler as wr
-    import os
-    if not ack_ids:
-        return
-    wg = os.getenv("ATHENA_WORKGROUP", "primary")
-    s3 = os.getenv("ATHENA_STAGING_S3")
-    ids = ", ".join("'" + str(a).replace("'", "''") + "'" for a in ack_ids)
-    excluded = ", ".join(
-        "'" + t + "'" for t in sorted(
-            ALT_EXCLUDED_ASSET_TYPES | ALT_NOISE_ASSET_TYPES | ALT_BRAND_EXTRA_EXCLUDED_ASSET_TYPES
-        )
-    )
-    trusted = ", ".join("'" + t + "'" for t in sorted(ALT_BRAND_TRUSTED_ASSET_TYPES))
-    exclusion_clause = " ".join(
-        "AND NOT (ack_id = '%s' AND lower(trim(raw_entity_name)) = '%s')"
-        % (a.replace("'", "''"), n.replace("'", "''"))
-        for a, n in ALT_BRAND_CONFIRMED_EXCLUSIONS
-    )
-    manager_case = _alt_manager_case_sql()
-
-    select_sql = f"""
-        SELECT
-            ack_id, raw_entity_name, raw_sponsor_name, plan_investment_amt,
-            {_alt_brand_case_sql(2)} AS asset_sub_class,
-            validation_status,
-            {_alt_vehicle_case_sql()} AS asset_type,
-            'MEDIUM' AS classification_confidence,
-            {_alt_brand_method_case_sql()} AS classification_method,
-            true AS manual_review_required,
-            current_timestamp AS routed_at,
-            'Alternatives' AS asset_class,
-            {manager_case} AS matched_manager_name,
-            CASE WHEN {manager_case} IS NOT NULL THEN 'HIGH' ELSE NULL END AS manager_match_confidence,
-            CASE WHEN {manager_case} IS NOT NULL THEN 'brand_regex_v1' ELSE NULL END AS manager_match_method
-        FROM {glue_db}.{staging_table}
-        WHERE ack_id IN ({ids})
-          AND (lower(trim(asset_type)) IS NULL OR lower(trim(asset_type)) NOT IN ({excluded}))
-          AND NOT EXISTS (
-              SELECT 1 FROM {glue_db}.{target_table} t
-              WHERE t.ack_id = {glue_db}.{staging_table}.ack_id
-                AND t.raw_entity_name = {glue_db}.{staging_table}.raw_entity_name
-          )
-          AND (
-              regexp_like(lower(raw_entity_name), '{ALT_BRAND_STRUCTURAL_MARKER_REGEX}')
-              OR lower(trim(asset_type)) IN ({trusted})
-          )
-          AND NOT regexp_like(lower(raw_entity_name), '{ALT_BRAND_NOISE_REGEX}')
-          {exclusion_clause}
-    """
-    insert_sql = (
-        f"INSERT INTO {glue_db}.{target_table} "
-        "(ack_id, raw_entity_name, raw_sponsor_name, plan_investment_amt, asset_sub_class, "
-        "validation_status, asset_type, classification_confidence, classification_method, "
-        "manual_review_required, routed_at, asset_class, "
-        "matched_manager_name, manager_match_confidence, manager_match_method) "
-        f"SELECT * FROM ({select_sql}) t WHERE t.asset_sub_class IS NOT NULL"
-    )
-    qid = wr.athena.start_query_execution(sql=insert_sql, database=glue_db, workgroup=wg, s3_output=s3)
-    wr.athena.wait_query(query_execution_id=qid)
-    logger.info("Routed brand-matched alternatives rows %s -> %s for %d acks", staging_table, target_table, len(ack_ids))
 
 
 # ---------------------------------------------------------------------------
@@ -1744,7 +1763,6 @@ def run_post_extract_validation(
             if alt_table:
                 alt_ack_ids = combined["ack_id"].dropna().unique().tolist()
                 _route_alternatives_from_staging(validated_glue_db, staging_table, alt_table, alt_ack_ids)
-                _route_alt_brands_from_staging(validated_glue_db, staging_table, alt_table, alt_ack_ids)
         else:
             write_iceberg_via_athena(combined, validated_glue_db, validated_table)
 
