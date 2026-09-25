@@ -1133,10 +1133,32 @@ _ALT_INSERT_COLUMNS = (
 
 def _route_alternatives_from_staging(glue_db: str, staging_table: str, target_table: str, ack_ids: list) -> None:
     """Populate the alternatives table from staging in a single pass with
-    four match strategies, phrase then debt-carveout then brand then sponsor,
-    combined in one query so there is no second statement and no ordering
-    dependency between them:
+    an override lookup plus four match strategies -- override first, then
+    phrase, then debt-carveout, then brand, then sponsor -- combined in one
+    query so there is no second statement and no ordering dependency between
+    them:
 
+    0. Override match (added 2026-09-25): looks up
+       alt_manual_research_overrides, a reference table holding rows whose
+       original classification came from one-time manual research
+       (classification_method LIKE 'manual:round2_sourced_research',
+       'manual:appendix_x_decomposition', 'manual:round3_sponsor_research')
+       rather than any of the four reproducible passes below. This exists
+       because a full DELETE+INSERT recompute is only as good as what the
+       automated passes can currently derive -- a recompute with no override
+       table would silently drop any row whose provenance was one-time human
+       research never captured as reusable logic (confirmed against a real
+       100-ack_id recompute: 12 rows / $297.1M would have been lost without
+       it). Takes unconditional top priority: always included for the run's
+       ack_ids regardless of what the passes below independently conclude.
+       Matched on the full (ack_id, raw_entity_name, raw_sponsor_name,
+       plan_investment_amt) tuple -- raw_entity_name alone repeats within an
+       ack_id when filers reuse a boilerplate Schedule D label
+       ("Partnership/joint venture interests") across many distinct real
+       funds named only in raw_sponsor_name, so the narrower (ack_id,
+       raw_entity_name) key the other passes use against each other isn't
+       safe here; the 4-column tuple was confirmed unique across all 480
+       override rows before this was built.
     1. Phrase match: keyword-matches raw_entity_name against ALT_FUND_PATTERNS
        (real estate / private credit / private equity / infrastructure /
        hedge fund).
@@ -1173,10 +1195,16 @@ def _route_alternatives_from_staging(glue_db: str, staging_table: str, target_ta
        no new information) and anything the phrase, debt-carveout, or brand
        pass already claimed.
 
+    Passes 1-4 each also exclude any staging row already covered by the
+    override lookup (same 4-column tuple), so if a future pattern change
+    ever makes one of them also match a manually-researched row, the
+    override version wins and the automated pass doesn't add a duplicate.
+
     Non-matching rows are left in staging, not swept into a catch-all bucket.
-    Deletes the run's acks from target first (idempotent), then inserts all
-    four subsets in one INSERT. manual_review_required is unconditionally
-    true for now: these patterns are unproven against real data, so every
+    Deletes the run's acks from target first (idempotent), then inserts the
+    override subset plus all four pattern-matched subsets in one INSERT.
+    manual_review_required is unconditionally true for the four pattern
+    passes for now: these patterns are unproven against real data, so every
     routed row should get a first look before this flips to a
     confidence-based rule."""
     import awswrangler as wr
@@ -1193,11 +1221,23 @@ def _route_alternatives_from_staging(glue_db: str, staging_table: str, target_ta
     debt_manager_case = _alt_debt_carveout_manager_sql()
 
     phrase_excluded = ", ".join("'" + t + "'" for t in sorted(ALT_EXCLUDED_ASSET_TYPES | ALT_NOISE_ASSET_TYPES))
-    brand_excluded = ", ".join(
-        "'" + t + "'" for t in sorted(
-            ALT_EXCLUDED_ASSET_TYPES | ALT_NOISE_ASSET_TYPES | ALT_BRAND_EXTRA_EXCLUDED_ASSET_TYPES
-        )
-    )
+    # brand_excluded is a hard, marker-independent block -- reserved for ALT_EXCLUDED_ASSET_TYPES
+    # only, since that's the one set that protects against colliding with a DIFFERENT router that
+    # already owns those literal asset_type values (MF_ASSET_TYPES -> plan_mf_history_v3;
+    # "common/collective trust fund"/"commingled fund" -> plan_cit_history, confirmed 2026-09-25 by
+    # sampling both tables against real Boyd Watterson/Harrison Street/Washington Capital rows: 35
+    # "mutual fund"-tagged rows and 6+ "common/collective trust fund" rows for these exact ack_ids
+    # were already present in those tables, so routing them here too would double-count the same
+    # dollars across two target tables. ALT_NOISE_ASSET_TYPES and ALT_BRAND_EXTRA_EXCLUDED_ASSET_TYPES
+    # are a different kind of thing -- a heuristic veto against bare public securities that happen to
+    # share a brand name (e.g. "Sterling Infrastructure Inc" filed as common stock), with no other
+    # router claiming those asset_type values -- so for the brand pass they're demoted from a hard
+    # exclusion to a normal marker requirement below: real LP-fund rows mistagged as "common stock"/
+    # "bond"/etc. by the filer (same ack_id-and-name evidence as above -- 87/99 mislabeled rows carry
+    # a clean "LP"/"Fund"/"Trust" structural marker) still route once the marker is present, while a
+    # bare brand name with no marker and no trusted asset_type is still blocked by the unchanged
+    # marker-or-trusted gate and noise regex below.
+    brand_excluded = ", ".join("'" + t + "'" for t in sorted(ALT_EXCLUDED_ASSET_TYPES))
     trusted = ", ".join("'" + t + "'" for t in sorted(ALT_BRAND_TRUSTED_ASSET_TYPES))
     brand_confirmed_exclusion_clause = " ".join(
         "AND NOT (s.ack_id = '%s' AND lower(trim(s.raw_entity_name)) = '%s')"
@@ -1206,11 +1246,20 @@ def _route_alternatives_from_staging(glue_db: str, staging_table: str, target_ta
     )
 
     combined_sql = f"""
-        WITH phrase_matches AS (
+        WITH override_matches AS (
             SELECT
                 ack_id, raw_entity_name, raw_sponsor_name, plan_investment_amt,
+                asset_sub_class, validation_status, asset_type, classification_confidence,
+                classification_method, manual_review_required, current_timestamp AS routed_at,
+                asset_class, matched_manager_name, manager_match_confidence, manager_match_method
+            FROM {glue_db}.alt_manual_research_overrides
+            WHERE ack_id IN ({ids})
+        ),
+        phrase_matches AS (
+            SELECT
+                s.ack_id, s.raw_entity_name, s.raw_sponsor_name, s.plan_investment_amt,
                 {_alt_case_sql(2)} AS asset_sub_class,
-                validation_status,
+                s.validation_status,
                 {vehicle_case} AS asset_type,
                 {_alt_case_sql(3)} AS classification_confidence,
                 {_alt_case_sql(4)} AS classification_method,
@@ -1220,10 +1269,17 @@ def _route_alternatives_from_staging(glue_db: str, staging_table: str, target_ta
                 {manager_case} AS matched_manager_name,
                 CASE WHEN {manager_case} IS NOT NULL THEN 'HIGH' ELSE NULL END AS manager_match_confidence,
                 CASE WHEN {manager_case} IS NOT NULL THEN 'brand_regex_v1' ELSE NULL END AS manager_match_method
-            FROM {glue_db}.{staging_table}
-            WHERE ack_id IN ({ids})
-              AND lower(trim(asset_type)) NOT IN ({phrase_excluded})
-              AND NOT regexp_like(lower(raw_entity_name), '{ALT_ROLLUP_POINTER_REGEX}')
+            FROM {glue_db}.{staging_table} s
+            WHERE s.ack_id IN ({ids})
+              AND lower(trim(s.asset_type)) NOT IN ({phrase_excluded})
+              AND NOT regexp_like(lower(s.raw_entity_name), '{ALT_ROLLUP_POINTER_REGEX}')
+              AND NOT EXISTS (
+                  SELECT 1 FROM override_matches o
+                  WHERE o.ack_id = s.ack_id
+                    AND o.raw_entity_name = s.raw_entity_name
+                    AND o.raw_sponsor_name IS NOT DISTINCT FROM s.raw_sponsor_name
+                    AND o.plan_investment_amt IS NOT DISTINCT FROM s.plan_investment_amt
+              )
         ),
         phrase_matched_rows AS (
             SELECT * FROM phrase_matches WHERE asset_sub_class IS NOT NULL
@@ -1247,6 +1303,13 @@ def _route_alternatives_from_staging(glue_db: str, staging_table: str, target_ta
               AND NOT EXISTS (
                   SELECT 1 FROM phrase_matched_rows p
                   WHERE p.ack_id = s.ack_id AND p.raw_entity_name = s.raw_entity_name
+              )
+              AND NOT EXISTS (
+                  SELECT 1 FROM override_matches o
+                  WHERE o.ack_id = s.ack_id
+                    AND o.raw_entity_name = s.raw_entity_name
+                    AND o.raw_sponsor_name IS NOT DISTINCT FROM s.raw_sponsor_name
+                    AND o.plan_investment_amt IS NOT DISTINCT FROM s.plan_investment_amt
               )
         ),
         debt_carveout_matched_rows AS (
@@ -1281,6 +1344,13 @@ def _route_alternatives_from_staging(glue_db: str, staging_table: str, target_ta
               AND NOT EXISTS (
                   SELECT 1 FROM debt_carveout_matched_rows d
                   WHERE d.ack_id = s.ack_id AND d.raw_entity_name = s.raw_entity_name
+              )
+              AND NOT EXISTS (
+                  SELECT 1 FROM override_matches o
+                  WHERE o.ack_id = s.ack_id
+                    AND o.raw_entity_name = s.raw_entity_name
+                    AND o.raw_sponsor_name IS NOT DISTINCT FROM s.raw_sponsor_name
+                    AND o.plan_investment_amt IS NOT DISTINCT FROM s.plan_investment_amt
               )
               {brand_confirmed_exclusion_clause}
         ),
@@ -1321,10 +1391,19 @@ def _route_alternatives_from_staging(glue_db: str, staging_table: str, target_ta
                   SELECT 1 FROM brand_matched_rows b
                   WHERE b.ack_id = s.ack_id AND b.raw_entity_name = s.raw_entity_name
               )
+              AND NOT EXISTS (
+                  SELECT 1 FROM override_matches o
+                  WHERE o.ack_id = s.ack_id
+                    AND o.raw_entity_name = s.raw_entity_name
+                    AND o.raw_sponsor_name IS NOT DISTINCT FROM s.raw_sponsor_name
+                    AND o.plan_investment_amt IS NOT DISTINCT FROM s.plan_investment_amt
+              )
         ),
         sponsor_matched_rows AS (
             SELECT * FROM sponsor_matches WHERE asset_sub_class IS NOT NULL
         )
+        SELECT {_ALT_INSERT_COLUMNS} FROM override_matches
+        UNION ALL
         SELECT {_ALT_INSERT_COLUMNS} FROM phrase_matched_rows
         UNION ALL
         SELECT {_ALT_INSERT_COLUMNS} FROM debt_carveout_matched_rows
