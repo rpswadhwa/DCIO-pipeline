@@ -1133,37 +1133,49 @@ _ALT_INSERT_COLUMNS = (
 
 def _route_alternatives_from_staging(glue_db: str, staging_table: str, target_table: str, ack_ids: list) -> None:
     """Populate the alternatives table from staging in a single pass with
-    three match strategies, phrase then brand then sponsor, combined in one
-    query so there is no second statement and no ordering dependency between
-    them:
+    four match strategies, phrase then debt-carveout then brand then sponsor,
+    combined in one query so there is no second statement and no ordering
+    dependency between them:
 
     1. Phrase match: keyword-matches raw_entity_name against ALT_FUND_PATTERNS
        (real estate / private credit / private equity / infrastructure /
        hedge fund).
-    2. Brand match: for staging rows the phrase pass doesn't cover (no generic
-       alt-fund phrase in the name, e.g. "AEA Investors Fund VII LP"), matches
-       against the ALT_BRAND_PATTERNS manager-brand vocabulary instead. Gated
-       tighter than the phrase pass (structural marker or trusted asset_type
-       required, extra noise/asset_type exclusions) since a bare brand name is
-       a weaker signal than an explicit category phrase. Excludes any
-       (ack_id, raw_entity_name) already covered by the phrase pass via a
-       NOT EXISTS against that pass's own CTE, so a name matched by phrase
-       never also gets a second, weaker-confidence brand row.
-    3. Sponsor match (added 2026-09-24, round 3): for rows neither pass above
-       covers -- typically a generic placeholder raw_entity_name ("Partnership/
-       joint venture interests", "N/A Limited Partnerships") that hides the
-       real manager name in raw_sponsor_name instead -- reruns the same
-       ALT_BRAND_PATTERNS vocabulary against raw_sponsor_name. Confidence is
-       LOW (below brand match's MEDIUM): sponsor free text is noisier and, per
-       ALT_SPONSOR_EXCLUDE_REGEX, just as likely to name a custodian bank or
-       traditional (non-alternative) manager as an alt brand. Also excludes
-       self-referential sponsors (sponsor name is just the entity name plus a
-       trailing numeric id, i.e. no new information) and anything the phrase
-       or brand pass already claimed.
+    2. Debt carveout (added 2026-09-25): for a handful of managers
+       (ALT_MANAGER_DEBT_PATTERNS) whose brand name spans both confirmed
+       public debt and equity holdings under one name -- something
+       ALT_BRAND_PATTERNS' single static (asset_type, asset_class) per term
+       structurally can't express -- routes name-level-confirmed debt rows to
+       'Manager Debt Exposure' with a per-row instrument type (Senior Notes/
+       CMBS/RMBS/ABS/Corporate Bond), ahead of the generic brand pass so a
+       specific debt/equity signal always wins over the coarse brand bucket.
+       Excludes rows the phrase pass already claimed, same NOT EXISTS pattern
+       as brand match below.
+    3. Brand match: for staging rows the phrase and debt-carveout passes
+       don't cover (no generic alt-fund phrase in the name, e.g. "AEA
+       Investors Fund VII LP"), matches against the ALT_BRAND_PATTERNS
+       manager-brand vocabulary instead. Gated tighter than the phrase pass
+       (structural marker or trusted asset_type required, extra noise/
+       asset_type exclusions) since a bare brand name is a weaker signal than
+       an explicit category phrase. Excludes any (ack_id, raw_entity_name)
+       already covered by the phrase or debt-carveout pass via a NOT EXISTS
+       against those passes' own CTEs, so a name matched by either one never
+       also gets a second, weaker-confidence brand row.
+    4. Sponsor match (added 2026-09-24, round 3): for rows none of the passes
+       above cover -- typically a generic placeholder raw_entity_name
+       ("Partnership/joint venture interests", "N/A Limited Partnerships")
+       that hides the real manager name in raw_sponsor_name instead --
+       reruns the same ALT_BRAND_PATTERNS vocabulary against
+       raw_sponsor_name. Confidence is LOW (below brand match's MEDIUM):
+       sponsor free text is noisier and, per ALT_SPONSOR_EXCLUDE_REGEX, just
+       as likely to name a custodian bank or traditional (non-alternative)
+       manager as an alt brand. Also excludes self-referential sponsors
+       (sponsor name is just the entity name plus a trailing numeric id, i.e.
+       no new information) and anything the phrase, debt-carveout, or brand
+       pass already claimed.
 
     Non-matching rows are left in staging, not swept into a catch-all bucket.
     Deletes the run's acks from target first (idempotent), then inserts all
-    three subsets in one INSERT. manual_review_required is unconditionally
+    four subsets in one INSERT. manual_review_required is unconditionally
     true for now: these patterns are unproven against real data, so every
     routed row should get a first look before this flips to a
     confidence-based rule."""
@@ -1178,6 +1190,7 @@ def _route_alternatives_from_staging(glue_db: str, staging_table: str, target_ta
     vehicle_case = _alt_vehicle_case_sql()
     manager_case_sponsor = _alt_manager_case_sql("raw_sponsor_name")
     vehicle_case_sponsor = _alt_vehicle_case_sql("raw_sponsor_name")
+    debt_manager_case = _alt_debt_carveout_manager_sql()
 
     phrase_excluded = ", ".join("'" + t + "'" for t in sorted(ALT_EXCLUDED_ASSET_TYPES | ALT_NOISE_ASSET_TYPES))
     brand_excluded = ", ".join(
@@ -1215,6 +1228,30 @@ def _route_alternatives_from_staging(glue_db: str, staging_table: str, target_ta
         phrase_matched_rows AS (
             SELECT * FROM phrase_matches WHERE asset_sub_class IS NOT NULL
         ),
+        debt_carveout_matches AS (
+            SELECT
+                s.ack_id, s.raw_entity_name, s.raw_sponsor_name, s.plan_investment_amt,
+                {_alt_debt_carveout_subclass_sql()} AS asset_sub_class,
+                s.validation_status,
+                {_alt_debt_carveout_instrument_type_sql()} AS asset_type,
+                'MEDIUM' AS classification_confidence,
+                {_alt_debt_carveout_method_sql()} AS classification_method,
+                true AS manual_review_required,
+                current_timestamp AS routed_at,
+                'Alternatives' AS asset_class,
+                {debt_manager_case} AS matched_manager_name,
+                CASE WHEN {debt_manager_case} IS NOT NULL THEN 'HIGH' ELSE NULL END AS manager_match_confidence,
+                CASE WHEN {debt_manager_case} IS NOT NULL THEN 'debt_carveout_regex_v1' ELSE NULL END AS manager_match_method
+            FROM {glue_db}.{staging_table} s
+            WHERE s.ack_id IN ({ids})
+              AND NOT EXISTS (
+                  SELECT 1 FROM phrase_matched_rows p
+                  WHERE p.ack_id = s.ack_id AND p.raw_entity_name = s.raw_entity_name
+              )
+        ),
+        debt_carveout_matched_rows AS (
+            SELECT * FROM debt_carveout_matches WHERE asset_sub_class IS NOT NULL
+        ),
         brand_matches AS (
             SELECT
                 s.ack_id, s.raw_entity_name, s.raw_sponsor_name, s.plan_investment_amt,
@@ -1240,6 +1277,10 @@ def _route_alternatives_from_staging(glue_db: str, staging_table: str, target_ta
               AND NOT EXISTS (
                   SELECT 1 FROM phrase_matched_rows p
                   WHERE p.ack_id = s.ack_id AND p.raw_entity_name = s.raw_entity_name
+              )
+              AND NOT EXISTS (
+                  SELECT 1 FROM debt_carveout_matched_rows d
+                  WHERE d.ack_id = s.ack_id AND d.raw_entity_name = s.raw_entity_name
               )
               {brand_confirmed_exclusion_clause}
         ),
@@ -1273,6 +1314,10 @@ def _route_alternatives_from_staging(glue_db: str, staging_table: str, target_ta
                   WHERE p.ack_id = s.ack_id AND p.raw_entity_name = s.raw_entity_name
               )
               AND NOT EXISTS (
+                  SELECT 1 FROM debt_carveout_matched_rows d
+                  WHERE d.ack_id = s.ack_id AND d.raw_entity_name = s.raw_entity_name
+              )
+              AND NOT EXISTS (
                   SELECT 1 FROM brand_matched_rows b
                   WHERE b.ack_id = s.ack_id AND b.raw_entity_name = s.raw_entity_name
               )
@@ -1281,6 +1326,8 @@ def _route_alternatives_from_staging(glue_db: str, staging_table: str, target_ta
             SELECT * FROM sponsor_matches WHERE asset_sub_class IS NOT NULL
         )
         SELECT {_ALT_INSERT_COLUMNS} FROM phrase_matched_rows
+        UNION ALL
+        SELECT {_ALT_INSERT_COLUMNS} FROM debt_carveout_matched_rows
         UNION ALL
         SELECT {_ALT_INSERT_COLUMNS} FROM brand_matched_rows
         UNION ALL
@@ -1566,6 +1613,177 @@ ALT_BRAND_CONFIRMED_EXCLUSIONS: List[Tuple[str, str]] = [
     # project_dcio_alternatives_router memory, 2026-09-20 verification.
     ("20250813090708NAL0008939265001", "ares management corp cl a"),
 ]
+
+
+# ---------------------------------------------------------------------------
+# Manager debt carve-out (added 2026-09-25). ALT_BRAND_PATTERNS can only map
+# a brand term to ONE static (asset_type, asset_class) pair, so it can't
+# express what row-level research proved true for these managers: the same
+# brand name spans confirmed public debt (bonds/notes) and equity (common
+# stock) holdings under one name, each needing different routing, and for
+# Starwood specifically an unrelated same-prefix brand (Starwood Hotels &
+# Resorts, now part of Marriott) has to be excluded explicitly. This pass
+# runs before brand_matches so a specific per-manager debt/equity signal
+# always wins over the generic brand bucket -- see _route_alternatives_
+# from_staging's docstring for where it sits in the overall pass order.
+#
+# Built from row-level-verified ground truth, not from trusting asset_type or
+# a regex blindly: Blue Owl's signals are copied from classify_blueowl.py
+# (validated against a 247-row candidate pool over 6 iterations of fixes,
+# used to route the manually-confirmed 123-row/$85.3M debt batch inserted
+# 2026-09-25). Starwood's are newly derived from starwood_debt_confirmed.csv
+# (89 rows) and cross-checked against known equity/private-fund/unrelated-
+# brand examples from the same session's research. See scratchpad/
+# validate_debt_carveout_patterns.py for the regression harness: 0
+# mismatches against Blue Owl's full 247-row ground truth; 87/89 against
+# Starwood's confirmed-debt set, with the 2 remaining rows (bare misspelled
+# names, zero vocabulary or asset_type signal anywhere) correctly left
+# unrouted for manual review rather than force-matched -- that's the
+# deliberately conservative behavior, not a gap to close.
+#
+# Deliberately does NOT handle the private-fund case for either manager:
+# Blue Owl's private-fund LP batch ($81.5M, 11 rows) is a separate, still-
+# undecided item, and Starwood's one known private-fund row ("Starwood REIT
+# CL I LP", $919) is left unrouted rather than guessing at a category for a
+# single low-dollar row with no broader authorization. Both fall through to
+# the existing brand_matches/sponsor_matches passes unchanged (Blue Owl
+# already has a generic "blue owl" -> Private Credit Fund brand entry there;
+# Starwood has none, so its one fund row simply stays unrouted, same as
+# today).
+ALT_MANAGER_DEBT_PATTERNS: Dict[str, Dict] = {
+    "blue owl": dict(
+        manager_name="Blue Owl Capital",
+        exclude_regex=None,
+        equity_regex=(
+            r"\bcommon\s+stock\b|\bcorporate\s+stock\b|\bshares\b|\bcom\s+cl\s+a\b|"
+            r"\bcl\s+a\b\s*$|\bclass\s+a\b|\bcom\s+ci\s+a\b|\bcorp\.?\s+ord\b|"
+            r"\bord\b\s*$|\bequity\b|\bcom\b\s*$"
+        ),
+        debt_strong_regex=(
+            r"\d+\.\d+%|\b144a\b|\bpvtpl\b|\bsr\.?\s*(nt|unsecured|notes?)\b|"
+            r"\bsenior\s+unsecured\b|\bunsecured\s*global\s+notes?\b|"
+            r"\bunsecured\s+notes?\b|\bnotes?\s+semi\s+annual\b|\bmatures?\b|"
+            r"\bdue\b|\bdd\s+\d|\bcallable\b|\bfixed\s+income\b|"
+            r"\bcorporate\s+(bond|debt)\b|\bbond\b|\bnt\b|\bser\b.*\bfltg\b|"
+            r"\bfltg\s+rt\b|\bcompany\s+guar\b|\basset\s+leas\b|"
+            r"\d\.\d{2}\s+\d{1,2}/\d{1,2}/\d{2,4}|\bnt\s+\d{3,4}\s+\d{3,4}\b|"
+            r"\bn/?a\s+\d{2}/\d{2}/\d{4}\b"
+        ),
+        debt_weak_numeric_regex=r"^\d{4,}\s|\b\d{3,4}\s+\d{4,8}\b",
+        debt_asset_types={
+            "bond", "corporate bonds - other", "corp. debt instr. - preferred",
+            "corp. debt instr. - all other", "corporate debt instruments",
+        },
+        instrument_type_rules=[
+            (r"\basset\s+leas\b", "ABS"),
+            (
+                r"\bcompany\s+guar\b|\bsr\.?\s*(nt|unsecured|notes?)\b|"
+                r"\bsenior\s+unsecured\b|\bsenior\b|144a|pvtpl|\bcallable\b",
+                "Senior Notes",
+            ),
+        ],
+        instrument_type_default="Corporate Bond",
+    ),
+    "starwood": dict(
+        manager_name="Starwood Capital Group",
+        exclude_regex=r"starwood\s+hotels",
+        equity_regex=r"\bcom\b|\bcommon\s+stock\b|\bcorporate\s+stock\b\s*$",
+        debt_strong_regex=(
+            r"\d+\.\d+%|\b144a\b|\bpvtpl\b|\bsr\.?\s*(nt|unsecured|notes?)\b|"
+            r"\bsenior\s+unsecured\b|\bdue\b|\bmatures?\b|\bcallable\b|"
+            r"\bfltg\s+rt\b|\bcorporate\s+(bond|obligation|debt)\b|"
+            r"\bcorp\.?\s+debt\b|\bbond\b|\bnt\b|\bmortgage\b|\bmtg\b|"
+            r"\bcommercial\s+mortgage\b"
+        ),
+        debt_weak_numeric_regex=r"^\d{4,}\s|\b\d{3,4}\s+\d{4,8}\b",
+        debt_asset_types={
+            "bond", "corporate bonds - other", "corp. debt instr. - preferred",
+            "corp. debt instr. - all other", "corporate debt instruments",
+        },
+        instrument_type_rules=[
+            (r"commercial\s+mortgage|retail\s+ppty|retail\s+property", "CMBS"),
+            (r"mortgage\s+residential|mortgage\s+re\b", "RMBS"),
+            (r"\bsr\.?\s*(nt|unsecured|notes?)\b|\bsenior\b|144a|pvtpl", "Senior Notes"),
+        ],
+        instrument_type_default="Corporate Bond",
+    ),
+}
+
+
+def _alt_debt_carveout_qualifies_sql(term: str, spec: Dict) -> str:
+    """Boolean SQL expression: does this staging row (aliased `s`) belong to
+    `term`'s manager debt carve-out? Gated on the manager name appearing in
+    raw_entity_name, not an excluded unrelated same-prefix brand, not an
+    equity-signal name, and carrying at least one debt signal -- a trusted
+    asset_type, the strong vocabulary in the name/sponsor/asset_type (the
+    last one catches data-quality artifacts like a coupon "4.750%" landing
+    in the asset_type column instead of a real type tag, found verifying
+    Starwood's ground truth), or -- name only, since sponsor free text
+    carries unrelated reference numbers -- the weaker bare-digit-pair
+    pattern."""
+    term_sql = term.replace("'", "''")
+    gate = f"strpos(lower(trim(s.raw_entity_name)), '{term_sql}') > 0"
+    if spec.get("exclude_regex"):
+        gate += f" AND NOT regexp_like(lower(s.raw_entity_name), '{spec['exclude_regex']}')"
+    equity = f"regexp_like(lower(s.raw_entity_name), '{spec['equity_regex']}')"
+    debt_types = ", ".join("'" + t + "'" for t in sorted(spec["debt_asset_types"]))
+    is_debt = (
+        f"(lower(trim(s.asset_type)) IN ({debt_types})"
+        f" OR regexp_like(lower(s.raw_entity_name), '{spec['debt_strong_regex']}')"
+        f" OR regexp_like(lower(s.raw_sponsor_name), '{spec['debt_strong_regex']}')"
+        f" OR regexp_like(lower(s.asset_type), '{spec['debt_strong_regex']}')"
+        f" OR regexp_like(lower(s.raw_entity_name), '{spec['debt_weak_numeric_regex']}'))"
+    )
+    return f"({gate} AND NOT {equity} AND {is_debt})"
+
+
+def _alt_debt_carveout_subclass_sql() -> str:
+    """asset_sub_class CASE: 'Manager Debt Exposure' for any row qualifying
+    under any manager in ALT_MANAGER_DEBT_PATTERNS, else NULL (filtered out
+    by the wrapping *_matched_rows CTE, same pattern as brand_matches)."""
+    lines = ["CASE"]
+    for term, spec in ALT_MANAGER_DEBT_PATTERNS.items():
+        lines.append(f"        WHEN {_alt_debt_carveout_qualifies_sql(term, spec)} THEN 'Manager Debt Exposure'")
+    lines.append("        ELSE NULL END")
+    return "\n".join(lines)
+
+
+def _alt_debt_carveout_instrument_type_sql() -> str:
+    """asset_type (instrument type) CASE, e.g. 'Senior Notes'/'CMBS'/'ABS',
+    per manager's instrument_type_rules with instrument_type_default as the
+    per-manager fallback."""
+    lines = ["CASE"]
+    for term, spec in ALT_MANAGER_DEBT_PATTERNS.items():
+        qualifies = _alt_debt_carveout_qualifies_sql(term, spec)
+        for pattern, label in spec["instrument_type_rules"]:
+            pat_sql = pattern.replace("'", "''")
+            lines.append(
+                f"        WHEN {qualifies} AND regexp_like(lower(s.raw_entity_name), '{pat_sql}') THEN '{label}'"
+            )
+        default = spec["instrument_type_default"].replace("'", "''")
+        lines.append(f"        WHEN {qualifies} THEN '{default}'")
+    lines.append("        ELSE NULL END")
+    return "\n".join(lines)
+
+
+def _alt_debt_carveout_manager_sql() -> str:
+    """matched_manager_name CASE for ALT_MANAGER_DEBT_PATTERNS."""
+    lines = ["CASE"]
+    for term, spec in ALT_MANAGER_DEBT_PATTERNS.items():
+        name = spec["manager_name"].replace("'", "''")
+        lines.append(f"        WHEN {_alt_debt_carveout_qualifies_sql(term, spec)} THEN '{name}'")
+    lines.append("        ELSE NULL END")
+    return "\n".join(lines)
+
+
+def _alt_debt_carveout_method_sql() -> str:
+    """classification_method CASE for ALT_MANAGER_DEBT_PATTERNS."""
+    lines = ["CASE"]
+    for term, spec in ALT_MANAGER_DEBT_PATTERNS.items():
+        suffix = term.replace(" ", "_")
+        lines.append(f"        WHEN {_alt_debt_carveout_qualifies_sql(term, spec)} THEN 'debt_carveout_v1:{suffix}'")
+    lines.append("        ELSE NULL END")
+    return "\n".join(lines)
 
 
 def _alt_brand_case_sql(value_index: int, column: str = "raw_entity_name") -> str:
