@@ -1792,18 +1792,34 @@ ALT_MANAGER_DEBT_PATTERNS: Dict[str, Dict] = {
 def _alt_debt_carveout_qualifies_sql(term: str, spec: Dict) -> str:
     """Boolean SQL expression: does this staging row (aliased `s`) belong to
     `term`'s manager debt carve-out? Gated on the manager name appearing in
-    raw_entity_name, not an excluded unrelated same-prefix brand, not an
-    equity-signal name, and carrying at least one debt signal -- a trusted
-    asset_type, the strong vocabulary in the name/sponsor/asset_type (the
-    last one catches data-quality artifacts like a coupon "4.750%" landing
-    in the asset_type column instead of a real type tag, found verifying
-    Starwood's ground truth), or -- name only, since sponsor free text
-    carries unrelated reference numbers -- the weaker bare-digit-pair
-    pattern."""
+    raw_entity_name, not an excluded unrelated same-prefix brand, not a row
+    whose asset_type belongs to a different router entirely (mutual fund /
+    CIT / commingled fund -- ALT_EXCLUDED_ASSET_TYPES) or a known bare
+    public-security type (ALT_NOISE_ASSET_TYPES), not an equity-signal name,
+    and carrying at least one debt signal -- a trusted asset_type, the
+    strong vocabulary in the name/sponsor/asset_type (the last one catches
+    data-quality artifacts like a coupon "4.750%" landing in the asset_type
+    column instead of a real type tag, found verifying Starwood's ground
+    truth), or -- name only, since sponsor free text carries unrelated
+    reference numbers -- the weaker bare-digit-pair pattern.
+
+    The asset_type exclusion was added after the generalized-survey pass
+    (2026-09-25) found it missing here: unlike the brand-match pass, this
+    gate had no guard against ordinary retail bond mutual funds/CITs whose
+    name happens to contain both a manager brand term and the bare word
+    "bond" (e.g. "Neuberger Berman Core Bond Fund"). The already-shipped
+    Blue Owl/Starwood carveout rows happened to come out clean -- their
+    debt_strong_regex vocabulary (144A, coupon %, "sr unsecured", etc.)
+    didn't collide with retail fund names in practice -- but the gap was
+    real and would have misfired on a manager with a blunter regex."""
     term_sql = term.replace("'", "''")
     gate = f"strpos(lower(trim(s.raw_entity_name)), '{term_sql}') > 0"
     if spec.get("exclude_regex"):
         gate += f" AND NOT regexp_like(lower(s.raw_entity_name), '{spec['exclude_regex']}')"
+    non_alt_types = ", ".join(
+        "'" + t.replace("'", "''") + "'" for t in sorted(ALT_EXCLUDED_ASSET_TYPES | ALT_NOISE_ASSET_TYPES)
+    )
+    not_other_router = f"lower(trim(s.asset_type)) NOT IN ({non_alt_types})"
     equity = f"regexp_like(lower(s.raw_entity_name), '{spec['equity_regex']}')"
     debt_types = ", ".join("'" + t + "'" for t in sorted(spec["debt_asset_types"]))
     is_debt = (
@@ -1813,7 +1829,7 @@ def _alt_debt_carveout_qualifies_sql(term: str, spec: Dict) -> str:
         f" OR regexp_like(lower(s.asset_type), '{spec['debt_strong_regex']}')"
         f" OR regexp_like(lower(s.raw_entity_name), '{spec['debt_weak_numeric_regex']}'))"
     )
-    return f"({gate} AND NOT {equity} AND {is_debt})"
+    return f"({gate} AND {not_other_router} AND NOT {equity} AND {is_debt})"
 
 
 def _alt_debt_carveout_subclass_sql() -> str:
