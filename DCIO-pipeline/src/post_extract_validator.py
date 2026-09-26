@@ -1138,7 +1138,7 @@ def _route_alternatives_from_staging(glue_db: str, staging_table: str, target_ta
     query so there is no second statement and no ordering dependency between
     them:
 
-    0. Override match (added 2026-09-25): looks up
+    0. Override match (added 2026-09-25, value-keyed 2026-09-25): looks up
        alt_manual_research_overrides, a reference table holding rows whose
        original classification came from one-time manual research
        (classification_method LIKE 'manual:round2_sourced_research',
@@ -1151,13 +1151,21 @@ def _route_alternatives_from_staging(glue_db: str, staging_table: str, target_ta
        100-ack_id recompute: 12 rows / $297.1M would have been lost without
        it). Takes unconditional top priority: always included for the run's
        ack_ids regardless of what the passes below independently conclude.
-       Matched on the full (ack_id, raw_entity_name, raw_sponsor_name,
-       plan_investment_amt) tuple -- raw_entity_name alone repeats within an
-       ack_id when filers reuse a boilerplate Schedule D label
-       ("Partnership/joint venture interests") across many distinct real
-       funds named only in raw_sponsor_name, so the narrower (ack_id,
-       raw_entity_name) key the other passes use against each other isn't
-       safe here; the 4-column tuple was confirmed unique across all 480
+       Matched by VALUE on (raw_entity_name, raw_sponsor_name), not by the
+       override row's own historical ack_id -- a manually-researched fund
+       recurs across many plans' filings over time under many different
+       ack_ids, and an ack_id-scoped match only ever helps a re-run of the
+       exact filing the research was originally done against, never a new
+       one. raw_entity_name alone repeats within an ack_id when filers reuse
+       a boilerplate Schedule D label ("Partnership/joint venture interests")
+       across many distinct real funds named only in raw_sponsor_name, so
+       raw_sponsor_name is part of the key too -- it's what disambiguates the
+       boilerplate case correctly (same boilerplate label + same sponsor name
+       = same real fund, filed by a different plan). plan_investment_amt and
+       ack_id were dropped from the key: they're expected to differ across
+       filings of the same fund and were never load-bearing for correctness,
+       only for uniqueness within the old snapshot-replay design. The
+       4-column tuple this replaces was confirmed unique across all 480
        override rows before this was built.
     1. Phrase match: keyword-matches raw_entity_name against ALT_FUND_PATTERNS
        (real estate / private credit / private equity / infrastructure /
@@ -1246,14 +1254,31 @@ def _route_alternatives_from_staging(glue_db: str, staging_table: str, target_ta
     )
 
     combined_sql = f"""
-        WITH override_matches AS (
+        WITH override_lookup AS (
             SELECT
-                ack_id, raw_entity_name, raw_sponsor_name, plan_investment_amt,
-                asset_sub_class, validation_status, asset_type, classification_confidence,
-                classification_method, manual_review_required, current_timestamp AS routed_at,
-                asset_class, matched_manager_name, manager_match_confidence, manager_match_method
+                lower(trim(raw_entity_name)) AS entity_key,
+                coalesce(lower(trim(raw_sponsor_name)), '') AS sponsor_key,
+                asset_sub_class, asset_type, classification_confidence,
+                classification_method, manual_review_required, asset_class,
+                matched_manager_name, manager_match_confidence, manager_match_method,
+                row_number() OVER (
+                    PARTITION BY lower(trim(raw_entity_name)), coalesce(lower(trim(raw_sponsor_name)), '')
+                    ORDER BY routed_at DESC
+                ) AS rn
             FROM {glue_db}.alt_manual_research_overrides
-            WHERE ack_id IN ({ids})
+        ),
+        override_matches AS (
+            SELECT
+                s.ack_id, s.raw_entity_name, s.raw_sponsor_name, s.plan_investment_amt,
+                o.asset_sub_class, s.validation_status, o.asset_type, o.classification_confidence,
+                o.classification_method, o.manual_review_required, current_timestamp AS routed_at,
+                o.asset_class, o.matched_manager_name, o.manager_match_confidence, o.manager_match_method
+            FROM {glue_db}.{staging_table} s
+            JOIN override_lookup o
+              ON lower(trim(s.raw_entity_name)) = o.entity_key
+             AND coalesce(lower(trim(s.raw_sponsor_name)), '') = o.sponsor_key
+             AND o.rn = 1
+            WHERE s.ack_id IN ({ids})
         ),
         phrase_matches AS (
             SELECT
@@ -1587,6 +1612,22 @@ ALT_BRAND_TERM_OVERRIDES: Dict[str, str] = {
     # valid for legitimate future matches (Pure Alpha etc.) while permanently
     # blocking any future All Weather row from auto-routing the same way.
     "bridgewater": "NOT regexp_like(lower(raw_entity_name), 'all weather')",
+    # "Neuberger Berman" retail mutual fund / CIT share classes (Real Estate
+    # R6, Mid Cap Growth, Genesis, Large Cap Value, Strategic MultiSector
+    # Fixed Income Trust, etc.) legitimately contain "Fund"/"Trust" so they
+    # pass the structural-marker gate, and get mistagged with alt-sounding
+    # asset_type values (real estate, separate account, GIC) by the source
+    # filer, so ALT_EXCLUDED_ASSET_TYPES never catches them either. Requiring
+    # a genuine alt-fund keyword instead of a blocklist keeps this correct as
+    # new retail products appear. Confirmed via 2026-09-25 row-level
+    # verification: 101 rows/$372.3M -> 21 rows/$176.5M, zero genuine
+    # Crossroads/Secondary Opportunities/Private Debt/CLO rows lost.
+    # "putwrite" added same day: "NB US Equity Index Putwrite Fund LLC"
+    # (asset_type "Private Fund - LLC") is a genuine private fund that
+    # matched none of the other keywords and would otherwise silently drop
+    # out of routing on any future filing of the same fund under a new
+    # ack_id (2026-09-25 row-level verification).
+    "neuberger berman": r"regexp_like(lower(raw_entity_name), 'crossroads|secondary\s+opp|private\s+debt|\bclo\b|loan\s+advisers|putwrite')",
 }
 
 # Terms that need a word-boundary match rather than plain substring -- "gso"
@@ -1691,6 +1732,12 @@ ALT_BRAND_CONFIRMED_EXCLUSIONS: List[Tuple[str, str]] = [
     # staging row: one copy blank asset_type, one copy mistagged). See
     # project_dcio_alternatives_router memory, 2026-09-20 verification.
     ("20250813090708NAL0008939265001", "ares management corp cl a"),
+    # Same NYSE Ares Management Corp (ticker ARES) common-stock false
+    # positive recurring under different ack_ids/name spellings -- found via
+    # 2026-09-25 row-level verification of the live brand_matches gate.
+    ("20251009140213NAL0003632563001", "ares management lp common stock"),
+    ("20251008131116NAL0009463904001", "ares management lp"),
+    ("20251010151350NAL0008379297001", "ares management corp"),
 ]
 
 
