@@ -1628,6 +1628,20 @@ ALT_BRAND_TERM_OVERRIDES: Dict[str, str] = {
     # out of routing on any future filing of the same fund under a new
     # ack_id (2026-09-25 row-level verification).
     "neuberger berman": r"regexp_like(lower(raw_entity_name), 'crossroads|secondary\s+opp|private\s+debt|\bclo\b|loan\s+advisers|putwrite')",
+    # "ullico" and "white oak global advisors" both false-positived on rows
+    # like "PORTFOLIO 14 ULLICO INVESTMENT ADVISORS AB0662242 Dreyfus
+    # Government Cash Management Short Term Investment Fund" -- a portfolio/
+    # account header naming the manager gets concatenated onto a generic
+    # Dreyfus cash-sweep MMF line item during extraction, and the brand term
+    # matches the header even though the actual instrument is not a fund of
+    # that manager's. Found + 6 rows manually deleted from
+    # plan_alternatives_history 2026-09-25; this closes the underlying match
+    # so it can't recur on a future filing of the same or a similar sweep
+    # vehicle. Scoped to the confirmed generic-MMF signature (mirrors the
+    # neuberger berman entry above) rather than a blanket rule, since other
+    # brand terms haven't been confirmed to hit this same failure mode yet.
+    "ullico": r"NOT regexp_like(lower(raw_entity_name), 'dreyfus|government cash management|short term investment fund')",
+    "white oak global advisors": r"NOT regexp_like(lower(raw_entity_name), 'dreyfus|government cash management|short term investment fund')",
 }
 
 # Terms that need a word-boundary match rather than plain substring -- "gso"
