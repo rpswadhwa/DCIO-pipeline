@@ -1571,3 +1571,33 @@ fair-value-footnote leak was drafted and then reverted uncommitted once
 this evidence showed page 17 isn't even classified as supplemental for
 this plan and the garbage row doesn't originate in extraction at all — that
 theory was wrong.)
+
+---
+
+## 27. `plan_alternative_history` (singular) — dead prototype, never created, no action needed
+
+Both `sql/create_plan_alternatives_history.sql` (plural — the real table,
+target of `_route_alternatives_from_staging` in `post_extract_validator.py`)
+and `sql/alternatives/{01_create,02_refresh,03_validate,04_create_alt_manager_views}.sql`
+(singular — a separate, self-contained regex/manager-signal classifier with
+its own DELETE+INSERT refresh and human-review workflow) were added in the
+same commit `43ad3884` (2026-09-20, "Add alternatives router, MF-routing
+junk guards, and institutional fund heading fix"). Confirmed 2026-09-25 via
+`information_schema.tables`: **`plan_alternative_history` does not exist in
+Athena at all** — its `01_create_plan_alternative_history.sql` DDL was never
+run. No cron/systemd schedules either pipeline on the EC2 box (crontab is
+empty, no systemd unit references either table). This is an abandoned
+parallel prototype, not a live competing system — no data, no scheduled
+job, nothing downstream can be reading from it. No action needed; noting
+here so it isn't rediscovered and mistaken for something active.
+
+Separately (same investigation): the real `plan_alternatives_history`
+(plural) router (`_route_alternatives_from_staging`) is deployed and
+correct but was found to be **inert in production** — its call site is
+gated behind `ALTERNATIVES_TABLE`, an env var that is set nowhere in the
+EC2 `.env` (only `HOLDINGS_STAGING_TABLE` is set, which lights up MF
+routing but not alt routing). Fix: add `ALTERNATIVES_TABLE=plan_alternatives_history`
+to `/home/ec2-user/DCIO-pipeline/DCIO-pipeline/.env` — additive-only,
+affects future batches only, no historical rewrite. Deferred until the
+in-flight pipeline run (PID 353698, started 2026-09-25) finishes, to avoid
+touching shared config mid-run.

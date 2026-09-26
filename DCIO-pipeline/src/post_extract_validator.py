@@ -1247,11 +1247,6 @@ def _route_alternatives_from_staging(glue_db: str, staging_table: str, target_ta
     # marker-or-trusted gate and noise regex below.
     brand_excluded = ", ".join("'" + t + "'" for t in sorted(ALT_EXCLUDED_ASSET_TYPES))
     trusted = ", ".join("'" + t + "'" for t in sorted(ALT_BRAND_TRUSTED_ASSET_TYPES))
-    brand_confirmed_exclusion_clause = " ".join(
-        "AND NOT (s.ack_id = '%s' AND lower(trim(s.raw_entity_name)) = '%s')"
-        % (a.replace("'", "''"), n.replace("'", "''"))
-        for a, n in ALT_BRAND_CONFIRMED_EXCLUSIONS
-    )
 
     combined_sql = f"""
         WITH override_lookup AS (
@@ -1377,7 +1372,6 @@ def _route_alternatives_from_staging(glue_db: str, staging_table: str, target_ta
                     AND o.raw_sponsor_name IS NOT DISTINCT FROM s.raw_sponsor_name
                     AND o.plan_investment_amt IS NOT DISTINCT FROM s.plan_investment_amt
               )
-              {brand_confirmed_exclusion_clause}
         ),
         brand_matched_rows AS (
             SELECT * FROM brand_matches WHERE asset_sub_class IS NOT NULL
@@ -1640,8 +1634,77 @@ ALT_BRAND_TERM_OVERRIDES: Dict[str, str] = {
     # vehicle. Scoped to the confirmed generic-MMF signature (mirrors the
     # neuberger berman entry above) rather than a blanket rule, since other
     # brand terms haven't been confirmed to hit this same failure mode yet.
-    "ullico": r"NOT regexp_like(lower(raw_entity_name), 'dreyfus|government cash management|short term investment fund')",
+    # "class a stock" branch added 2026-09-26 after a full-universe dry run
+    # of every ALT_BRAND_PATTERNS term found "Private Equity Fund: Ullico
+    # Class A Stock" ($2,199,329) -- the "Private Equity Fund:" label
+    # prefixed onto a bare stock-holding line supplies the "Fund" structural
+    # marker, same concatenation failure mode, different shape.
+    "ullico": r"NOT regexp_like(lower(raw_entity_name), 'dreyfus|government cash management|short term investment fund|class\s+a.*stock')",
     "white oak global advisors": r"NOT regexp_like(lower(raw_entity_name), 'dreyfus|government cash management|short term investment fund')",
+    # "Ares Management" false-positived the same way as Ullico/White Oak
+    # above, but on the manager's OWN parent-company stock/bond rows rather
+    # than a cash sweep: e.g. "Ares Management Corp Cl A" or "Ares
+    # Management LP Common Stock" have no fund vehicle at all, yet the bare
+    # brand name plus a trailing "Corp"/"LP"/"Inc" satisfies the structural
+    # marker gate. This had previously been patched 4 times as one-off
+    # (ack_id, raw_entity_name) exclusions -- "ares management corp cl a"
+    # (ack_id 20250813090708NAL0008939265001), "ares management lp common
+    # stock" (20251009140213NAL0003632563001), "ares management lp"
+    # (20251008131116NAL0009463904001), and "ares management corp"
+    # (20251010151350NAL0008379297001) -- which only ever protected those
+    # exact filings. This entry generalizes that to a term-level guard so it
+    # also covers future filings under new ack_ids. Validated 2026-09-26
+    # against the full plan_holdings_staging universe of "ares management"
+    # rows: catches all 4 rows above plus a new gap row ("Ares Management LP
+    # Common Stock", $2,825,399, ack_id 20251009140213NAL0003632563001)
+    # found by the same dry run, while leaving both confirmed-legitimate
+    # Ares fund names (Landmark Real Estate Partners VII LP, Senior Direct
+    # Lending Fund Cayman III LP) and 2 genuinely ambiguous rows ("Ares
+    # Management ARES EUROPEAN REAL ESTATE", "Ares Management NA")
+    # untouched. The old per-ack_id exclusion list was removed 2026-09-26
+    # as redundant with this term-level guard.
+    "ares management": r"NOT regexp_like(lower(raw_entity_name), '^ares management(\s+(corp|lp|inc))?\.?(\s+(common\s+stock|cl\.?\s*a))?\.?$')",
+    # "Perella Weinberg Partners" (PWP) is a publicly-traded parent company
+    # (formed via de-SPAC, hence its own literal "Class A common stock")
+    # whose legal name happens to contain "partners", satisfying the
+    # structural marker gate on its own stock -- no fund vehicle involved.
+    # An initial narrow fix (block bare name + "common/preferred stock" only)
+    # missed a wide tail of the same underlying holding recorded with
+    # inconsistent suffixes across filings/extractions: bare "Perella
+    # Weinberg Partners", "...CL A", "...Equity", and numeric/CUSIP-prefixed
+    # variants ("71367G102 Perella Weinberg Partners", "Perella Weinberg
+    # Partners 7801/3563/4500/6310", "5882 Perella Weinberg Partners Class
+    # A"), none tagged with a trusted asset_type. Switched 2026-09-26 to an
+    # allowlist requiring "fund" appear in the name instead, which is what
+    # every genuine PWP-managed vehicle in the data has ("...ABV OPPTY
+    # FUNDII/FUNDIII", "Other Private Equity Fund PERELLA WEINBERG PARTNERS
+    # ABV OPPTY OFFSHORE FD II B") and none of the bare-stock rows do.
+    # Mirrors the neuberger berman allowlist entry above for the same reason
+    # (brand term collides with the parent company's own plain-English name).
+    "perella weinberg partners": r"regexp_like(lower(raw_entity_name), 'fund')",
+    # "Partners Group Holding AG" (and its ticker-free/abbreviated forms
+    # "Partners Group Holding" and "Partners Group HLG") is the
+    # publicly-traded parent; same shape as PWP above -- "partners" in its
+    # legal name satisfies the structural marker gate on its own
+    # stock/equity/bond, no fund vehicle involved. Broadened 2026-09-26
+    # (full-universe dry run, then a second pass over that same dry run's own
+    # "still matching" output) beyond the originally-found "...Common Stock
+    # CHF.01"/"...Publiclytraded stock" rows (~$8.2M) after finding: the bare
+    # parent name untagged ("PARTNERS GROUP HOLDING AG" alone, asset_type
+    # "common stock"); "...Equity"/a "bond" line for "PARTNERS GROUP HOLDING"
+    # (no "AG"); and "PARTNERS GROUP HLG CHF0.01 (REGD)" (same CHF-par-value
+    # signature as the Holding AG rows, "HLG" abbreviating "Holding"). Also
+    # blocks two unrelated companies that substring-match "partners group"
+    # but aren't the Partners Group PE firm at all: "FleetPartners Group
+    # Ltd" (asset_type "corporate stock - common") and "Financial Partners
+    # Group Co Ltd" (seen twice, tagged "NPV" and "Publiclytraded stock" --
+    # both public-stock signatures, no fund characteristics anywhere in the
+    # data). None of the genuine Partners Group fund products (Private
+    # Equity Master Fund, Private Credit Strategy, Real Estate Secondary,
+    # Client Access, Global Infrastructure, Kingdom LP, etc.) contain
+    # "holding"/"hlg"/"fleetpartners"/"financial partners group", so this is
+    # safe to key on rather than the narrower "...stock"-suffix-only shape.
+    "partners group": r"NOT regexp_like(lower(raw_entity_name), '^(\S+\s+)?partners group (holding|hlg)\b|fleetpartners group|financial partners group')",
 }
 
 # Terms that need a word-boundary match rather than plain substring -- "gso"
@@ -1734,25 +1797,6 @@ ALT_BRAND_EXTRA_EXCLUDED_ASSET_TYPES = frozenset({
     "corporate stock - common", "bond", "corp. debt instr. - all other",
     "equities", "corporate stock- preferred",
 })
-
-# Specific (ack_id, raw_entity_name) pairs confirmed as false positives
-# despite passing every filter above -- found via row-level verification
-# against ground truth, not (yet) inferable from any general rule. Kept as
-# explicit exclusions rather than folded into a regex, to avoid over-fitting
-# a one-off data-quality artifact into a general-purpose filter.
-ALT_BRAND_CONFIRMED_EXCLUSIONS: List[Tuple[str, str]] = [
-    # NYSE-listed Ares Management Corp Class A common stock, mistagged
-    # asset_type='real estate' in one plan's raw filing data (duplicated
-    # staging row: one copy blank asset_type, one copy mistagged). See
-    # project_dcio_alternatives_router memory, 2026-09-20 verification.
-    ("20250813090708NAL0008939265001", "ares management corp cl a"),
-    # Same NYSE Ares Management Corp (ticker ARES) common-stock false
-    # positive recurring under different ack_ids/name spellings -- found via
-    # 2026-09-25 row-level verification of the live brand_matches gate.
-    ("20251009140213NAL0003632563001", "ares management lp common stock"),
-    ("20251008131116NAL0009463904001", "ares management lp"),
-    ("20251010151350NAL0008379297001", "ares management corp"),
-]
 
 
 # ---------------------------------------------------------------------------
