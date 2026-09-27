@@ -2057,6 +2057,16 @@ ALT_MANAGER_NAMES: Dict[str, str] = {
         "peak rock capital credit": "Peak Rock Capital",
         "peak rock capital": "Peak Rock Capital",
         "tcw direct lending": "TCW Group",
+        # Brand-router default (term.title()) previously diverged from the
+        # debt-carveout manager_name for these two terms (ALT_MANAGER_DEBT_
+        # PATTERNS above uses "Blue Owl Capital"/"Starwood Capital Group"),
+        # producing two matched_manager_name spellings for the same firm
+        # depending on which pass classified a given row. Confirmed via
+        # 2026-09-27 web + raw-data research that both spellings refer to one
+        # firm in each case; aligning here so future rows agree regardless of
+        # which pass routes them. See project_dcio_alternatives_router memory.
+        "blue owl": "Blue Owl Capital",
+        "starwood": "Starwood Capital Group",
     }.get(term, term.title())
     for term, _asset_type, _asset_class in ALT_BRAND_PATTERNS
 }
