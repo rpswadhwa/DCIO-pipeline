@@ -2001,6 +2001,7 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
         # actually have two distinct trailing numbers.
         _value_before_shares = bool(re.search(r'shares\b[\s\S]{0,120}\bheld\b', text, re.IGNORECASE))
         _dual_trailing_pattern = re.compile(r'\$?\s*([\d,]+)\s+\$?\s*([\d,]+)\s*$')
+        _leading_units_count_re = re.compile(r'^\d{1,3}(?:,\d{3})+(?:\.\d+)?\s+(?=[A-Za-z])')
 
         row_num = 0
         for i in range(data_start_idx, len(lines)):
@@ -2137,6 +2138,18 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
                     # leaking onto a later, unrelated row.
                     pass
                 pending_issuer_name = ""
+
+            # Strip a leading "No. of Units"/"No. of Shares" count that got glued onto
+            # the fund/security name. Some filers' Mutual Fund & ETF (or Common Stock)
+            # tables lay the units/shares column out with only a narrow gap before the
+            # name column, so pdfplumber's flattened text reads as a single token stream
+            # ("594,114 EUPAC FUND CL R-6") with no camelot-detected column boundary to
+            # split on. Only strips a comma-grouped integer (>=4 digits, e.g. "594,114",
+            # "11,067,278"), optionally with a decimal remainder (e.g. "1,943,507.37") --
+            # never a bare 1-3 digit number -- so real fund names that themselves start
+            # with a small number (e.g. "500 Index Fund", "3M") are left untouched, since
+            # those never render with thousands-separator commas.
+            issuer_description = _leading_units_count_re.sub('', issuer_description)
 
             if page_scale_factor != 1:
                 current_value = _scale_currency_string(current_value, page_scale_factor)
