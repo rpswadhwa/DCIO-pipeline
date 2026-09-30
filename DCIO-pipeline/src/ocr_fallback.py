@@ -15,6 +15,14 @@ extraction total keeps this trigger scoped to genuine extraction failures.
 
 Only fires in the under-capture direction: a plan that is OVER-capturing
 (extracted > certified) is never flagged here.
+
+Trigger is a hard zero, not a percentage band: only a PDF whose fresh
+extraction total came back at $0 is flagged. Text extraction returning
+some nonzero-but-low total (e.g. classification dropped most rows) is a
+different, non-OCR-fixable problem -- OCR only helps when there was no
+text layer to extract from in the first place, which is exactly the
+zero-extraction case (confirmed on Stanford: 0 chars on the affected
+pages, OCR recovered 99.6% of certified).
 """
 
 from typing import Dict, List
@@ -25,12 +33,10 @@ from .post_extract_validator import compute_extracted_all_types_totals
 def identify_undercapture_pdfs(
     raw_rows: List[Dict],
     reference: Dict[str, Dict[str, object]],
-    tolerance: float = 0.10,
 ) -> Dict[str, Dict[str, float]]:
     """Return {pdf_stem: {extracted_total, certified, gap_amt, gap_pct}} for
-    every ack_id in `reference` whose freshly-extracted all-types total falls
-    short of certified amt_mutual_funds by more than `tolerance` (10% default,
-    matching the existing undercapture-universe definition).
+    every ack_id in `reference` whose freshly-extracted all-types total is
+    exactly $0 -- a total extraction failure, not merely an under-capture.
     """
     extracted_totals = compute_extracted_all_types_totals(raw_rows)
     flagged: Dict[str, Dict[str, float]] = {}
@@ -39,13 +45,11 @@ def identify_undercapture_pdfs(
         if not certified or certified <= 0:
             continue
         extracted = extracted_totals.get(pdf_stem, 0.0)
-        gap_amt = certified - extracted
-        gap_pct = gap_amt / certified
-        if gap_pct > tolerance:
+        if extracted <= 0:
             flagged[pdf_stem] = {
                 "extracted_total": extracted,
                 "certified": certified,
-                "gap_amt": gap_amt,
-                "gap_pct": gap_pct,
+                "gap_amt": certified - extracted,
+                "gap_pct": (certified - extracted) / certified,
             }
     return flagged

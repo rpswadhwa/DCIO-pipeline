@@ -541,11 +541,9 @@ def main():
                 print("  Skipped: VALIDATION_REF_TABLE / ATHENA_STAGING_S3 not set")
             else:
                 reference = load_reference(ref_glue_db, ref_table, ref_workgroup, ref_s3_staging)
-                # Only escalate to OCR when a PDF captured less than 25% of its
-                # certified total (i.e. missed more than 75% of it) -- a high bar
-                # so this doesn't fire on ordinary classification-level gaps.
-                tolerance = float(read_env("OCR_FALLBACK_TOLERANCE", "0.75"))
-                flagged = identify_undercapture_pdfs(raw_rows, reference, tolerance=tolerance)
+                # Only escalate to OCR when a PDF's fresh extraction total came back
+                # as an exact $0 -- a total extraction failure, not a partial gap.
+                flagged = identify_undercapture_pdfs(raw_rows, reference)
                 flagged_with_pdf = {
                     stem: info for stem, info in flagged.items()
                     if os.path.exists(os.path.join(input_dir, f"{stem}.pdf"))
