@@ -1870,6 +1870,13 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
             'mutual and exchange-traded fund': 'Mutual Fund',
             'registered investment compan': 'Mutual Fund',
             'registered investment fund': 'Mutual Fund',
+            # Bare plural "Registered investments:" (no "Company"/"Companies"/"Fund"
+            # suffix) -- distinct heading wording seen on Mass General Brigham's
+            # Schedule H, 4i (Consolidated 403(b) Program), which the two keys above
+            # don't cover since neither requires "compan"/"fund" to follow. Without
+            # this, every row under that heading (Vanguard Target Retirement series,
+            # TIAA-CREF Funds, GQG, PIMCO, etc.) fell through with asset_type unset.
+            'registered investments': 'Mutual Fund',
             'variable annuity': 'Variable Annuity Contract',
             'money market fund': 'Money Market Fund',
             'money market funds': 'Money Market Fund',
@@ -1990,7 +1997,19 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
         # header wording ("... Value Cost"); only fires on lines that actually
         # have two distinct trailing numbers, so single-value lines and
         # standard-order filers are unaffected.
-        _value_before_cost = bool(re.search(r'\bvalue\s+cost\b', text, re.IGNORECASE))
+        # The negative lookbehind excludes "maturity value" immediately before
+        # "Cost" -- that's the IRS's own standard Schedule H column-(b) caption
+        # ("...collateral, par, or maturity value") butting up against column
+        # (d)'s "Cost**" header, not an actual reversed value/cost column
+        # order. Without it, this is a false positive on ANY filer using the
+        # IRS's stock caption wording (confirmed on Mass General Brigham,
+        # whose columns are the standard Cost-then-Current-value order): it
+        # misapplies the dual-trailing-number split to every data row, taking
+        # the FIRST trailing number as "value" -- which, on a row with no real
+        # second dollar column, is often just the fund's own embedded target
+        # year (e.g. "VANGUARD TARGET RETIREMENT 2035 $ 1,569,093" got read as
+        # value=2035, cost=1569093, discarding the real $1,569,093 figure).
+        _value_before_cost = bool(re.search(r'(?<!maturity )\bvalue\s+cost\b', text, re.IGNORECASE))
         # Same shape of bug, different column: some filers add a supplemental
         # "Shares Held" column AFTER the standard Current Value column (e.g.
         # "... CREF Stock R2  33,385,095  36,632" = value then share count).
