@@ -30,8 +30,14 @@ _TOTAL_AFFIX_RE = re.compile(
 def _page_values_are_in_thousands(text: str) -> bool:
     """Return True when page text declares dollar amounts in thousands."""
     if re.search(
-        r'\b(?:in\s+thousands|amounts?\s+(?:are\s+)?in\s+thousands|'
-        r'dollars?\s+in\s+thousands|thousands\s+of\s+dollars|\$\s*000s?|'
+        # "in\s*thousands" (not \s+): some filers' PDF text extracts with no
+        # space between words at certain boundaries (font/kerning artifact,
+        # e.g. FedEx Pilots' page prints "(InThousands)" with zero space
+        # while other pages of the same filing print "(In Thousands)"
+        # normally) -- \s* still requires a word boundary before "in", so it
+        # won't fire on "within thousands" or similar.
+        r'\b(?:in\s*thousands|amounts?\s+(?:are\s+)?in\s*thousands|'
+        r'dollars?\s+in\s*thousands|thousands\s+of\s+dollars|\$\s*000s?|'
         # Some filers use "(amounts in 000's)" instead of the word "thousands";
         # the apostrophe often extracts as a stray/garbled character (curly
         # quote, PDF font mojibake) rather than a plain ' , so match any
