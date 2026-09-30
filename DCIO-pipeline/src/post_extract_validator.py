@@ -1589,6 +1589,27 @@ ALT_BRAND_PATTERNS: List[Tuple[str, str, str]] = [
     ("peak rock capital", "Private Equity Fund", "Private Equity"),
     ("tcw direct lending", "Private Credit Fund", "Private Credit"),  # scoped narrow: TCW Group overall
     # is multi-strategy (confirmed via 2026-09-24 research), so no bare "tcw" term is added.
+    # Added 2026-09-30: Brookfield and CBRE are both multi-strategy managers (infra/real
+    # estate/PE/credit for Brookfield; private RE/infra/RE credit/listed real assets for
+    # CBRE), so neither gets a bare brand-wide term -- see project_dcio_alternatives_router
+    # memory for the reconciled dollar-bucket research behind each scoped term below.
+    # No bare "brookfield" term: its own parent stock/bonds and public-listed affiliates
+    # (Brookfield Infrastructure Partners/BIP, Brookfield Renewable, etc.) would collide.
+    ("brookfield capital partners", "Private Equity Fund", "Private Equity"),
+    ("brookfield cap ptnrs", "Private Equity Fund", "Private Equity"),
+    ("brookfield special investments", "Private Equity Fund", "Private Equity"),  # Brookfield's own
+    # annual report places this strategy under Private Equity.
+    ("brookfield strategic re", "Real Estate Fund", "Real Estate"),
+    ("brookfield infra fund", "Infrastructure Fund", "Infrastructure"),  # narrower than "brookfield
+    # infra" alone, which would also match the publicly-listed Brookfield Infrastructure Partners/BIP.
+    # No bare "cbre" term: CBRE Group Inc (NYSE: CBRE) public stock and CBRE Services Inc public
+    # bonds dominate the raw data (~97% of observed CBRE-brand dollars) and would swamp a bare term.
+    ("cbre us logistics partners", "Real Estate Fund", "Real Estate"),
+    ("cbre gip", "Infrastructure Fund", "Infrastructure"),  # GIP = CBRE IM's Global Investment
+    # Partners infrastructure feeder vehicles.
+    ("cbre strategic ptr", "Real Estate Fund", "Real Estate"),  # Strategic Partners US Opportunity
+    ("cbre strategic partners", "Real Estate Fund", "Real Estate"),  # fund series; both the observed
+    # "Ptr" abbreviation and the spelled-out form are covered.
 ]
 
 # Per-term extra restriction, ANDed onto that term's match only. Both entries
@@ -1772,8 +1793,12 @@ def _alt_brand_term_cond(term: str, column: str = "raw_entity_name") -> str:
 # stock) since the brand is a substring of the public company's own name too.
 ALT_BRAND_STRUCTURAL_MARKER_REGEX = (
     r"\b(l\.?p\.?|llc|fund|partners?|trust|ltd|joint\s+venture|\bjv\b|"
-    r"capital\s+partners|feeder|offshore|reif)\b"
+    r"capital\s+partners|feeder|offshore|reif|limited\s+partnership)\b"
 )
+# "limited partnership" added 2026-09-30: the abbreviated "l.p."/"partners" forms above don't
+# match a name that spells it out in full (e.g. "Blue Owl GP Stakes Pension Investors IV Limited
+# Partnership" -- $2.75M confirmed missed for exactly this reason; see
+# project_dcio_alternatives_router memory).
 ALT_BRAND_TRUSTED_ASSET_TYPES = frozenset({
     "hedge fund", "joint venture", "real estate", "private equity funds",
     "103-12 investment entity", "partnership interest",
