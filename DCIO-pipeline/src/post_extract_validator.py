@@ -1610,6 +1610,21 @@ ALT_BRAND_PATTERNS: List[Tuple[str, str, str]] = [
     ("cbre strategic ptr", "Real Estate Fund", "Real Estate"),  # Strategic Partners US Opportunity
     ("cbre strategic partners", "Real Estate Fund", "Real Estate"),  # fund series; both the observed
     # "Ptr" abbreviation and the spelled-out form are covered.
+    # Added 2026-09-30: discovery-search shortlist of single-strategy PE managers
+    # (see project_dcio_alternatives_router memory for the distinct-name/dollar
+    # reconciliation behind each term). Coller is the one multi-strategy name in
+    # this batch (credit vs. PE secondaries) -- "coller credit" is listed first
+    # so the more specific credit term wins before the broader PE term below.
+    ("adams street partnership", "Private Equity Fund", "Private Equity"),
+    ("adams street co-investment", "Private Equity Fund", "Private Equity"),
+    ("advent international", "Private Equity Fund", "Private Equity"),
+    ("cinven", "Private Equity Fund", "Private Equity"),
+    ("welsh carson", "Private Equity Fund", "Private Equity"),
+    ("wcas", "Private Equity Fund", "Private Equity"),
+    ("american securities partners", "Private Equity Fund", "Private Equity"),
+    ("green equity investors", "Private Equity Fund", "Private Equity"),  # Leonard Green's fund brand
+    ("coller credit", "Private Credit Fund", "Private Credit"),
+    ("coller capital", "Private Equity Fund", "Private Equity"),  # secondaries feeder funds
 ]
 
 # Per-term extra restriction, ANDed onto that term's match only. Both entries
