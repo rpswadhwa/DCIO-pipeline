@@ -1841,9 +1841,15 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
         #    why position is no longer used to anchor this.
         # 2. "Fund Name $ 225,122,092" or "Fund Name 225,122,092" (simple two-column format)
         # 3. "Fund Name $ 698" — explicit $ with small value (no minimum digit count)
+        # Optional decimal suffix on all value patterns below -- some filers (e.g.
+        # Gundersen Lutheran) print every value with cents and no "$"/"*" marker
+        # (e.g. "1,077,003.17"). Without the "(?:\.\d+)?", the trailing digit run
+        # these patterns anchor on stops at the decimal point, leaving only the
+        # 1-2 cent digits -- too short to satisfy simple_value_pattern's 4-char
+        # floor -- so every row on every page silently fails to match at all.
         _asterisk_re = re.compile(r'\*+')
-        trailing_value_pattern = re.compile(r'\$?\s*([\d,]+)\s*$')
-        dollar_value_pattern = re.compile(r'\$\s*([\d,]+)\s*$')          # explicit $
+        trailing_value_pattern = re.compile(r'\$?\s*([\d,]+(?:\.\d+)?)\s*$')
+        dollar_value_pattern = re.compile(r'\$\s*([\d,]+(?:\.\d+)?)\s*$')          # explicit $
 
         def _value_glued_to_prev_char(s: str, m) -> bool:
             # A trailing digit run with no whitespace immediately before it is
@@ -1867,7 +1873,7 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
             # space before its value).
             start = m.start(1)
             return start > 0 and not s[start - 1].isspace()
-        simple_value_pattern = re.compile(r'([\d,]{4,})\s*$')             # no $, 4+ chars
+        simple_value_pattern = re.compile(r'([\d,]{4,}(?:\.\d+)?)\s*$')             # no $, 4+ chars
 
         # Section heading detection for simple two-column format
         # Keys are matched both exactly and as substrings of the line
@@ -1954,7 +1960,7 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
             r'(?:' + '|'.join(
                 re.escape(_k).replace(r'\ ', r'\s+')
                 for _k in sorted(SECTION_HEADING_MAP.keys(), key=len, reverse=True)
-            ) + r')\s*\**\s*([\d,]+)\s*$',
+            ) + r')\s*\**\s*([\d,]+(?:\.\d+)?)\s*$',
             re.IGNORECASE,
         )
         current_section_type = inherited_asset_type or ''
@@ -2025,7 +2031,7 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
         # Same guard as _value_before_cost: only changes behavior on lines that
         # actually have two distinct trailing numbers.
         _value_before_shares = bool(re.search(r'shares\b[\s\S]{0,120}\bheld\b', text, re.IGNORECASE))
-        _dual_trailing_pattern = re.compile(r'\$?\s*([\d,]+)\s+\$?\s*([\d,]+)\s*$')
+        _dual_trailing_pattern = re.compile(r'\$?\s*([\d,]+(?:\.\d+)?)\s+\$?\s*([\d,]+(?:\.\d+)?)\s*$')
         _leading_units_count_re = re.compile(r'^\d{1,3}(?:,\d{3})+(?:\.\d+)?\s+(?=[A-Za-z])')
 
         row_num = 0
