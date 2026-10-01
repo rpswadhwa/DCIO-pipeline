@@ -2251,6 +2251,7 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
                 'REGISTERED INVESTMENT COMPANY': 'Mutual Fund',
                 'REGISTERED INVESTMENT FUND': 'Mutual Fund',
                 'MUTUAL FUND': 'Mutual Fund',
+                'MUTUAL FUNDS': 'Mutual Fund',
                 'MONEY MARKET FUND': 'Money Market Fund',
                 'VARIABLE ANNUITY CONTRACT': 'Variable Annuity Contract',
                 'COMMON STOCK': 'Employer Stock',
