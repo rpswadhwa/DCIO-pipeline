@@ -316,6 +316,50 @@ def _is_v3_wrong_asset_type(raw: str) -> bool:
 # are derivative positions, never a mutual fund.
 _SWAP_CDS_LEG_RE = re.compile(r"^99s\w*[bs]w(u|pc)\w*(irs|cds)")
 
+# Bare foreign-currency cash holdings (2026-10-01): a plan's raw cash sleeve gets
+# extracted with the entity name set to a plain currency/country description and the
+# literal trailing word "Currency" appended as a type tag -- e.g. "BRAZILIAN REAL
+# Currency", "AUSTRALIAN DOLLAR CURRENCY Currency" (confirmed live in v3, ack_id
+# 20260724135502NAL0012679475001, $159,449 across 3 rows, deleted). Never a fund.
+#
+# Must NOT fire on real EM-local-currency / currency-hedged funds that also end in the
+# word "Currency" when OCR/extraction truncates the trailing "Bond"/"Fund" wording --
+# e.g. "PIMCO Emerging Markets Local Currency" and "Ishares Inc Emerging Mkts Local
+# Currency" are real (truncated) fund rows seen in the same sweep. The guard-word list
+# below excludes both of those (via "emerging"/"markets"/"mkts"/"local") -- tested
+# against all currency-containing names found in that sweep before being added here.
+_CURRENCY_DENOM_WORDS = {
+    "dollar", "dollars", "pound", "pounds", "sterling", "euro", "euros", "yen", "franc",
+    "francs", "real", "reais", "peso", "pesos", "rand", "won", "yuan", "renminbi",
+    "rupee", "rupees", "krona", "kronor", "krone", "kroner", "ringgit", "baht", "dinar",
+    "dirham", "shekel", "rupiah", "zloty", "forint", "lira", "koruna", "leu", "lev",
+    "hryvnia", "rial", "riyal", "kwacha", "naira", "cedi", "colon", "bolivar", "sol",
+    "quetzal", "lempira", "cordoba", "balboa", "guarani", "dong", "kyat", "taka",
+    "afghani", "manat", "som", "tenge", "lari", "dram", "denar", "kuna", "ngultrum",
+}
+_CURRENCY_FUND_GUARD_WORDS = {
+    "fund", "funds", "etf", "etfs", "bond", "bonds", "trust", "local", "emerging",
+    "markets", "mkts", "instl", "institutional", "inc", "co", "corp", "class", "shares",
+    "share", "hedge", "hedged", "hedg", "index", "select", "growth", "value", "income",
+    "discovery", "portfolio", "series", "r1", "r2", "r3", "r4", "r5", "r6", "adv",
+    "admiral", "retirement",
+}
+
+
+def _is_bare_currency_holding(raw: str) -> bool:
+    words = [w.lower() for w in re.findall(r"[a-zA-Z]+", raw or "")]
+    if not words or words[-1] != "currency":
+        return False
+    body = words[:-1]
+    if body and body[-1] == "currency":  # strip duplicated "... CURRENCY Currency"
+        body = body[:-1]
+    if not body:
+        return False
+    if any(w in _CURRENCY_FUND_GUARD_WORDS for w in body):
+        return False
+    return any(w in _CURRENCY_DENOM_WORDS for w in body)
+
+
 # Participant loans / notes receivable -- never a fund. Matched as a normalized substring
 # because the phrasing is bounded and never occurs inside a real fund name.
 # "participants?loan" (not just "participantloan") so the plural form -- "Participants Loan
@@ -436,6 +480,8 @@ def is_junk_name(name: str) -> Tuple[bool, str, str]:
         return True, "v3 cleanup: multiple SEDOLs spliced into one name (2026-09-09)", "DELETE"
     if _SWAP_CDS_LEG_RE.match(nn):
         return True, "v3 cleanup: interest-rate-swap/CDS contract leg, not a fund (2026-09-09)", "DELETE"
+    if _is_bare_currency_holding(raw):
+        return True, "v3 cleanup: bare foreign-currency cash holding, not a fund (2026-10-01)", "DELETE"
     # Participant loans / notes receivable (bounded phrasing, safe as substring)
     if _LOAN_RE.search(nn):
         return True, "participant loan / notes receivable", "DELETE"
