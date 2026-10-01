@@ -976,8 +976,15 @@ this file for the enhancement recommendation that comes out of this batch.
   can. Flagged for awareness, not treated as a backfill opportunity.
 - Status: open — root cause confirmed, fix design deferred (parking_lot.md #23).
 
-## Texas Children's
+## Jefferson Health New Jersey 403(b) Plan (f/k/a Kennedy Health System Retirement Savings Plan)
 - ack_id: `20251015122503NAL0002285555001`
+- CORRECTED 2026-09-30: this entry was previously mislabeled "Texas Children's"
+  in this file — opening the actual PDF confirms the sponsor is Jefferson
+  Health New Jersey / f/k/a Kennedy Health System, not Texas Children's
+  Hospital. All figures/diagnosis below were verified against this ack_id's
+  real PDF and are otherwise unaffected by the mislabel; only the plan name
+  was wrong. The real Texas Children's Hospital plan is a different ack_id —
+  see the entry below.
 - Certified: $2,030,623,209 (amt_mutual_funds, `plan_master_index_universe`;
   total plan assets $2,141,432,234) — Staged: $33,179,467 (1 row: "Vanguard
   Vanguard Institutional Index Inst Plus", asset_class `Equity` /
@@ -988,6 +995,16 @@ this file for the enhancement recommendation that comes out of this batch.
   pattern noted on the Thomas Jefferson University (2) entry above — no
   per-category subtotal available to backfill from.
 - Status: open — root cause confirmed, fix design deferred (parking_lot.md #23).
+
+## Texas Children's Hospital (The Tax Sheltered Annuity Plan of Texas Children's Hospital)
+- ack_id: `20250730144153NAL0002010355001` (confirmed via PDF page 1 text, 2026-09-30)
+- Per `data/inputs/Plan by MF.csv`: certified $2,141,432,234, staged $2,030,623,209
+  — 95% capture. NOT a total-extraction-failure case like the rest of this
+  batch; likely does not belong in the 15-plan undercapture batch at all under
+  this ack_id. Not yet investigated further — if a real gap remains (~$111M,
+  5%) it may be an ordinary classification-level issue, not worth an OCR/
+  parser fix on its own. Flagging rather than closing, since it hasn't been
+  looked at directly.
 
 ## American Institutes for Research in the Behavioral Sciences
 - ack_id: `20251015105028NAL0002275363002`

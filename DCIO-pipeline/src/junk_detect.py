@@ -317,8 +317,11 @@ _SWAP_CDS_LEG_RE = re.compile(r"^99s\w*[bs]w(u|pc)\w*(irs|cds)")
 
 # Participant loans / notes receivable -- never a fund. Matched as a normalized substring
 # because the phrasing is bounded and never occurs inside a real fund name.
+# "participants?loan" (not just "participantloan") so the plural form -- "Participants Loan
+# Account", norm() "participantsloanaccount" -- still matches; the bare singular pattern missed
+# it because the extra "s" sits between "participant" and "loan".
 _LOAN_RE = re.compile(
-    r"participantloan|loanstoparticipant|notesreceivablefromparticipant|"
+    r"participants?loan|loanstoparticipant|notesreceivablefromparticipant|"
     r"participantnotesreceivable|loanreceivable|promissorynote"
 )
 

@@ -612,6 +612,41 @@ Do not run these prod reloads without explicit go-ahead — add here, then wait.
   was ever actually submitted to a production batch run — not yet
   investigated).
 
+## The University of Pennsylvania Health System 403(b) Retirement Savings Plan
+- ack_id: `20251015190301NAL0010875202001`
+- Bug: the text-fallback schedule parser's `asset_type_patterns` dict
+  (`src/text_extract.py`) only had the singular key `MUTUAL FUND`, missing
+  the plural `MUTUAL FUNDS` that this filer prints as its trailing
+  section label (e.g. "Vanguard Institution Index Plus Mutual Funds **").
+  Fund name and value extracted fine, but the untyped row was dropped
+  before reaching `plan_mf_history_v3`.
+- Fix status: committed `19797b5c`, deployed to EC2 (hash-verified).
+  Verified against the real PDF: corrected extraction sums to
+  $3,286,317,049, exactly matching the filer's own printed subtotal on
+  page 24.
+- Rerun status: **not yet run** — needs a full pipeline + classification
+  rerun scoped to this ack_id.
+
+## CVS Health Future Fund
+- ack_id: `20251006141123NAL0003741777001`
+- Bug: not a mis-extraction — a broken/missing `ToUnicode` CMap on the
+  Schedule H page's embedded font (page 19). Glyphs render correctly
+  on-screen, but character codes decode to garbage (PUA junk on
+  copy-paste, a consistent letter-substitution cipher under `pypdf`).
+  Zero rows reached `plan_holdings_staging`/`plan_mf_history_v3`.
+- Fix status: no plan-specific code change — the fix is the live OCR
+  fallback (`src/ocr_fallback.py`, tightened to the zero-extraction-only
+  trigger in `b70f79ac`, deployed and enabled on EC2 via
+  `OCR_FALLBACK_ENABLED=1`). Verified empirically: rendered page 19 to an
+  image and ran it through the actual production `paddle_ocr_engine.py`
+  on EC2, which recovered every fund name/value correctly (Vanguard Small
+  Cap $1,226,416,495, Mid Cap $2,781,044,998, Intl Equity $2,842,314,805,
+  Inflation-Protected $116,468,978, Socially Responsible $188,070,898,
+  plus more rows below).
+- Rerun status: **not yet run** — needs a full pipeline + classification
+  rerun scoped to this ack_id, so the OCR fallback actually fires against
+  it in a real run (not yet exercised end-to-end in production).
+
 ## Macy's Inc. Defined Contribution Plans Master Trust
 - ack_id: `20251015182817NAL0011027730001`
 - Bug: this filer's Schedule H, 4i pages (JPMorgan "FD491" report template)

@@ -1601,3 +1601,110 @@ to `/home/ec2-user/DCIO-pipeline/DCIO-pipeline/.env` — additive-only,
 affects future batches only, no historical rewrite. Deferred until the
 in-flight pipeline run (PID 353698, started 2026-09-25) finishes, to avoid
 touching shared config mid-run.
+
+---
+
+## 30. Toyota Motor North America — OCR-path asset_type never populated; fix written, PARKED UNVERIFIED (2026-09-30)
+
+- **Plan**: Toyota Motor North America, Inc. Retirement Savings Plan
+- **ack_id**: `20251008114247NAL0009333472001`
+- **Certified**: $2,291,791,017 area per earlier 10-plan sweep (finding #22
+  used a $2.02B figure for this sponsor; not re-verified against
+  `plan_master_index_universe` this session) — **Staged**: $138.5M (~7%)
+  per finding #22's production snapshot.
+
+This plan's Schedule H, line 4i supplemental pages (pages 20-47 of 48) are
+OCR-only — `classify_pages` flags them supplemental but they have no usable
+native text layer, so the pipeline's OCR fallback path (`pdf_to_images` →
+`classify_pages` → `normalize_pages` → `detect_tables` → `run_ocr` →
+`map_rows_with_llm`) is what actually produces the 613 raw-mapped rows for
+this filing, not the Camelot/text path finding #22 was testing against.
+
+**Root cause (two layered bugs, both in the OCR path specifically):**
+
+1. OCR noise glues/garbles the type label onto adjacent text — e.g.
+   `'M ut ual fund'`, `'Mutal Funds'`, `'T2040 Commingled fund'` — which the
+   original `ASSET_TYPE_PATTERNS` regexes (built for clean Camelot/text
+   extraction) don't match.
+2. **Bigger bug**: `run_pipeline.py`'s STEP 3.5 OCR-fallback-escalation block
+   never called `parse_investment_row()` on OCR-sourced `mapped_rows` at
+   all before this session — unlike the Camelot/text path, which always
+   calls it. This meant every one of this plan's 613 OCR rows got
+   `asset_type` left completely blank regardless of label quality,
+   confirmed via a standalone EC2 test (command invocation `bh8d0qo6g`,
+   pre-fix): `Clean rows: 613`, `MF total: 0.0`, `Commingled total: 0.0`,
+   `(blank): 613` — every single row, including unambiguous ones like
+   `T2040 Commingled fund $795,645,341` and `T2045 Commingled fund
+   $604,278,733`.
+
+**Fixes implemented this session (uncommitted, local working tree only):**
+
+- `src/asset_type_patterns.py` — OCR-tolerant "mutual fund" regex tolerant
+  of stray internal spaces/typos (`M ut ual fund`, `Mutal Funds`, etc.).
+- `src/ocr_fallback.py` — added a `FORCE_OCR_ACK_IDS` hardcoded override set
+  containing this ack_id, to force the OCR path to run against it
+  deterministically for testing.
+- `src/run_pipeline.py` (STEP 3.5 OCR-fallback-escalation block) — added
+  the missing `parse_investment_row(row)` call + field merge
+  (`issuer_name`, `investment_description`, `asset_type`) into the
+  OCR-row-building loop before `clean_investment_data`, mirroring what the
+  Camelot/text path already does.
+
+**Verification status: NOT CONFIRMED.** An end-to-end EC2 re-test (uploading
+the patched `src/` files + a standalone test harness
+`toyota_e2e_ocr_test.py` to
+`s3://retirementinsights-bronze/dcio_deploy/tmp_test/`, run via SSM on
+`i-0eaee37f64dfe7195`) was kicked off to confirm the fixes actually populate
+`asset_type` and recover the commingled-fund/mutual-fund totals, but the SSM
+command (`5409e3d0-4af8-4242-82d5-2eaa844dde16`) hung in `InProgress` far
+longer than the pre-fix diagnostic run and never reached a terminal state
+despite extended polling. Per user decision (2026-09-30), stopped pursuing
+this rather than keep debugging the hang: the Monitor watch was dropped and
+the SSM command was sent a `cancel-command`. **The three code fixes above
+remain written but have never been proven to work end-to-end** — do not
+treat them as deployed-and-working without re-running verification first
+(and probably root-causing the EC2 hang itself, e.g. PaddleOCR model-hoster
+connectivity check, OOM, or something introduced in the test harness, before
+trusting a future run to complete either).
+
+**Next step if revisited**: re-run the same EC2 verification with a hard
+timeout and stderr capture from the start (the hung run gave no partial
+output to diagnose from), and cross-check whatever `asset_type` breakdown
+it produces against finding #22's $2.02B certified figure — plus
+independently re-confirm the certified amount via
+`default.plan_master_index_universe` the same way Saint-Gobain's was
+confirmed, since finding #22's $2.02B was not sourced that way.
+
+---
+
+## 31. IBM 401(k) Plan — page classification flags nearly the entire filing as supplemental; not yet investigated past that observation
+
+- **Plan**: IBM 401(K) PLAN (International Business Machines Corporation)
+- **ack_id**: `20260717114259NAL0006085105001`
+- **Certified**: $8,699,489,575.00 (`amt_mutual_funds`, per
+  `scratch_undercapture_top1000.csv`) — **Staged**: $0.00 (0% capture, the
+  worst-case entry in the batch by dollar gap)
+
+Deliberately parked early, before this plan's own root cause was chased
+down, to prioritize other plans in the batch. The only diagnostic step taken
+so far: `classify_pages_text()` was run against the filing and flagged
+**500+ of this PDF's 578 total pages** as `is_supplemental=1`. For
+comparison, every other plan in this batch has a schedule spanning a
+handful to a few dozen pages — a filing where the overwhelming majority of
+pages match the supplemental-schedule keyword set is itself the anomaly
+worth explaining before anything else, since it suggests either a very
+unusual document structure (e.g. a huge composite/multi-fund-family
+schedule, repeated per-fund pages, or a false-positive keyword match
+bleeding across most of the document) or a classifier bug specific to this
+filer's template.
+
+**Not yet root-caused**: the source PDF has not been opened for visual
+review, and no page content, table structure, or extraction attempt has
+been inspected — this entry exists solely to record the one data point
+already in hand (the 500+/578 page-classification anomaly) so the next
+pass starts there instead of from zero. Per
+[[feedback_dcio_open_pdf_first]], opening the actual PDF should be the
+first step whenever this is picked back up.
+
+**Status**: parked, not yet root-caused beyond the page-classification
+observation above. No fix exists yet to queue a reload against.
