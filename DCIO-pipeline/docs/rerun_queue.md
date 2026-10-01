@@ -612,6 +612,47 @@ Do not run these prod reloads without explicit go-ahead — add here, then wait.
   was ever actually submitted to a production batch run — not yet
   investigated).
 
+## Macy's Inc. Defined Contribution Plans Master Trust
+- ack_id: `20251015182817NAL0011027730001`
+- Bug: this filer's Schedule H, 4i pages (JPMorgan "FD491" report template)
+  have no ruled table gridlines, so Camelot's `stream` flavor can't detect
+  column boundaries and returns a degenerate 1-column table for every page.
+  The per-row `non_empty_cells == 1` section-heading heuristic in
+  `extract_tables_and_map()` (`src/text_extract.py`) assumes multi-column
+  tables, so every row on a 1-column table gets misclassified as a heading
+  and discarded — zero `row_data` rows ever get built. Separately, the
+  existing FALLBACK retry logic only inspects pages already keyed in
+  `mapped_pages`; a page with a table object but zero rows never becomes a
+  `mapped_pages` key, so it's invisible to both the "no tables found" check
+  and the "poor quality" check — the page was silently dropped with no
+  error and no retry. Confirmed root cause via direct `camelot.read_pdf`
+  calls returning shape (31,1)/(36,1)/(34,1)/(10,1)/(16,1) tables for pages
+  2-6. Zero rows reached `plan_holdings_staging`/`plan_mf_history_v3`
+  against a certified `amt_mutual_funds` of $2,252,908,000.
+- Fix status: committed `9b842585` (not yet deployed to EC2). Added a check
+  for pages present in `pages_with_tables` but absent from `mapped_pages`,
+  routing them into the existing text-extraction retry
+  (`extract_text_based_investments()`, already used by many other filers).
+  The new condition can only fire on a page that currently contributes zero
+  rows, so it's additive-only — verified with a real before/after run
+  against Saint-Gobain's PDF (byte-identical 320-row output, patch never
+  fires there) in addition to Macy's own PDF. Recovers 30 raw rows → 23
+  clean rows (7 genuine `TOTAL ...` subtotal lines correctly stripped by
+  the existing `clean_investment_data()`, no separate fix needed there),
+  $4,545,685,618 total extracted value. `asset_type == 'Mutual Fund'` rows
+  sum to $1,910,584,438; adding the four Vanguard Target Retirement
+  2055/2060/2065/2070 rows ($354,498,253) that land with a blank
+  `asset_type` (a separate, smaller, unfixed classification gap — inherited
+  asset-type isn't carried into later text-extraction pages) brings the
+  total to ~$2,265,082,691, within ~0.5% of certified.
+- Rerun status: **not yet run** — needs EC2 deploy first, then a full
+  pipeline + classification rerun scoped to this ack_id.
+  Expected recovery if run: 0 rows in `plan_holdings_staging` for this
+  ack_id → 23 clean rows, Mutual Fund subtotal reconciling to roughly
+  $2.27B against the $2,252,908,000 certified target (exact match pending
+  a fix for the trailing-Vanguard-funds asset_type gap, noted above as a
+  known residual).
+
 ---
 
 Template for a new entry:
