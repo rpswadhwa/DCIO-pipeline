@@ -3685,6 +3685,26 @@ def extract_tables_and_map(
     # FALLBACK: Check if table extraction produced mostly empty data
     # If so, try text-based extraction instead
     pages_to_retry = []
+    # A page whose Camelot table is entirely single-column (no column-gap
+    # detection at all) never gets a mapped_pages key in the first place --
+    # every row has exactly one non-empty cell, so the per-row loop above
+    # classifies each one as a section heading / name-fragment and `continue`s,
+    # with no row_data dict ever appended. Such a page is in pages_with_tables
+    # (Camelot did return a table object) but absent from mapped_pages, so the
+    # loop below -- which only inspects pages already keyed in mapped_pages --
+    # never sees it, and the "no tables found" retry check further down also
+    # skips it since it IS in pages_with_tables. Net effect without this check:
+    # the page is silently dropped with zero investments. This check only ever
+    # fires for a page that currently contributes literally nothing to the
+    # result, so it cannot change behavior for any page that already produces
+    # at least one row. Confirmed on Macy's (ack_id 20251015182817NAL0011027730001):
+    # Camelot stream returns 1-column tables for every Schedule H page, so
+    # every row was misclassified as a heading and zero rows ever reached
+    # plan_mf_history_v3 despite a clean, readable text layer.
+    for page_num in supplemental_pages:
+        if page_num in pages_with_tables and page_num not in mapped_pages:
+            print(f"    Table on page {page_num} produced zero usable rows (single-column/no-header table), retrying text extraction")
+            pages_to_retry.append(page_num)
     for page_num, rows in mapped_pages.items():
         if not rows:
             pages_to_retry.append(page_num)
