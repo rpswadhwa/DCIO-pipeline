@@ -688,6 +688,43 @@ Do not run these prod reloads without explicit go-ahead — add here, then wait.
   a fix for the trailing-Vanguard-funds asset_type gap, noted above as a
   known residual).
 
+## MassMutual Defined Contribution Plan Master Trust
+- ack_id: `20250919133721NAL0002366369001`
+- Bug: two compounding issues. (1) This filer's schedule is an insurance-
+  recordkeeper "Summary of Net Trust Assets" report (fund name | share
+  balance | historical cost | price | total market value), not a standard
+  EFAST Schedule H,4i. Its header matches zero `supplemental_schedule_keywords`
+  and trips the `SUMMARY` negative keyword (from "SUMMARY OF NET TRUST
+  ASSETS"), so `classify_pages_text()` (`src/text_extract.py`) flagged
+  `is_supplemental=0` and the page was never handed to extraction at all —
+  explains the literal zero rows in both `plan_holdings_staging` and
+  `plan_mf_history_v3`. (2) Even once extracted, "MM FIXED INTEREST" (a
+  MassMutual general-account stable-value/GIC product bundled into the same
+  fund list) must be excluded from the Mutual Fund total — confirmed by hand:
+  all 33 fund rows sum to $4,443,840,645.57; the three "MM FIXED INTEREST"
+  lots alone sum to $916,601,988.48; the difference, $3,527,238,657.09,
+  matches certified `amt_mutual_funds` ($3,527,238,657.00) to the penny.
+  Ruled out a master-trust cross-plan-allocation complication: the filing
+  entity's own name IS "...Master Trust," so the full pooled total correctly
+  belongs to this one ack_id, no proportional split needed.
+- Fix status: committed `fb8c627c`, deployed to EC2 (hash-verified,
+  2026-10-01). Added a structural override (`has_mm_net_trust_schedule`,
+  keyed on the column headers SHARE BALANCE / HISTORICAL COST / TOTAL MARKET
+  VALUE) to `classify_pages_text()`'s `is_supplemental` condition, mirroring
+  the existing `has_ric_schedule`/`looks_like_schedule_page` overrides; added
+  a dedicated parser (`_extract_mm_net_trust_assets_for_pdf()`), mirroring
+  the existing Northern Trust custody-statement pattern, routed before
+  Camelot. Row `asset_type` comes from the existing `detect_asset_type_row()`
+  (already classifies "fixed interest" as Stable Value Fund), defaulting
+  blank rows to Mutual Fund. Verified against the real filing PDF: page now
+  classifies `is_supplemental=1`, all 33 rows extract, Mutual Fund subtotal
+  $3,527,238,657.09 vs. certified $3,527,238,657.00.
+- Rerun status: **not yet run** — needs a full pipeline + classification
+  rerun scoped to this ack_id.
+  Expected recovery if run: 0 rows in `plan_holdings_staging` and
+  `plan_mf_history_v3` for this ack_id → 33 rows (30 Mutual Fund, 3 Stable
+  Value Fund), Mutual Fund subtotal reconciling to $3,527,238,657.
+
 ---
 
 Template for a new entry:

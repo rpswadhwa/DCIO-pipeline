@@ -1708,3 +1708,38 @@ first step whenever this is picked back up.
 
 **Status**: parked, not yet root-caused beyond the page-classification
 observation above. No fix exists yet to queue a reload against.
+
+---
+
+## 32. Delta Air Lines DC Plan — near-total extraction failure, one stray non-fund row in staging
+
+- **Plan**: THE DELTA AIR LINES, INC. DEFINED CONTRIBUTION PLA[N] (Delta Air
+  Lines, Inc.)
+- **ack_id**: `20251014143400NAL0006349954001`
+- **Certified**: $3,772,388,663.00 (`amt_mutual_funds`, per
+  `scratch_undercapture_top1000.csv`) — **Staged**: $0.00 in
+  `plan_mf_history_v3` (0% capture)
+
+`plan_mf_history_v3` has zero rows for this ack_id. `plan_holdings_staging`
+has exactly **one** row, and it isn't a fund holding at all:
+
+| raw_entity_name | plan_investment_amt | asset_class | asset_sub_class | validation_status | asset_type |
+|---|---|---|---|---|---|
+| `594712WY3 MI ST UNIV 4165 8152122 SEMIANN 4165` | 703,470.00 | PENDING_AI | PENDING_AI | MANUAL_REVIEW | (blank) |
+
+That's a CUSIP-prefixed municipal bond coupon/interest line (Michigan State
+University bond, semiannual payment), not a mutual fund — even if it were
+promoted out of `MANUAL_REVIEW`, it wouldn't move the needle on the
+certified mutual-fund total. The real schedule's ~$3.77B of fund holdings
+produced no rows anywhere in the pipeline, not even malformed ones stuck in
+review. Unlike MassMutual (finding above, fixed), the PDF hasn't been opened
+yet to check whether this is another page-classification miss, a layout
+Camelot/text-fallback can't parse, or something else — the single
+leaked-through bond row suggests whatever schedule *did* get read was
+mis-scoped (e.g. matched the wrong page/section) rather than never read at
+all.
+
+**Status**: parked per explicit instruction, not yet root-caused. Per
+[[feedback_dcio_open_pdf_first]], opening the actual filing PDF is the
+first step whenever this is picked back up. No fix exists yet to queue a
+reload against.
