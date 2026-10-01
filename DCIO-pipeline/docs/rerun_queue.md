@@ -579,6 +579,39 @@ Do not run these prod reloads without explicit go-ahead — add here, then wait.
   total ($952,109,593) is ~5% over certified ($904,086,154) — not addressed
   by this rerun, may need separate scoping check.
 
+## Saint-Gobain Corporation Investment Account
+- ack_id: `20251015094802NAL0004496641001`
+- Bug: not a mis-extraction — a missing classification mechanism. This
+  filer's Schedule H, 4i (pages 1-7) is one flat, unheaded list of ~400
+  securities (mutual funds, individual bonds, agency MBS/CMOs, GICs,
+  brokerage sweep) with no section headings or per-row type labels
+  anywhere in the document. Every `ASSET_TYPE_PATTERNS` entry
+  (`src/asset_type_patterns.py`) is keyed on section-heading text, so none
+  of them can ever fire here — extraction itself is clean (318 rows,
+  $2,531,247,072.26, matching certified), but `asset_type` is blank on
+  every row.
+- Fix status: committed `9675fda7`, deployed to EC2 (hash-verified,
+  2026-10-01). Added `_llm_flag_mutual_funds()` in `src/text_extract.py`,
+  hardcoded to this one ack_id (`_SAINT_GOBAIN_ACK_ID`), gated behind
+  `use_llm`: sends every blank-`asset_type` row's name to the LLM at
+  extraction time and sets `asset_type='Mutual Fund'` on rows it flags
+  true (binary mutual-fund-or-not, per explicit scope decision — not the
+  full asset_type taxonomy; every other instrument type stays blank, as
+  today). Verified against real data with a real (non-mocked) LLM call:
+  ran the actual function against all 316 real blank-type rows via genuine
+  Gemini API calls on EC2 (openai provider hit an unrelated broken package
+  install in the shared venv — pip metadata says 1.3.0 but the installed
+  module files are 2.44.0; not fixed, worked around via gemini for this
+  test). Result: 29/316 flagged, 28 exactly matching the user's
+  independently-identified list of 28 real mutual funds; 1 likely miss
+  ("Fidelity STIF" flagged true, should be false — a STIF is a cash-sweep
+  vehicle, not a registered mutual fund).
+- Rerun status: **not yet run** — needs a full pipeline + classification
+  rerun scoped to this ack_id. `plan_holdings_staging` currently has zero
+  rows for this ack_id (separate, still-open question: whether this PDF
+  was ever actually submitted to a production batch run — not yet
+  investigated).
+
 ---
 
 Template for a new entry:
