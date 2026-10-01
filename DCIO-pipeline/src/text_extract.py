@@ -2699,6 +2699,65 @@ def _dedupe_mapped_rows_by_name(rows: list) -> list:
     return result
 
 
+# Saint-Gobain Corporation Investment Account (ack_id 20251015094802NAL0004496641001):
+# this filer's Schedule H, 4i page is one flat, unheaded list of ~400 securities (mutual
+# funds, individual bonds, agency MBS/CMOs, GICs, brokerage sweep) with no section
+# headings or per-row type labels anywhere in the document. Every ASSET_TYPE_PATTERNS
+# entry is keyed off section-heading text, so none of them can ever fire here, leaving
+# every row's asset_type blank even though extraction itself is otherwise clean. Rather
+# than building a brittle name-pattern parser for this one filer's abbreviated fund
+# tickers (e.g. "WASATCH SM CAP GR IS", "FID FDM IDX 2045 IPR"), ask the LLM which rows
+# are mutual funds.
+_SAINT_GOBAIN_ACK_ID = "20251015094802NAL0004496641001"
+
+
+def _llm_flag_mutual_funds(rows: List[Dict], provider: str, model: str) -> None:
+    """Sets asset_type='Mutual Fund' in place on rows the LLM identifies as mutual
+    funds; leaves every other row's asset_type untouched (blank, as today). Only
+    called for ack_ids with no extractable section-heading structure -- see
+    _SAINT_GOBAIN_ACK_ID above."""
+    candidates = [
+        row for row in rows
+        if not normalize_whitespace(str(row.get("asset_type", "") or "")).strip()
+    ]
+    if not candidates:
+        return
+
+    names = [
+        normalize_whitespace(str(row.get("issuer_name") or row.get("investment_description") or "")).strip()
+        for row in candidates
+    ]
+    prompt = {
+        "securities": names,
+        "instruction": (
+            "Each entry is a holding name from a retirement plan's Schedule of Assets. "
+            "Return JSON mapping each entry's index (as a string) to true if it is a "
+            "mutual fund (an open-end registered investment company, typically a short "
+            "ticker-like abbreviation for a fund family/share class, e.g. a Vanguard, "
+            "Fidelity, T. Rowe Price, Dodge & Cox, or Wasatch fund), or false if it is "
+            "any other instrument (individual bond or note, agency MBS/CMO pass-through, "
+            "GIC, brokerage/cash sweep, STIF, or anything else)."
+        ),
+    }
+    try:
+        text = call_llm_json(prompt, provider, model or "gpt-4o-mini")
+        flags = json.loads(text)
+    except Exception as exc:
+        print(f"    [Saint-Gobain MF flag] LLM call failed, leaving asset_type blank: {exc}")
+        return
+
+    flagged = 0
+    for idx_str, is_mf in flags.items():
+        try:
+            idx = int(idx_str)
+        except (TypeError, ValueError):
+            continue
+        if 0 <= idx < len(candidates) and is_mf:
+            candidates[idx]["asset_type"] = "Mutual Fund"
+            flagged += 1
+    print(f"    [Saint-Gobain MF flag] LLM flagged {flagged}/{len(candidates)} blank rows as Mutual Fund")
+
+
 def extract_tables_and_map(
     pdf_path: str,
     supplemental_pages: List[int],
@@ -3778,5 +3837,12 @@ def extract_tables_and_map(
         for _r in _emp_stock_rows:
             _r["asset_type"] = "Common Stock"
         print(f"    Demoted {len(_emp_stock_rows)} 'Employer Stock' rows ({len(_distinct_issuers)} distinct issuers) to 'Common Stock' -- diversified holdings, not a single employer-stock fund")
+
+    if use_llm and pdf_path.split("/")[-1].rsplit(".", 1)[0] == _SAINT_GOBAIN_ACK_ID:
+        _llm_flag_mutual_funds(
+            [row for _entry in result for row in _entry.get("mapped_rows", [])],
+            provider,
+            model,
+        )
 
     return plan_info, result
