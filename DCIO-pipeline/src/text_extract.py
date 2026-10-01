@@ -10,7 +10,7 @@ from rapidfuzz import process, fuzz
 
 import pandas as pd
 
-from .asset_type_patterns import ASSET_TYPE_PATTERNS, detect_asset_type, detect_asset_type_strict
+from .asset_type_patterns import ASSET_TYPE_PATTERNS, detect_asset_type, detect_asset_type_strict, detect_asset_type_row
 from .data_cleaner import handle_split_rows, parse_investment_row
 from .utils import load_yaml, normalize_whitespace
 
@@ -133,6 +133,43 @@ def _pdf_has_northern_trust_schedule_layout(pdf_path: str, pages: List[int]) -> 
             for page_num in pages_to_check:
                 text = pdf.pages[page_num - 1].extract_text() or ""
                 if _pdf_page_has_northern_trust_schedule(text.upper()):
+                    return True
+                checked += 1
+                if checked >= 12:
+                    break
+    except Exception:
+        return False
+    return False
+
+
+# Insurance-recordkeeper "Summary of Net Trust Assets" layout (seen on MassMutual
+# Defined Contribution Plan Master Trust, ack_id 20250919133721NAL0002366369001): a
+# single flat, unruled list of fund share holdings with four trailing numeric columns
+# (Share Balance, Historical Cost, Price, Total Market Value) and no section headings
+# or per-row type labels at all. Detected by these column headers rather than the
+# literal "MassMutual"/"Summary of Net Trust Assets" wording, so the same recordkeeper
+# template is caught for any other filer using it.
+_MM_NET_TRUST_ASSETS_HEADER_MARKERS = (
+    'SHARE BALANCE',
+    'HISTORICAL COST',
+    'TOTAL MARKET VALUE',
+)
+
+
+def _pdf_page_has_mm_net_trust_assets_schedule(text_upper: str) -> bool:
+    return all(marker in text_upper for marker in _MM_NET_TRUST_ASSETS_HEADER_MARKERS)
+
+
+def _pdf_has_mm_net_trust_assets_layout(pdf_path: str, pages: List[int]) -> bool:
+    """Detect the "Summary of Net Trust Assets" layout above. Must be routed to the
+    dedicated text parser before Camelot, mirroring the Northern Trust/GM checks."""
+    try:
+        with pdfplumber.open(pdf_path) as pdf:
+            pages_to_check = [p for p in pages if 1 <= p <= len(pdf.pages)] or range(1, len(pdf.pages) + 1)
+            checked = 0
+            for page_num in pages_to_check:
+                text = pdf.pages[page_num - 1].extract_text() or ""
+                if _pdf_page_has_mm_net_trust_assets_schedule(text.upper()):
                     return True
                 checked += 1
                 if checked >= 12:
@@ -877,6 +914,16 @@ def classify_pages_text(pdf_path: str, keywords_yml: str) -> List[Dict]:
                 and "CURRENT" in header_text
                 and "VALUE" in header_text
             )
+            # Insurance-recordkeeper "Summary of Net Trust Assets" pages (MassMutual
+            # Defined Contribution Plan Master Trust) carry none of the standard
+            # schedule keywords and DO trip the "SUMMARY" negative keyword from their
+            # own title, so without this override the page is dropped before ever
+            # reaching extraction -- the actual root cause of that plan's zero-row
+            # capture. The column-header combination is specific to this fund-share
+            # layout and doesn't appear on narrative/summary pages otherwise.
+            has_mm_net_trust_schedule = all(
+                marker in header_text for marker in _MM_NET_TRUST_ASSETS_HEADER_MARKERS
+            )
             # A page that matches a schedule keyword only because it's narrating/
             # citing the schedule in prose (e.g. an auditor's "Other Matter --
             # Supplemental Schedules" boilerplate paragraph) shouldn't be able to
@@ -898,7 +945,8 @@ def classify_pages_text(pdf_path: str, keywords_yml: str) -> List[Dict]:
                     "page_number": i,
                     "header_text": header_text,
                     "is_supplemental": 1
-                    if (hits >= min_hits or has_ric_schedule) and (neg_hits == 0 or looks_like_schedule_page)
+                    if (hits >= min_hits or has_ric_schedule or has_mm_net_trust_schedule)
+                    and (neg_hits == 0 or looks_like_schedule_page or has_mm_net_trust_schedule)
                     else 0,
                     "_neg_hits": neg_hits,
                     "_money_line_count": money_line_count,
@@ -1742,6 +1790,58 @@ def _extract_northern_trust_schedule_for_pdf(pdf_path: str) -> List[Dict]:
                     'cost': tail[3].replace(',', '').strip('()'),
                     'current_value': current_value,
                     'units_or_shares': tail[0].replace(',', ''),
+                    'page_number': page_idx,
+                    'row_id': row_num,
+                })
+    return all_rows
+
+
+_MM_FOOTER_LINE_RE = re.compile(r'^(?:OUTSTANDING\s+LOAN\s+BALANCE|NET\s+ASSETS\b)', re.IGNORECASE)
+
+
+def _extract_mm_net_trust_assets_for_pdf(pdf_path: str) -> List[Dict]:
+    """Parse the "Summary of Net Trust Assets" layout (see
+    _pdf_has_mm_net_trust_assets_layout above). Each fund is one line ending in 3 or 4
+    trailing numeric tokens (Share Balance, [Historical Cost], Price, Total Market
+    Value -- the Historical Cost column is sometimes blank/omitted on a zero-share
+    lot); current_value is always the LAST trailing token. The footer's "OUTSTANDING
+    LOAN BALANCE" and "NET ASSETS ...:" lines end in only 1 trailing token each and
+    are excluded explicitly below (participant loans and the page's own grand total,
+    not fund holdings).
+
+    Every row gets asset_type via the shared ROW_TYPE_PATTERNS name-based detector
+    first (this already classifies "MM FIXED INTEREST" as Stable Value Fund, since
+    that's the insurer's own general-account guaranteed option, not a mutual fund);
+    anything that detector leaves blank defaults to Mutual Fund, since this layout is
+    specifically a DC plan's fund-share menu. Confirmed against ack_id
+    20250919133721NAL0002366369001: excluding exactly the three "MM FIXED INTEREST"
+    lots (and only those) makes the extracted total match this plan's certified
+    amt_mutual_funds figure to the penny ($3,527,238,657 of $4,443,840,645.57 in total
+    fund rows) -- every other row, MassMutual's own sub-advised funds as well as the
+    Vanguard funds, is a registered mutual fund on this platform."""
+    all_rows: List[Dict] = []
+    row_num = 0
+    with pdfplumber.open(pdf_path) as pdf:
+        for page_idx, page in enumerate(pdf.pages, start=1):
+            text = page.extract_text() or ''
+            if not _pdf_page_has_mm_net_trust_assets_schedule(text.upper()):
+                continue
+            for raw_line in text.split('\n'):
+                line = normalize_whitespace(raw_line)
+                if not line or _MM_FOOTER_LINE_RE.match(line):
+                    continue
+                lead, tail = _split_trailing_numeric_tokens(line)
+                if len(tail) not in (3, 4) or not lead.strip():
+                    continue
+                current_value = tail[-1].replace('$', '').replace(',', '').strip('()')
+                asset_type = detect_asset_type_row(lead) or 'Mutual Fund'
+                row_num += 1
+                all_rows.append({
+                    'issuer_name': lead,
+                    'investment_description': lead,
+                    'asset_type': asset_type,
+                    'current_value': current_value,
+                    'units_or_shares': tail[0].replace('$', '').replace(',', '').strip('()'),
                     'page_number': page_idx,
                     'row_id': row_num,
                 })
@@ -2795,6 +2895,17 @@ def extract_tables_and_map(
         if nt_rows:
             print(f"    Northern Trust schedule parser extracted {len(nt_rows)} investments")
             return plan_info, _build_text_result(pdf_path, nt_rows)
+
+    # Insurance-recordkeeper "Summary of Net Trust Assets" layout (MassMutual
+    # Defined Contribution Plan Master Trust, ack_id
+    # 20250919133721NAL0002366369001): a flat, unruled fund list with no
+    # section headings at all, so it needs its own trailing-numeric-column
+    # parser just like Northern Trust above, routed before Camelot.
+    if _pdf_has_mm_net_trust_assets_layout(pdf_path, supplemental_pages):
+        mm_rows = _extract_mm_net_trust_assets_for_pdf(pdf_path)
+        if mm_rows:
+            print(f"    MassMutual Net Trust Assets parser extracted {len(mm_rows)} investments")
+            return plan_info, _build_text_result(pdf_path, mm_rows)
 
     # Composite Master-Trust-style participation schedules: flat, unruled text
     # reports with recognized section headings + 'TOTAL <category>' subtotals.
