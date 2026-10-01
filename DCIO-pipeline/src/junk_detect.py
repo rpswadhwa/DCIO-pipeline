@@ -97,7 +97,8 @@ JUNK_EXACT = {
     "statements", "perthefinancialstatements", "ein", "seenotes", "notes",
     "various", "other", "miscellaneous", "misc", "cash",
     # user-reviewed 2026-07-15
-    "commoninvestmenttrustfunds", "sharesofcommonstock", "shares",
+    "commoninvestmenttrustfunds", "sharesofcommonstock", "shares", "units",  # "units" added
+    # 2026-10-01 as the bare sibling of "shares" -- same share/unit-count header, no fund name
     "carriedforward", "emp", "investmentsperfinancialstatements",
     # user-reviewed 2026-07-16 (bare labels / fragments)
     "balances", "balancebroughtforward", "contracts", "companyshares",
@@ -379,6 +380,11 @@ JUNK_PREFIXES = (
 # Tier 3 shape
 _DATE_RE = re.compile(r"^(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.?\s*\d{1,2}",
                       re.I)
+# Tax-lot "Acquired <date>" fragment, e.g. "Acquired 11/10/23 L" -- a cost-basis/acquisition-date
+# column bled into the name column; the trailing letter is a holding-period code (L=long/S=short).
+# Never a fund name. _DATE_RE above only matches month-NAME dates, so this numeric m/d/y form
+# (2026-10-01, from the SEDOL/units/participant-loan junk-lexicon review) needs its own rule.
+_ACQUIRED_DATE_RE = re.compile(r"(?i)^acquired\s+\d{1,2}/\d{1,2}/\d{2,4}\b")
 _BOND_FRAG_RE = re.compile(r"^\d[\d,\. ]*\s*(maturing|matures|due|%|percent)", re.I)
 _MATURING_RE = re.compile(r"maturing (at various|through|on)", re.I)
 _GENERIC_WORDS = {"statements", "investments", "total", "other", "various", "cash",
@@ -452,6 +458,8 @@ def is_junk_name(name: str) -> Tuple[bool, str, str]:
     # Tier 3 shape
     if _DATE_RE.match(raw):
         return True, "date parsed as fund", "DELETE"
+    if _ACQUIRED_DATE_RE.match(raw):
+        return True, "tax-lot acquisition-date fragment", "DELETE"
     if _BOND_FRAG_RE.match(raw) or _MATURING_RE.search(raw):
         return True, "bond/maturity fragment", "DELETE"
     # 733-plan MF-staging review (2026-09-17), confirmed against full live v3 name universe

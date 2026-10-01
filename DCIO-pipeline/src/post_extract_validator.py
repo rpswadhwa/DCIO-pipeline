@@ -603,15 +603,18 @@ _TOTAL_LINE_RE = _re.compile(
     r')')
 
 
-# CUSIP-continuation-line artifact detector (FIX 20, Mode 1 over-capture).
+# CUSIP/SEDOL-continuation-line artifact detector (FIX 20, Mode 1 over-capture).
 # Northern-Trust-style master-trust schedules ("5500 Supplemental Schedules") render each
 # holding as a TWO-line record: line 1 = "<security desc> <shares> <cost> <current value>",
-# line 2 = "CUSIP: <9-char id>". The extractor mis-reads the CUSIP continuation line as its
-# own holding -- name becomes "CUSIP" (or a wrapped fund-name tail like "INDEX FD ADMIRAL
-# SHS CUSIP") and the 9-digit CUSIP id (e.g. 989207105) parses as a $989M "value".
-# Schlumberger master trust alone produced ~896 such rows summing to $352B of fake AUM.
-# The token "CUSIP" never appears in a genuine fund name, so matching it anywhere is zero-FP.
-_CUSIP_ARTIFACT_RE = _re.compile(r'(?i)\bCUSIP\b')
+# line 2 = "CUSIP: <9-char id>" (or, for non-US securities, "SEDOL: <7-char id>"). The extractor
+# mis-reads the id-continuation line as its own holding -- name becomes "CUSIP"/"SEDOL" (or a
+# wrapped fund-name tail like "INDEX FD ADMIRAL SHS CUSIP") and the id itself (e.g. 989207105)
+# parses as a $989M "value". Schlumberger master trust alone produced ~896 such CUSIP rows
+# summing to $352B of fake AUM; the single-token "SEDOL" case ($39.8B / 9,122 rows found in the
+# 2026-10-01 staging review) is the identical artifact under the sibling identifier scheme --
+# junk_detect.py's _MULTI_SEDOL_RE only catches two SEDOLs spliced together, not this bare form.
+# Neither token ever appears in a genuine fund name, so matching either anywhere is zero-FP.
+_CUSIP_ARTIFACT_RE = _re.compile(r'(?i)\b(CUSIP|SEDOL)\b')
 
 
 def _strip_trailing_value_tokens(name: str) -> str:
@@ -738,8 +741,8 @@ def build_mf_rows_df(rows: List[Dict],
         # "Total Stock Market" funds (see _TOTAL_LINE_RE).
         if _TOTAL_LINE_RE.search(_name):
             continue
-        # Mode 1 over-capture: drop CUSIP-continuation-line artifacts (name contains the
-        # token "CUSIP"; the 9-digit CUSIP id was mis-read as the value). See _CUSIP_ARTIFACT_RE.
+        # Mode 1 over-capture: drop CUSIP/SEDOL-continuation-line artifacts (name contains the
+        # token "CUSIP" or "SEDOL"; the security id was mis-read as the value). See _CUSIP_ARTIFACT_RE.
         if _CUSIP_ARTIFACT_RE.search(_name):
             continue
         # Scope: annuity / insurance vehicles (CREF, TIAA Traditional, Voya/Empower
