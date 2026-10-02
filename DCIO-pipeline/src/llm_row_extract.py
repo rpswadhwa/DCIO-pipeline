@@ -29,7 +29,7 @@ _MAX_ATTEMPTS = 3
 _RETRY_BACKOFF_SEC = [3, 8]
 
 _SCHEMA_FIELDS = [
-    "issuer_name", "investment_description", "asset_type",
+    "issuer_name", "investment_description", "asset_type", "asset_type_source",
     "par_value", "cost", "current_value", "units_or_shares",
 ]
 
@@ -39,6 +39,8 @@ _KNOWN_ASSET_TYPES = [
     "Variable Annuity Contract", "Self-Directed Brokerage Account",
     "Stock", "Bond", "Participant Loan",
 ]
+
+_KNOWN_ASSET_TYPE_SOURCES = ["row", "heading", "total", "inferred", "none"]
 
 _PROMPT_INSTRUCTIONS = (
     "You are reading one page of a Form 5500 Schedule H, Line 4i "
@@ -54,16 +56,36 @@ _PROMPT_INSTRUCTIONS = (
     "ENTIRE string 'Inflation-Protected Securities Fund: Inv Shares Mutual "
     "Funds', not just the trailing share-class words. Never drop or "
     "summarize any words from the middle of the printed name), "
-    "asset_type (your best classification, using ONLY one of these labels if "
-    "it clearly applies: " + ", ".join(_KNOWN_ASSET_TYPES) + " -- otherwise "
-    "empty string, do not invent a label outside this list), "
+    "asset_type (classify using ONLY one of these labels: " +
+    ", ".join(_KNOWN_ASSET_TYPES) + " -- otherwise empty string, do not "
+    "invent a label outside this list). This page's rows are often grouped "
+    "under a SECTION HEADING (e.g. a line reading 'Registered Investment "
+    "Company', 'Common/Collective Trust', 'Separate Account') that applies "
+    "to every row printed below it, up to the next heading or the end of "
+    "the page -- 'Registered Investment Company' means Mutual Fund. Rows "
+    "may also be followed by a SUBTOTAL/TOTAL line (e.g. 'Total - "
+    "Registered Investment Companies  $12,345') that retroactively labels "
+    "every row above it back to the prior heading or subtotal. Use these "
+    "rules, in priority order, for every row: "
+    "(1) if the row's own printed text names its type explicitly, use that; "
+    "(2) otherwise, if a section heading above the row (before the next "
+    "heading/subtotal) names a type, use that; "
+    "(3) otherwise, if a subtotal/total line below the row (before the next "
+    "heading) names a type, use that; "
+    "(4) otherwise, if you can confidently infer the type from general "
+    "knowledge of the named fund/manager (e.g. a well-known mutual fund "
+    "family's share class), use that; "
+    "(5) otherwise, empty string -- never guess at random. "
+    "asset_type_source (which rule above produced asset_type: 'row', "
+    "'heading', 'total', 'inferred', or 'none' if asset_type is empty), "
     "current_value (the row's current/fair value in dollars, digits only, no "
     "$ sign or commas, as a plain number), "
     "units_or_shares (share/unit count if printed, else empty string), "
     "par_value (if printed, else empty string), "
     "cost (historical cost if printed, else empty string). "
     "Do NOT include subtotal rows, section-heading-only rows (e.g. a line that "
-    "just says \"Mutual Funds:\"), grand-total rows, or blank/filler rows. "
+    "just says \"Mutual Funds:\"), grand-total rows, or blank/filler rows -- "
+    "use their text only to classify the holding rows as described above. "
     "If the page has no real holding rows, return an empty array. "
     "Return ONLY the JSON array, no other text."
 )
@@ -131,8 +153,16 @@ def _process_page(pdf_path: str, pdf_stem: str, page_num: int, provider: str, mo
         for field in _SCHEMA_FIELDS:
             val = llm_row.get(field, "")
             row[field] = "" if val is None else str(val).strip()
-        if row["asset_type"] not in _KNOWN_ASSET_TYPES:
+        if row["asset_type"] and row["asset_type"] not in _KNOWN_ASSET_TYPES:
+            # Log instead of silently discarding -- a near-miss label (wrong
+            # case, a synonym) is a prompt/model issue worth seeing, not a
+            # value to lose without a trace.
+            print(f"    [llm_row_extract] page {page_num} row {row_idx}: "
+                  f"dropping out-of-vocabulary asset_type {row['asset_type']!r}")
             row["asset_type"] = ""
+            row["asset_type_source"] = "none"
+        elif row["asset_type_source"] not in _KNOWN_ASSET_TYPE_SOURCES:
+            row["asset_type_source"] = "inferred" if row["asset_type"] else "none"
         row["page_number"] = page_num
         row["row_id"] = row_idx
         mapped_rows.append(row)
