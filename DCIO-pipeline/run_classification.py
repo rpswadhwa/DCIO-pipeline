@@ -8,8 +8,16 @@ Flow:
   2. Run asset_class SQL     (s3://retirementinsights-reference/sqls/4updateassetmf.sql)
   3. Run asset_sub_class SQL (s3://retirementinsights-reference/sqls/5updatesubassetmf.sql)
   4. Merge classifications back into plan_mf_history_v3
+
+By default this sweeps every PENDING_AI / unmatched row in plan_mf_history_v3
+(what run.sh does after a full batch run). To scope a run to specific plans
+(e.g. a one-off manual single-plan reload that bypassed run.sh), set ACK_IDS
+to a comma-separated list of ack_ids before invoking:
+
+    ACK_IDS=20251015190301NAL0010875202001 python3.11 run_classification.py
 """
 import boto3
+import os
 import time
 import sys
 
@@ -21,8 +29,19 @@ SQL_ASSET      = 's3://retirementinsights-reference/sqls/4updateassetmf.sql'
 SQL_SUB_ASSET  = 's3://retirementinsights-reference/sqls/5updatesubassetmf.sql'
 POLL_INTERVAL  = 3  # seconds between status checks
 
+ACK_IDS = [a.strip() for a in os.environ.get('ACK_IDS', '').split(',') if a.strip()]
+
 athena = boto3.client('athena', region_name='us-east-1')
 s3     = boto3.client('s3',     region_name='us-east-1')
+
+
+def ack_filter(alias: str = '') -> str:
+    """Returns an 'AND [alias.]ack_id IN (...)' clause, or '' when ACK_IDS is empty."""
+    if not ACK_IDS:
+        return ''
+    quoted = ', '.join("'" + a.replace("'", "''") + "'" for a in ACK_IDS)
+    prefix = f'{alias}.' if alias else ''
+    return f'AND {prefix}ack_id IN ({quoted})'
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -80,11 +99,12 @@ FROM (
           FROM fund_intelligence_mapping_mf f
           WHERE lower(trim(f.raw_entity_name)) = lower(trim(h.raw_entity_name))
       )
+      {ack_filter('h')}
 )
 WHERE rn = 1
 """
 
-WRITEBACK_SQL = """
+WRITEBACK_SQL = f"""
 MERGE INTO default.plan_mf_history_v3 h
 USING (
     SELECT 
@@ -111,8 +131,8 @@ USING (
     WHERE rn = 1
 ) m
 ON (trim(upper(h.raw_entity_name)) = m.k)
-WHEN MATCHED THEN
-    UPDATE SET 
+WHEN MATCHED {ack_filter('h')} THEN
+    UPDATE SET
         asset_class = m.asset_class,
         asset_sub_class = m.asset_sub_class,
         is_passive = m.is_passive
@@ -122,7 +142,7 @@ DROP_STAGING_SQL = """
 DROP TABLE IF EXISTS mf_entity_sponsor_map_staging
 """
 
-CREATE_STAGING_SQL = """
+CREATE_STAGING_SQL = f"""
 CREATE TABLE mf_entity_sponsor_map_staging AS
 WITH entities AS (
     SELECT DISTINCT
@@ -141,6 +161,7 @@ WITH entities AS (
     FROM plan_mf_history_v3
     WHERE coalesce(needs_sponsor_cleaning_flag, true) = true
       AND raw_entity_name IS NOT NULL
+      {ack_filter()}
 ),
 
 matches AS (
@@ -204,7 +225,7 @@ FROM ranked
 WHERE rn = 1
 """
 
-MERGE_SPONSOR_SQL = """
+MERGE_SPONSOR_SQL = f"""
 MERGE INTO plan_mf_history_v3 t
 USING mf_entity_sponsor_map_staging s
 ON trim(
@@ -219,7 +240,7 @@ ON trim(
        )
    ) = s.entity_norm
 
-WHEN MATCHED THEN UPDATE SET
+WHEN MATCHED {ack_filter('t')} THEN UPDATE SET
     normalized_sponsor_name = s.normalized_sponsor_name,
     sponsor_match_status = s.sponsor_match_status,
     sponsor_match_confidence = s.sponsor_match_confidence,
@@ -246,7 +267,7 @@ TBLPROPERTIES (
 )
 """
 
-INSERT_AUDIT_SQL = """
+INSERT_AUDIT_SQL = f"""
 INSERT INTO mf_sponsor_match_audit
 SELECT
     CAST(current_timestamp AS timestamp) AS audit_run_at,
@@ -256,6 +277,7 @@ SELECT
         FROM plan_mf_history_v3
         WHERE coalesce(needs_sponsor_cleaning_flag, true) = true
           AND raw_entity_name IS NOT NULL
+          {ack_filter()}
     ) AS total_rows_needing_cleaning,
 
     (
@@ -278,6 +300,7 @@ SELECT
                  ' '
                )
              ) = s.entity_norm
+        {ack_filter('t')}
     ) AS updated_rows_estimate,
 
     (
@@ -285,6 +308,7 @@ SELECT
         FROM plan_mf_history_v3
         WHERE coalesce(needs_sponsor_cleaning_flag, true) = true
           AND raw_entity_name IS NOT NULL
+          {ack_filter()}
     ) AS unmatched_rows
 """
 
@@ -293,6 +317,10 @@ SELECT
 def main():
     print("=" * 60)
     print("ASSET CLASS CLASSIFICATION PIPELINE")
+    if ACK_IDS:
+        print(f"Scope: {len(ACK_IDS)} ack_id(s) -> {ACK_IDS}")
+    else:
+        print("Scope: FULL TABLE SWEEP (ACK_IDS not set)")
     print("=" * 60)
 
     run_query(SEED_SQL,                        "Step 1: Seed fund_intelligence_mapping_mf")
