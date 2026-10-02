@@ -234,6 +234,21 @@ def main():
     )
     use_post_llm = read_env("USE_POST_LLM", "1") != "0"
     use_ocr = read_env("USE_OCR", "0") == "1"
+    # Full-row LLM extraction (src/llm_row_extract.py): bypasses Camelot/text-regex
+    # row parsing entirely and has the LLM read each identified page's raw text and
+    # return structured rows directly, instead of just normalizing column headers
+    # (that's what the `use_llm`/USE_LLM flag above does). DEFAULT OFF -- opt-in
+    # exception path for a capped batch test, mirrors the SECTION_TYPING=1 pattern.
+    # Page IDENTIFICATION (classify_pages_text/expand_continuation_pages below) is
+    # unchanged either way; only row-level VALUE extraction switches to the LLM.
+    llm_full_extract = read_env("LLM_FULL_EXTRACT", "0") == "1"
+    llm_full_extract_limit = int(read_env("LLM_FULL_EXTRACT_LIMIT", "100"))
+    llm_full_extract_provider = read_env("LLM_FULL_EXTRACT_PROVIDER", "gemini")
+    llm_full_extract_model = read_env(
+        "LLM_FULL_EXTRACT_MODEL",
+        "gemini-2.5-flash" if llm_full_extract_provider == "gemini" else "gpt-4.1-mini",
+    )
+    llm_full_extract_count = 0
     llm_batch_size = int(read_env("POST_LLM_BATCH_SIZE", "10"))
     llm_max_batches_raw = read_env("POST_LLM_MAX_BATCHES", "")
     llm_max_batches = int(llm_max_batches_raw) if llm_max_batches_raw else None
@@ -394,14 +409,26 @@ def main():
             supp_nums = expanded_supp_nums
             print(f"    Supplemental pages: {supp_nums}")
 
-            plan_info, page_data = extract_tables_and_map(
-                pdf_path,
-                supp_nums,
-                schema_yml,
-                model,
-                use_llm=use_llm,
-                provider=llm_provider,
-            )
+            if llm_full_extract and supp_nums and llm_full_extract_count < llm_full_extract_limit:
+                llm_full_extract_count += 1
+                print(f"    [LLM_FULL_EXTRACT {llm_full_extract_count}/{llm_full_extract_limit}] "
+                      f"extracting rows via {llm_full_extract_provider}/{llm_full_extract_model}")
+                from .llm_row_extract import extract_investments_via_llm
+                plan_info = {}
+                page_data = extract_investments_via_llm(
+                    pdf_path, supp_nums,
+                    provider=llm_full_extract_provider,
+                    model=llm_full_extract_model,
+                )
+            else:
+                plan_info, page_data = extract_tables_and_map(
+                    pdf_path,
+                    supp_nums,
+                    schema_yml,
+                    model,
+                    use_llm=use_llm,
+                    provider=llm_provider,
+                )
             if plan_info:
                 plan_info_map[pdf_stem] = plan_info
 
