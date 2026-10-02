@@ -307,7 +307,13 @@ _DEDUP_STOP = {
 
 
 def _dd_clean(s):
-    return _re.sub(r'\s+', ' ', _re.sub(r'[^a-z0-9 ]', ' ', str(s or '').lower())).strip()
+    s = str(s or '').lower()
+    # Fuse a stray punctuation/encoding-glitch char sitting BETWEEN two letters/digits
+    # (a hyphenated compound like "Mid-Cap", a garbled apostrophe) instead of letting it
+    # split one word into two tokens -- otherwise "Mid-Cap" (-> mid, cap) and "MidCap"
+    # (-> midcap) fail to token-match even though they're the same fund name.
+    s = _re.sub(r'(?<=[a-z0-9])[^a-z0-9\s](?=[a-z0-9])', '', s)
+    return _re.sub(r'\s+', ' ', _re.sub(r'[^a-z0-9 ]', ' ', s)).strip()
 
 
 def _dd_norm(s):
