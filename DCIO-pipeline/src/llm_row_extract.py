@@ -17,6 +17,7 @@ runs unmodified.
 """
 import json
 import re
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 import pdfplumber
@@ -24,6 +25,8 @@ import pdfplumber
 from .llm_provider import call_llm_json
 
 _MAX_WORKERS = 6
+_MAX_ATTEMPTS = 3
+_RETRY_BACKOFF_SEC = [3, 8]
 
 _SCHEMA_FIELDS = [
     "issuer_name", "investment_description", "asset_type",
@@ -103,10 +106,22 @@ def _process_page(pdf_path: str, pdf_stem: str, page_num: int, provider: str, mo
         return empty
 
     prompt = {"instructions": _PROMPT_INSTRUCTIONS, "page_text": page_text}
-    try:
-        raw = call_llm_json(prompt, provider=provider, model=model)
-    except Exception as exc:
-        print(f"    [llm_row_extract] page {page_num}: LLM call failed: {exc}")
+    raw = None
+    last_exc = None
+    for attempt in range(_MAX_ATTEMPTS):
+        try:
+            raw = call_llm_json(prompt, provider=provider, model=model)
+            break
+        except Exception as exc:
+            last_exc = exc
+            if attempt < _MAX_ATTEMPTS - 1:
+                wait_sec = _RETRY_BACKOFF_SEC[attempt]
+                print(f"    [llm_row_extract] page {page_num}: attempt {attempt + 1} failed "
+                      f"({exc}), retrying in {wait_sec}s...")
+                time.sleep(wait_sec)
+    if raw is None:
+        print(f"    [llm_row_extract] page {page_num}: LLM call failed after "
+              f"{_MAX_ATTEMPTS} attempts: {last_exc}")
         return empty
 
     llm_rows = _parse_llm_rows(raw)

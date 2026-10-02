@@ -249,6 +249,12 @@ def main():
         "gemini-2.5-flash" if llm_full_extract_provider == "gemini" else "gpt-4.1-mini",
     )
     llm_full_extract_count = 0
+
+    from .page_overrides import load_page_overrides
+    page_overrides = load_page_overrides(read_env("LLM_PAGE_OVERRIDES_FILE", "llm_page_overrides.json"))
+    if page_overrides:
+        print(f"  Loaded manual page overrides for {len(page_overrides)} plan(s)")
+
     llm_batch_size = int(read_env("POST_LLM_BATCH_SIZE", "10"))
     llm_max_batches_raw = read_env("POST_LLM_MAX_BATCHES", "")
     llm_max_batches = int(llm_max_batches_raw) if llm_max_batches_raw else None
@@ -401,13 +407,17 @@ def main():
             classified = classify_pages_text(pdf_path, keywords_yml)
             pages.extend(classified)
 
-            supp_nums = [p["page_number"] for p in classified if p.get("is_supplemental") == 1]
-            expanded_supp_nums = expand_continuation_pages(pdf_path, supp_nums)
-            if expanded_supp_nums != supp_nums:
-                added_pages = [p for p in expanded_supp_nums if p not in supp_nums]
-                print(f"    Continuation pages added: {added_pages}")
-            supp_nums = expanded_supp_nums
-            print(f"    Supplemental pages: {supp_nums}")
+            if pdf_stem in page_overrides:
+                supp_nums = page_overrides[pdf_stem]
+                print(f"    Manual page override active, skipping auto-detection: {supp_nums}")
+            else:
+                supp_nums = [p["page_number"] for p in classified if p.get("is_supplemental") == 1]
+                expanded_supp_nums = expand_continuation_pages(pdf_path, supp_nums)
+                if expanded_supp_nums != supp_nums:
+                    added_pages = [p for p in expanded_supp_nums if p not in supp_nums]
+                    print(f"    Continuation pages added: {added_pages}")
+                supp_nums = expanded_supp_nums
+                print(f"    Supplemental pages: {supp_nums}")
 
             if llm_full_extract and supp_nums and llm_full_extract_count < llm_full_extract_limit:
                 llm_full_extract_count += 1

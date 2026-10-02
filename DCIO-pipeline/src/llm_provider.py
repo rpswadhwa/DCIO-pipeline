@@ -54,7 +54,7 @@ def _call_gemini(prompt: dict, model: str) -> str:
         ],
         "generationConfig": {"responseMimeType": "application/json"},
     }
-    resp = httpx.post(url, params={"key": api_key}, json=body, timeout=60.0)
+    resp = httpx.post(url, params={"key": api_key}, json=body, timeout=90.0)
     resp.raise_for_status()
     data = resp.json()
     return data["candidates"][0]["content"]["parts"][0]["text"]
