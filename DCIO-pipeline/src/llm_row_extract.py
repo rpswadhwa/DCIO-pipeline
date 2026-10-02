@@ -17,10 +17,13 @@ runs unmodified.
 """
 import json
 import re
+from concurrent.futures import ThreadPoolExecutor
 
 import pdfplumber
 
 from .llm_provider import call_llm_json
+
+_MAX_WORKERS = 6
 
 _SCHEMA_FIELDS = [
     "issuer_name", "investment_description", "asset_type",
@@ -83,53 +86,66 @@ def _parse_llm_rows(raw_text: str) -> list:
     return [r for r in data if isinstance(r, dict)]
 
 
+def _process_page(pdf_path: str, pdf_stem: str, page_num: int, provider: str, model: str) -> dict:
+    empty = {
+        "pdf": pdf_path, "pdf_stem": pdf_stem, "page_number": page_num,
+        "mapped_rows": [], "ocr_cells": [], "normalized_path": pdf_path,
+    }
+
+    page_text = _get_page_text(pdf_path, page_num)
+    if not page_text.strip():
+        return empty
+
+    prompt = {"instructions": _PROMPT_INSTRUCTIONS, "page_text": page_text}
+    try:
+        raw = call_llm_json(prompt, provider=provider, model=model)
+    except Exception as exc:
+        print(f"    [llm_row_extract] page {page_num}: LLM call failed: {exc}")
+        return empty
+
+    llm_rows = _parse_llm_rows(raw)
+    mapped_rows = []
+    for row_idx, llm_row in enumerate(llm_rows, start=1):
+        row = {f: "" for f in _SCHEMA_FIELDS}
+        for field in _SCHEMA_FIELDS:
+            val = llm_row.get(field, "")
+            row[field] = "" if val is None else str(val).strip()
+        if row["asset_type"] not in _KNOWN_ASSET_TYPES:
+            row["asset_type"] = ""
+        row["page_number"] = page_num
+        row["row_id"] = row_idx
+        mapped_rows.append(row)
+
+    print(f"    [llm_row_extract] page {page_num}: {len(mapped_rows)} row(s) via {provider}/{model}")
+    return {
+        "pdf": pdf_path, "pdf_stem": pdf_stem, "page_number": page_num,
+        "mapped_rows": mapped_rows, "ocr_cells": [], "normalized_path": pdf_path,
+    }
+
+
 def extract_investments_via_llm(
     pdf_path: str,
     page_nums: list,
     provider: str = "gemini",
     model: str = "gemini-2.5-flash",
 ) -> list:
-    """Returns a page_data list matching extract_tables_and_map()'s contract."""
+    """Returns a page_data list matching extract_tables_and_map()'s contract.
+
+    Pages are sent to the LLM concurrently (each page is an independent prompt/
+    response, no shared state) since a page-by-page sequential loop made even a
+    3-PDF smoke test run past a 30-minute SSM command timeout -- each call is a
+    real network round trip, and a multi-page schedule has many of them.
+    """
     pdf_stem = pdf_path.split("/")[-1].rsplit(".", 1)[0].replace("\\", "/").split("/")[-1]
-    result = []
 
-    for page_num in page_nums:
-        page_text = _get_page_text(pdf_path, page_num)
-        if not page_text.strip():
-            result.append({
-                "pdf": pdf_path, "pdf_stem": pdf_stem, "page_number": page_num,
-                "mapped_rows": [], "ocr_cells": [], "normalized_path": pdf_path,
-            })
-            continue
+    if len(page_nums) <= 1:
+        return [_process_page(pdf_path, pdf_stem, p, provider, model) for p in page_nums]
 
-        prompt = {"instructions": _PROMPT_INSTRUCTIONS, "page_text": page_text}
-        try:
-            raw = call_llm_json(prompt, provider=provider, model=model)
-        except Exception as exc:
-            print(f"    [llm_row_extract] page {page_num}: LLM call failed: {exc}")
-            result.append({
-                "pdf": pdf_path, "pdf_stem": pdf_stem, "page_number": page_num,
-                "mapped_rows": [], "ocr_cells": [], "normalized_path": pdf_path,
-            })
-            continue
+    with ThreadPoolExecutor(max_workers=min(_MAX_WORKERS, len(page_nums))) as pool:
+        futures = {
+            pool.submit(_process_page, pdf_path, pdf_stem, p, provider, model): p
+            for p in page_nums
+        }
+        by_page = {futures[fut]: fut.result() for fut in futures}
 
-        llm_rows = _parse_llm_rows(raw)
-        mapped_rows = []
-        for row_idx, llm_row in enumerate(llm_rows, start=1):
-            row = {f: "" for f in _SCHEMA_FIELDS}
-            for field in _SCHEMA_FIELDS:
-                val = llm_row.get(field, "")
-                row[field] = "" if val is None else str(val).strip()
-            if row["asset_type"] not in _KNOWN_ASSET_TYPES:
-                row["asset_type"] = ""
-            row["page_number"] = page_num
-            row["row_id"] = row_idx
-            mapped_rows.append(row)
-
-        print(f"    [llm_row_extract] page {page_num}: {len(mapped_rows)} row(s) via {provider}/{model}")
-        result.append({
-            "pdf": pdf_path, "pdf_stem": pdf_stem, "page_number": page_num,
-            "mapped_rows": mapped_rows, "ocr_cells": [], "normalized_path": pdf_path,
-        })
-
-    return result
+    return [by_page[p] for p in page_nums]
