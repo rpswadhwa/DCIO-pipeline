@@ -64,12 +64,13 @@ print(f"Wrote override for {ack_id}: {pages}")
 ' || fail "failed to write llm_page_overrides.json"
 
 echo "[STEP 3] Running pipeline scoped to ${ACK_ID} with LLM_FULL_EXTRACT=1"
+# run_pipeline.py itself now runs classification (run_classification.py scoped to
+# the override ack_id) as its own Step 12 whenever LLM_PAGE_OVERRIDES_FILE is set,
+# so it can't be silently skipped if this script's invocation changes -- no
+# separate classification step needed here anymore.
 SYNC_S3_INPUTS=0 \
 LLM_PAGE_OVERRIDES_FILE=llm_page_overrides.json \
 LLM_FULL_EXTRACT=1 \
 PYTHONPATH=. python3.11 -m src.run_pipeline || fail "run_pipeline.py failed"
-
-echo "[STEP 4] Running classification scoped to ACK_IDS=${ACK_ID}"
-ACK_IDS="$ACK_ID" PYTHONPATH=. python3.11 run_classification.py || fail "run_classification.py failed"
 
 echo "PROCESS_PAGE_REQUEST: SUCCESS ack_id=${ACK_ID}"

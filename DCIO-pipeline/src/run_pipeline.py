@@ -16,7 +16,7 @@ import pytesseract
 from dotenv import load_dotenv
 
 from .classify_pages import classify_pages
-from .data_cleaner import clean_investment_data
+from .data_cleaner import clean_investment_data, parse_investment_row
 from .detect_tables import detect_tables
 from .ingest import ingest_pdfs, pdf_to_images
 from .llm_map import map_rows_with_llm
@@ -648,6 +648,20 @@ def main():
                         for page in ocr_supp:
                             for row in page.get("mapped_rows", []):
                                 row["extraction_method"] = "ocr"
+                                # OCR pages have no dedicated "Type" column (the asset-type
+                                # label sits inline in the identity/description cell), so
+                                # map_rows_with_llm's column mapping never populates
+                                # asset_type -- every OCR row comes back blank otherwise.
+                                # Mirrors the same per-row type inference the Camelot/text
+                                # path already applies (text_extract.py's parse_investment_row
+                                # calls). Confirmed needed on Toyota (ack_id
+                                # 20251008114247NAL0009333472001): without this, OCR
+                                # correctly separates "Commingled fund" from the dollar
+                                # value but nothing ever reads that label into asset_type.
+                                parsed = parse_investment_row(row)
+                                row["issuer_name"] = parsed["issuer_name"]
+                                row["investment_description"] = parsed["investment_description"]
+                                row["asset_type"] = parsed["asset_type"]
                         ocr_new_rows = _collect_extracted_rows(ocr_supp, plan_info_map, plan_year)
                         print(f"      OCR extracted {len(ocr_new_rows)} rows for {stem}")
 
@@ -782,6 +796,29 @@ def main():
             print("\n[STEP 11] MF enrichment skipped (ENRICH_MF_ENABLED=0)")
     else:
         print("\n[STEP 10] Validation skipped (VALIDATION_ENABLED not set)")
+
+    if page_overrides:
+        # Manual single-plan reprocess (e.g. via process_page_request.sh). Step 11
+        # above only seeds PENDING_AI placeholders and copies ALREADY-classified
+        # mappings -- it never resolves PENDING_AI into real values. That requires
+        # the separate run_classification.py script (regex-based asset_class/
+        # asset_sub_class SQL + sponsor matching), which used to be a second shell
+        # step callers had to remember to run. Triggering it here instead, scoped
+        # to the override ack_id(s), means a manual run can never silently skip it
+        # (e.g. J&J entity 1, 2026-10-02: the standalone step was skipped, leaving
+        # 2 of 8 rows stuck at asset_class='PENDING_AI').
+        print("\n[STEP 12] Classification (auto-triggered for manually-overridden plan(s))")
+        ack_ids_csv = ",".join(page_overrides.keys())
+        repo_root = os.path.join(os.path.dirname(__file__), "..")
+        result = subprocess.run(
+            ["python3.11", "run_classification.py"],
+            cwd=repo_root,
+            env={**os.environ, "ACK_IDS": ack_ids_csv},
+        )
+        if result.returncode != 0:
+            print(f"  ⚠ Classification step failed (exit {result.returncode}) for {ack_ids_csv}")
+        else:
+            print(f"  ✓ Classification complete for {ack_ids_csv}")
 
 
     if read_env("STAGE_REPORT_ENABLED", "0") == "1":
