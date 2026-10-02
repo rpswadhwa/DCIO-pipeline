@@ -114,6 +114,20 @@ Findings below are root-caused but intentionally deferred (not fixed yet) per
       2026-08-26) — see `plan_notes.md`. Affects how "capture %" should be
       computed for TIAA-CREF-style plans generally, independent of the
       1-row-survivor bug (#23) also present on that plan.
+- [x] **DONE (2026-10-01, committed `df1e3ace`, deployed to EC2)** Removed
+      the unguarded `_infer_first_section_asset_type` keyword-scanning
+      heuristic from `text_extract.py` entirely (per user: "this page
+      searching can create a lot of issues") — it was wrongly detecting a
+      fund's own name as a section heading on headerless schedules (e.g.
+      FedEx), poisoning `inherited_asset_type` and disabling the correct
+      trailing "Total <category>" backfill. See finding #33 below for the
+      remaining, separate, still-unfixed FedEx bugs.
+- [ ] Fix three distinct Camelot extraction bugs found on UPenn's
+      multi-page CREF/Vanguard investment table (row-split merge, column-
+      shift verification on reused column maps, table-boundary cutoff) —
+      see finding #34 below for full root-cause detail. Also trace the
+      downstream filter that's cutting prod's result down to 8 rows/$65.6M,
+      far below even this broken raw extraction.
 
 ---
 
@@ -1224,40 +1238,72 @@ exists yet to queue a reload against.
 
 ---
 
-## 26. Johnson & Johnson (second ack_id) — same composite Master Trust direct-securities format as finding #13, not yet root-caused in detail
+## 26. Johnson & Johnson Pension and Savings Plan Master Trust — root cause found (timeout + parser-quality gap on a 243-page composite schedule), like Toyota: needs real build work, not a quick fix
 
-- **Plan/Sponsor**: JOHNSON AND JOHNSON
+- **Plan/Sponsor**: JOHNSON AND JOHNSON PENSION AND SAVINGS PLAN MASTER TRUST
+  (JOHNSON AND JOHNSON)
 - **ack_id**: `20251015121015NAL0002381763001`
-- **Certified**: `amt_mutual_funds` = $2,227,385,856
+- **Certified**: `amt_mutual_funds` = $2,227,385,856.00 — **Staged**: $0.00
+  (0% capture; the one row in `plan_mf_history_v3`/`plan_holdings_staging` is
+  a garbage `"ASSET CATEGORY NOT FOUND"` / $0.00 placeholder line, not a real
+  fund)
 
-Not yet opened/inspected in depth — parked per user request (2026-08-30) to
-come back later, "very different format." Quick look at
-`plan_holdings_staging` (58 rows) shows the same fingerprint as finding #13
-(J&J, ack_id `20251015121024NAL0002265923001` — near-identical ack_id
-timestamp, same sponsor): raw entity names are bare internal fund codes
-(`JJDE`, `JJBE`, `JJCA`, `JJDF`, `JJDB`, `JJ7F`, repeated dozens of times
-across rows ranging ~$85K–$88M, mostly typed `common stock`), plus ~15 rows
-with real private-fund names (`WHITEHORSE LIQUIDITY PART V`, `PENNYBACKER
-VI LP`, `AG REALTY VALUE FUND XI`, `MC CREDIT FUND IV SM LP`, etc.) also
-typed `common stock` — reads like a Master Trust composite schedule mixing
-direct fixed-income/PE/real-estate positions under internal fund codes,
-the same general shape as #13, not a standard mutual-fund menu. One
-`"ASSET CATEGORY NOT FOUND"` / $0.00 garbage row and one State Street Short
-Term Investment Fund row whose value (`2030.00`) looks like a
-misparsed date/unit fragment, not a dollar amount — same pattern seen
-elsewhere (Wilbur-Ellis `docs/rerun_queue.md` entry, finding-#6-style
-mid-number corruption).
+Opened the real source PDF (243 pages). It's a composite filing bundling
+three internal sub-plan segments under one ack_id: "JJ4K" (pages 1-2,
+small), "JJ2K" (pages 3-226, 224 pages — the bulk of the schedule, a
+Schedule H,4i "SCHEDULE OF ASSETS (HELD AT END OF YEAR)" with columns
+`IDENTITY OF ISSUER / DESCRIPTION OF INVESTMENT / RATE / MAT DATE / FUND
+SHARES-PAR / COST / CURRENT VALUE`, two text lines per holding, no ruling
+lines), then "JJ2K"/"JJ3C"/"JJ4K" Schedule H,4j reportable-transactions
+pages (228-243, not asset holdings). Content is overwhelmingly direct
+securities — FX cash, agency MBS, corporate bonds, international equities,
+private-equity/LP positions (several written to $0.00 against nonzero
+cost) — same general shape as finding #13.
 
-`plan_mf_history_v3` has only **1 row** for this ack_id — the same garbage
-`"ASSET CATEGORY NOT FOUND"` row — nothing else graduated from staging.
+**Confirmed real money, not a DB/DC scope mismatch**: page 225/226 carries
+a dedicated "REGISTERED INVESTMENT COMPANY" section — 8 named mutual funds
+(PIMCO FDS Short Term Fltg NAV, Long Duration Corp Bd Portfolio, Barrow
+Hanley ACWI, Artisan International Value, etc.) summing to
+**$2,227,385,855.85**, matching certified `amt_mutual_funds`
+($2,227,385,856.00) to the penny. The dollars are real and literally
+present as named mutual-fund line items; the pipeline just never captures
+them.
 
-**Not yet root-caused**: haven't opened the source PDF or compared its
-actual page layout against #13's "Security ID / Security Description /
-Shares / Cost / Market Value" composite format, or against the
-Howmet/Lumen `_composite_participation_schedule_pages` detector. Given the
-shared "JJ"-prefixed fund codes and near-identical ack_id timestamp to
-#13, this is very likely the same underlying filing family/format —
-worth investigating both together rather than as separate one-offs.
+**Root cause, confirmed by running the real production `extract_tables_and_map()`
+against the real PDF directly (no mock)** — two compounding problems:
+
+1. **Timeout.** Real end-to-end extraction took **316.7 seconds** —
+   longer than the pipeline's `PER_PDF_TIMEOUT_SEC=300` default
+   (`src/run_pipeline.py`). Camelot's stream-mode table detector is tried
+   (and fails) on every one of the 242 supplemental pages before falling
+   back to the text parser; with 224 consecutive schedule pages that adds
+   up past the timeout. In production this file almost certainly gets
+   killed before it ever reaches page 225, where the mutual-fund section
+   lives near the end of the schedule.
+2. **Parser quality, independent of the timeout.** Even letting it run to
+   completion, the generic text-fallback row parser mishandles this
+   filing's two-line-per-security layout (fund name on one line, then a
+   fund-code/CUSIP + repeated numbers on the next — same family as
+   Northern Trust/MassMutual's layout, which both needed dedicated
+   parsers). `issuer_name` ends up as duplicated numeric strings (e.g.
+   `"176,749,352.66 176,749,352.66"`, `"JJDP 8611239B5 161,989,320.38
+   161,989,320.38"`) instead of real security/fund names, and `asset_type`
+   is inconsistently assigned (a Common/Collective Trust rollup total was
+   seen mislabeled "Mutual Fund"). The generic parser was never built for
+   this shape.
+
+**Status**: root-caused in detail, same family as finding #13 (likely
+shares the same underlying filing format as the other J&J ack_id) — but
+**unlike IBM (finding #31), which has a queued fix just waiting on a prod
+run, this one has no fix yet.** It's in the Toyota bucket (finding #30):
+needs real build work before it can be queued — a timeout increase (or
+chunked processing) for oversized composite filings, plus a dedicated
+two-line-per-security parser purpose-built for this layout, mirroring the
+Northern Trust/MassMutual pattern but scoped to this "(A)(B) IDENTITY OF
+ISSUER ... FUND SHARES/PAR (D) COST VALUE" format with its "ASSET
+CATEGORY" rollup subtotal pages as a validation anchor. Worth tackling
+together with finding #13, since both J&J ack_ids appear to share this
+format.
 
 ---
 
@@ -1743,3 +1789,164 @@ all.
 [[feedback_dcio_open_pdf_first]], opening the actual filing PDF is the
 first step whenever this is picked back up. No fix exists yet to queue a
 reload against.
+
+---
+
+## 33. FedEx — wrongful-section-guess fix DONE and deployed; two separate page-21 bugs remain, parked
+
+- **Plan**: FedEx (ack_id `20251014155850NAL0001653379001`)
+- Found at 3 S3 locations: `s3://retirementinsights-bronze/filings_5500_pdf/
+  year=2026/batch_date={2026-06-28, 2026-08-23-undercapture130,
+  2026-09-29-undercapture-validate15}/20251014155850NAL0001653379001.pdf`
+
+**Fixed this session (2026-10-01)**: page 19's trailing "Total mutual funds
+1,707,829" line wasn't retroactively classifying its preceding 10 Vanguard
+mutual-fund rows. Root cause: `_infer_first_section_asset_type()` (an
+unguarded keyword scan of the first 40 lines of a page) was mis-detecting a
+fund's own name as a section heading on this headerless schedule (no
+leading section headings at all, only trailing "Total <category>" lines),
+poisoning `inherited_asset_type` and disabling the page's own correct
+trailing-total backfill in `extract_text_based_investments`. Per user
+decision ("i am wondering why we would even have that logic... what do you
+think?"), removed the heuristic entirely rather than patching it — it was
+used in exactly one place
+(`continuation_asset_types[p] = last_seen_section_asset_type or
+active_structural_asset_type`), now trusts only the confirmed
+`last_seen_section_asset_type` signal. Verified against the real PDF: all
+10 mutual fund rows now sum to exactly $1,707,829,000, matching the PDF's
+own total to the dollar. Committed `df1e3ace` (`src/text_extract.py` only),
+deployed to EC2 via `deploy_to_ec2.sh --allow-dirty`, MD5-verified
+byte-identical across all 32 shipped files.
+
+**Still unfixed, NOT requested/touched this session — parking for later:**
+
+1. **Page 21: issuer_name collapses to generic "The Vanguard Group"** for
+   multiple distinct funds via `handle_split_rows`/`parse_investment_row`
+   in `src/data_cleaner.py` (not yet read/investigated this session) —
+   real individual fund names are being lost in favor of the parent
+   manager's name.
+2. **Phantom $5,291,740,000 grand-total row** surviving as if it were a
+   real investment line (same general "Total line kept as a fake row"
+   class of bug confirmed independently on UPenn, finding #34 below).
+3. **"Participant loans" mistyped as `'Bond'`** asset_type.
+
+**Status**: item 1 fix is DONE/DEPLOYED. Items 2-3 are root-cause-level
+observations only, not yet investigated in detail or fixed — explicitly
+flagged to the user as separate, outstanding issues.
+
+---
+
+## 34. UPenn (403(b) Retirement Savings Plan) — three distinct Camelot bugs drop the bulk of a multi-page CREF/Vanguard table; downstream filter gap not yet traced
+
+- **Plan**: The University of Pennsylvania Health System 403(b) Retirement
+  Savings Plan
+- **ack_id**: `20251015190301NAL0010875202001`
+- Found at 5 S3 locations under `s3://retirementinsights-bronze/
+  filings_5500_pdf/year=2026/batch_date=.../20251015190301NAL0010875202001.pdf`
+  (e.g. `2026-10-02-upenn-saintgobain`)
+- **Prod result reported by user**: 8 rows, $65,621,073.00 — far below the
+  real schedule's actual holdings (confirmed real PDF "Total investments,
+  at fair value" line: $3,414,284,749)
+
+User transcribed the actual PDF page content (CREF accounts + ~22 Vanguard
+mutual fund rows) and asked why so much of it was missing from the captured
+8-row output. Page classification itself is correct — `classify_pages_text`
++ `expand_continuation_pages` correctly identify all 6 real schedule pages
+(1-indexed `[6, 23, 24, 25, 26, 27, 28]`), and the schedule's 3-physical-page
+block is duplicated verbatim elsewhere in the PDF (physical 0-indexed pages
+22-24 and 25-27 are character-for-character identical — same duplicate-page
+pattern already seen on FedEx).
+
+Running the real orchestrator (`extract_tables_and_map`, not a mocked/
+standalone call) and then dumping Camelot's raw per-cell table output
+directly (not the cleaned-up `mapped_rows`) pinpointed three independent,
+narrow bugs — nothing "stops," each one just silently loses a different
+slice of data:
+
+**Bug 1 — Camelot splits one logical row into two half-rows, and the
+named half gets discarded.** The single largest line item (CREF Stock
+Account, $38,258,155) is misread as two separate physical table rows:
+```
+row 5: ['*', '', '', '', '38,258,155']                                    <- value, no name
+row 6: ['', 'CREF Stock Account', 'Registered Investment Companies', '**', '']  <- name, no value
+```
+Downstream row processing correctly drops rows with no value (right call in
+general — most such rows are stray header/footer junk), which discards row
+6 (the named half) and keeps row 5 as a blank-identity $38M entry. Confirmed
+directly via `camelot.read_pdf(pdf_path, pages="23", flavor="stream")`
+raw cell dump — this is not a downstream classification bug, the name and
+value are genuinely split across two Camelot rows with no code path that
+re-merges a 2-cell/3-cell row pair like this (the existing
+`pending_single_cell_fragments` merge logic in `text_extract.py` only
+handles rows with exactly ONE non-empty cell, not this 2-vs-3 split).
+
+**Bug 2 — reusing a page's column map after a page-to-page column-count
+shift silently misreads the fund-name column.** The next page (the
+Vanguard continuation) has no repeated header row, so
+`_looks_like_headerless_continuation` (`text_extract.py:3484`) reuses the
+previous page's `column_map` verbatim after only
+`_verify_or_remap_value_column` (line 3485) — no equivalent verification
+exists for `issuer_name` or `investment_description` on this reuse path
+(contrast with the header-row branch above it, which calls both
+`_verify_or_remap_description_column` AND `_verify_or_remap_value_column`).
+The CREF page has 5 columns (it has a leading "*" footnote-marker column);
+the Vanguard continuation page has only 4 (no such column), so everything
+shifts one index left. Confirmed via raw Camelot dump — the continuation
+page's real data is a clean 4-column table (`fund name | "Mutual Funds" |
+"**" | value`), but the reused map still points `issuer_name` at index 1
+("Mutual Funds" literal) and `investment_description` at index 2 ("**"),
+while index 0 (the real fund name) is unmapped and never read. All ~20
+Vanguard rows' names are lost this way; dollar values survive intact
+because that column IS re-verified. The "Remapped current_value column 4 ->
+3" log line is `_verify_or_remap_value_column` correctly catching and
+fixing the value-column half of this same shift — only the name/description
+half of the fix is missing.
+
+**Bug 3 — Camelot's table-boundary detection stops early, never even
+attempting to read a trailing block.** A ~5-row, ~$215M block
+("Fidelity Management Trust Company" heading, Blackrock Total Return + 4
+more Vanguard funds) sits on the same physical page as the CREF section,
+after its subtotal lines, but before the page actually ends. Camelot
+returns only 1 table for this page and it ends at the CREF subtotal —
+the Fidelity block is never inside any table boundary Camelot detects, so
+it's invisible to extraction entirely (not blank, not misrouted — simply
+never attempted). Same general bug class as finding #25 (Fox Corporation)'s
+table-boundary truncation, confirmed independently on a second filer.
+
+**Also confirmed, compounding the above:** "Total" subtotal/grand-total
+lines (e.g. `Total 3,286,317,049`, `Total investments, at fair value
+3,414,284,749`) are surviving as if they were real investment rows instead
+of being dropped, and the whole 3-page block being duplicated in the source
+PDF means a naive full run double-counts everything on top of that — a
+direct `extract_tables_and_map`-only test (no cleanup/dedup stage) summed
+to a nonsensical $19,959,199,790 across all pages, vs. the PDF's real
+~$3.41B total.
+
+**Open/not yet traced**: prod's actual reported result (8 rows / $65.6M) is
+much *smaller* than even this raw, bug-ridden extraction — meaning some
+downstream cleanup/filtering stage (not yet examined this session, likely
+`post_extract_validator.py` or similar) is dropping most of what
+`extract_tables_and_map` does successfully capture, plausibly by discarding
+blank-`issuer_name`/blank-`asset_type` rows — which is exactly what bugs 1
+and 2 above produce. Confirming this would explain the full gap end-to-end,
+but has not been verified.
+
+**Fix candidates (none built yet)**:
+1. Extend the row-processing loop to detect and re-merge a split
+   name-half/value-half row pair (not just the existing single-cell-fragment
+   case) when two adjacent Camelot rows have non-overlapping non-empty
+   columns and no value-bearing row in between.
+2. Add an `issuer_name`/`investment_description` re-verification step
+   (mirroring `_verify_or_remap_value_column`) to the headerless-continuation
+   column-map-reuse path (`text_extract.py:3484-3488`), not just the value
+   column.
+3. Same general fix already proposed for finding #25 (Fox Corp): cross-check
+   Camelot's captured rows against the full page's own value-lines (via
+   `pdfplumber`) and retry/extend when the table stopped short of the page's
+   actual content — needs the same careful before/after regression testing
+   the user flagged for #25, since this is a shared code path.
+
+**Status**: all three bugs root-caused and confirmed against the real PDF
+(2026-10-01); none fixed yet. Downstream filter explaining prod's 8-row
+result not yet traced. Parked per user request to capture findings before
+continuing.
