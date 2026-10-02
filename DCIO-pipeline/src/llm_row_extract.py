@@ -22,6 +22,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pdfplumber
 
+from .asset_type_patterns import detect_asset_type
 from .llm_provider import call_llm_json
 
 _MAX_WORKERS = 6
@@ -78,6 +79,11 @@ _PROMPT_INSTRUCTIONS = (
     "(5) otherwise, empty string -- never guess at random. "
     "asset_type_source (which rule above produced asset_type: 'row', "
     "'heading', 'total', 'inferred', or 'none' if asset_type is empty), "
+    "section_heading (copy the EXACT, VERBATIM text of the section heading "
+    "line that applies to this row, per rule (2) above -- the nearest heading "
+    "line above the row, before any other heading/subtotal -- or empty string "
+    "if no such heading exists. Just copy the printed text, do not interpret "
+    "or classify it), "
     "current_value (the row's current/fair value in dollars, digits only, no "
     "$ sign or commas, as a plain number), "
     "units_or_shares (share/unit count if printed, else empty string), "
@@ -153,6 +159,23 @@ def _process_page(pdf_path: str, pdf_stem: str, page_num: int, provider: str, mo
         for field in _SCHEMA_FIELDS:
             val = llm_row.get(field, "")
             row[field] = "" if val is None else str(val).strip()
+
+        if not row["asset_type"]:
+            # Deterministic backfill: don't trust the LLM to apply the heading
+            # -> type inheritance rule itself (observed failing silently on
+            # most rows under a shared heading, e.g. J&J entity 1 p.225,
+            # 2026-10-02). Instead have it just copy the heading text
+            # (section_heading, not part of _SCHEMA_FIELDS) and run it through
+            # the same regex table enhance_asset_types.py/text_extract.py
+            # already rely on elsewhere in the pipeline.
+            section_heading = str(llm_row.get("section_heading") or "").strip()
+            detected = detect_asset_type(section_heading) if section_heading else ""
+            if not detected:
+                detected = detect_asset_type(f"{row['investment_description']} {row['issuer_name']}")
+            if detected and detected in _KNOWN_ASSET_TYPES:
+                row["asset_type"] = detected
+                row["asset_type_source"] = "heading" if section_heading else "row"
+
         if row["asset_type"] and row["asset_type"] not in _KNOWN_ASSET_TYPES:
             # Log instead of silently discarding -- a near-miss label (wrong
             # case, a synonym) is a prompt/model issue worth seeing, not a
