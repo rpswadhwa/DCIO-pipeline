@@ -23,6 +23,7 @@ DEPLOY_PATHS=(
   "DCIO-pipeline/src"
   "DCIO-pipeline/config"
   "DCIO-pipeline/run.sh"
+  "DCIO-pipeline/process_page_request.sh"
   "DCIO-pipeline/run_classification.py"
   "DCIO-pipeline/cleanup_investment_names.py"
   "DCIO-pipeline/llm_enhance_investments.py"
