@@ -2505,28 +2505,6 @@ def _looks_like_structural_investment_continuation(text: str) -> bool:
     return issuer_like >= 3 and values >= 3
 
 
-
-def _infer_first_section_asset_type(text: str) -> str:
-    """Infer the first asset section heading on a structural investment schedule page."""
-    section_map = [
-        (r'\bmutual\s+funds?\b', 'Mutual Fund'),
-        (r'\bregistered\s+investment\s+compan(?:y|ies)\b', 'Mutual Fund'),
-        (r'\bcommon/?collective\s+trusts?\b|\bcollective\s+investment\s+funds?\b', 'Common/Collective Trust Fund'),
-        (r'\bguaranteed\s+investment\s+contracts?\b', 'Guaranteed Investment Contract'),
-        (r'\bself[- ]directed\s+brokerage\s+accounts?\b', 'Self-Directed Brokerage Account'),
-        (r'\bpooled\s+separate\s+(?:investment\s+)?accounts?\b', 'Separate Account'),
-        (r'\bcollective\s+funds?\b', 'Commingled Fund'),
-        (r'\bmoney\s+market\s+funds?\b|\bmmrk\b', 'Money Market Fund'),
-        (r'\bvariable\s+annuit(?:y|ies)\b', 'Variable Annuity Contract'),
-        (r'\bcommon\s+stocks?\b', 'Employer Stock'),
-    ]
-    for line in (text or '').splitlines()[:40]:
-        clean = normalize_whitespace(line)
-        for pattern, asset_type in section_map:
-            if re.search(pattern, clean, re.IGNORECASE):
-                return asset_type
-    return ''
-
 def _infer_structural_row_profile(text: str) -> Dict[str, str]:
     """Infer a repeated issuer-prefix row shape from a structural investment page."""
     candidates = []
@@ -2950,12 +2928,9 @@ def extract_tables_and_map(
         active_parser_profile = ""
         active_schedule_run = False
         active_structural_profile: Dict[str, str] = {}
-        active_structural_asset_type = ""
         continuation_asset_types: Dict[int, str] = {}
         # Running "last section heading actually seen so far" (top-to-bottom,
-        # across pages), distinct from active_structural_asset_type which is
-        # frozen at whatever heading appeared FIRST on the page that started
-        # this schedule run. A multi-section filer whose schedule opens with
+        # across pages). A multi-section filer whose schedule opens with
         # "Mutual Funds" but later moves into "Common Stocks" (e.g. Chubb)
         # would otherwise have every continuation page mistyped as Mutual
         # Fund for the rest of the schedule, however many section changes
@@ -2975,12 +2950,10 @@ def extract_tables_and_map(
                 active_parser_profile = _infer_inline_text_parser_profile(page_text)
                 active_schedule_run = True
                 active_structural_profile = _infer_structural_row_profile(page_text) if is_structural_schedule else {}
-                active_structural_asset_type = _infer_first_section_asset_type(page_text) if is_structural_schedule else ""
             elif _is_new_exhibit_or_schedule_page(page_text) or _reportable_or_service_page_re.search(page_text):
                 active_parser_profile = ""
                 active_schedule_run = False
                 active_structural_profile = {}
-                active_structural_asset_type = ""
 
             is_profile_continuation = _matches_structural_row_profile(page_text, active_structural_profile)
             # classify_pages_text already forward-fills which pages belong to the
@@ -3002,8 +2975,18 @@ def extract_tables_and_map(
                     last_seen_section_asset_type = section_table_areas[-1][1]
                 if is_continuation and active_parser_profile:
                     continuation_parser_profiles[p] = active_parser_profile
-                if is_profile_continuation and (last_seen_section_asset_type or active_structural_asset_type):
-                    continuation_asset_types[p] = last_seen_section_asset_type or active_structural_asset_type
+                # Only carry forward a REAL confirmed category -- one resolved from an
+                # actual detected section heading (last_seen_section_asset_type). Never
+                # fall back to active_structural_asset_type's keyword guess: on a
+                # header-less schedule (totals only, no leading headings -- e.g. FedEx's
+                # Schedule H) that guess is scanning raw fund-name text, and a fund's own
+                # name can innocently contain a category word (e.g. "Janus Core Plus
+                # Income Collective Fund" is one fund's name, not a "Collective Trusts"
+                # heading). Letting that guess seed inherited_asset_type pre-stamps every
+                # row on the page and disables the page's own, more reliable trailing
+                # "Total <category>" backfill in extract_text_based_investments.
+                if is_profile_continuation and last_seen_section_asset_type:
+                    continuation_asset_types[p] = last_seen_section_asset_type
                 page_value_scale[p] = _page_value_scale_factor(page_text)
         supplemental_pages = filtered_pages
     if not supplemental_pages:
