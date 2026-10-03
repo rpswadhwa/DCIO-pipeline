@@ -602,6 +602,41 @@ def main():
                     per_pdf_timeout_sec = int(read_env("PER_PDF_TIMEOUT_SEC", "300"))
                     for stem, info in flagged_with_pdf.items():
                         pdf_path = os.path.join(input_dir, f"{stem}.pdf")
+
+                        # Vision-based escalation: when this plan has a manual page
+                        # override (every plan reprocessed via process_page_request.sh
+                        # has one), the target pages are already known, so skip
+                        # _ocr_pdf_worker's classify_pages -> detect_tables -> run_ocr
+                        # chain entirely -- that chain depends on pytesseract, which
+                        # crashes with TesseractNotFoundError when the tesseract binary
+                        # isn't installed on the host (classify_pages.py's OCR call is
+                        # only wrapped in `except RuntimeError`, which doesn't catch
+                        # it). Sending the rasterized page image straight to the vision-
+                        # capable LLM removes that dependency and handles genuinely
+                        # scanned (no-text-layer) pages the text path can't read at all.
+                        if stem in page_overrides:
+                            vision_pages = page_overrides[stem]
+                            print(f"    OCR escalation (vision, pages {vision_pages}): {stem}")
+                            try:
+                                from .llm_vision_extract import extract_investments_via_llm_vision
+                                ocr_supp = extract_investments_via_llm_vision(
+                                    pdf_path, vision_pages,
+                                    provider=ocr_llm_provider, model=ocr_model,
+                                )
+                            except Exception as vision_exc:
+                                print(f"      ERROR: vision escalation failed for {stem}: {vision_exc}")
+                                continue
+
+                            for page in ocr_supp:
+                                for row in page.get("mapped_rows", []):
+                                    row["extraction_method"] = "vision"
+                            ocr_new_rows = _collect_extracted_rows(ocr_supp, plan_info_map, plan_year)
+                            print(f"      Vision extracted {len(ocr_new_rows)} rows for {stem}")
+
+                            raw_rows.extend(ocr_new_rows)
+                            supplemental_pages.extend(ocr_supp)
+                            continue
+
                         print(f"    OCR escalation: {stem}")
                         pdf_images_dir = os.path.join(images_dir, stem)
                         result_path = os.path.join(output_dir, f"_ocr_fallback_result_{stem}.pkl")
