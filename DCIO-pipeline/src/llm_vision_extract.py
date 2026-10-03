@@ -32,7 +32,8 @@ from .llm_row_extract import (
     _PROMPT_INSTRUCTIONS,
     _RETRY_BACKOFF_SEC,
     _SCHEMA_FIELDS,
-    _parse_llm_rows,
+    _apply_scale,
+    _parse_llm_response,
 )
 
 _MAX_WORKERS = 4
@@ -80,13 +81,14 @@ def _process_page_vision(pdf_path: str, pdf_stem: str, page_num: int, provider: 
               f"{_MAX_ATTEMPTS} attempts: {last_exc}")
         return empty
 
-    llm_rows = _parse_llm_rows(raw)
+    scale_multiplier, llm_rows = _parse_llm_response(raw)
     mapped_rows = []
     for row_idx, llm_row in enumerate(llm_rows, start=1):
         row = {f: "" for f in _SCHEMA_FIELDS}
         for field in _SCHEMA_FIELDS:
             val = llm_row.get(field, "")
             row[field] = "" if val is None else str(val).strip()
+        _apply_scale(row, scale_multiplier)
 
         if not row["asset_type"]:
             section_heading = str(llm_row.get("section_heading") or "").strip()
@@ -108,7 +110,8 @@ def _process_page_vision(pdf_path: str, pdf_stem: str, page_num: int, provider: 
         row["row_id"] = row_idx
         mapped_rows.append(row)
 
-    print(f"    [llm_vision_extract] page {page_num}: {len(mapped_rows)} row(s) via {provider}/{model}")
+    scale_note = f", scale_multiplier={scale_multiplier:g}" if scale_multiplier != 1 else ""
+    print(f"    [llm_vision_extract] page {page_num}: {len(mapped_rows)} row(s) via {provider}/{model}{scale_note}")
     return {
         "pdf": pdf_path, "pdf_stem": pdf_stem, "page_number": page_num,
         "mapped_rows": mapped_rows, "ocr_cells": [], "normalized_path": pdf_path,

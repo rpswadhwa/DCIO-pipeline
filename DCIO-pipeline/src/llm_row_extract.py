@@ -84,16 +84,29 @@ _PROMPT_INSTRUCTIONS = (
     "line above the row, before any other heading/subtotal -- or empty string "
     "if no such heading exists. Just copy the printed text, do not interpret "
     "or classify it), "
-    "current_value (the row's current/fair value in dollars, digits only, no "
-    "$ sign or commas, as a plain number), "
+    "current_value (the row's current/fair value EXACTLY as printed on the "
+    "page, digits only, no $ sign or commas, as a plain number -- copy the "
+    "printed figure verbatim, do NOT multiply or rescale it yourself even if "
+    "you determine the page is denominated in thousands; scaling is applied "
+    "separately, see scale_multiplier below), "
     "units_or_shares (share/unit count if printed, else empty string), "
     "par_value (if printed, else empty string), "
     "cost (historical cost if printed, else empty string). "
     "Do NOT include subtotal rows, section-heading-only rows (e.g. a line that "
     "just says \"Mutual Funds:\"), grand-total rows, or blank/filler rows -- "
     "use their text only to classify the holding rows as described above. "
-    "If the page has no real holding rows, return an empty array. "
-    "Return ONLY the JSON array, no other text."
+    "Separately, check whether this page states that dollar amounts are "
+    "expressed in a scaled unit -- look for explicit language anywhere on the "
+    "page (a schedule title, column header, or footnote) such as '(Expressed "
+    "in U.S. dollars in thousands)', '(in thousands)', '($000s)', or similar. "
+    "Only rely on such explicit wording, never infer scale from how large or "
+    "small the printed numbers look. Report this as scale_multiplier: 1000 if "
+    "such wording is present, otherwise 1. "
+    "Return ONLY a single JSON OBJECT (not an array) with exactly two "
+    "top-level fields: scale_multiplier (1 or 1000, as described above) and "
+    "rows (the JSON array of row objects described above). If the page has no "
+    "real holding rows, return {\"scale_multiplier\": 1, \"rows\": []}. "
+    "Return ONLY the JSON object, no other text."
 )
 
 
@@ -104,23 +117,55 @@ def _get_page_text(pdf_path: str, page_num: int) -> str:
         return pdf.pages[page_num - 1].extract_text() or ""
 
 
-def _parse_llm_rows(raw_text: str) -> list:
+def _parse_llm_response(raw_text: str) -> tuple:
+    """Returns (scale_multiplier, rows). Accepts the new {"scale_multiplier":
+    ..., "rows": [...]} object shape; falls back to treating a bare JSON array
+    as rows with scale_multiplier=1 for backward compatibility.
+    """
     text = raw_text.strip()
     text = re.sub(r"^```(?:json)?\s*", "", text)
     text = re.sub(r"\s*```$", "", text)
     try:
         data = json.loads(text)
     except json.JSONDecodeError:
-        match = re.search(r"\[.*\]", text, re.DOTALL)
+        match = re.search(r"[\[{].*[\]}]", text, re.DOTALL)
         if not match:
-            return []
+            return 1, []
         try:
             data = json.loads(match.group(0))
         except json.JSONDecodeError:
-            return []
-    if not isinstance(data, list):
-        return []
-    return [r for r in data if isinstance(r, dict)]
+            return 1, []
+
+    if isinstance(data, list):
+        return 1, [r for r in data if isinstance(r, dict)]
+    if isinstance(data, dict):
+        rows = data.get("rows", [])
+        rows = [r for r in rows if isinstance(r, dict)] if isinstance(rows, list) else []
+        try:
+            scale = float(data.get("scale_multiplier", 1))
+        except (TypeError, ValueError):
+            scale = 1
+        return (scale if scale in (1, 1000) else 1), rows
+    return 1, []
+
+
+def _apply_scale(row: dict, scale_multiplier: float) -> None:
+    """Multiplies current_value by scale_multiplier in place. Only touches
+    current_value -- not par_value/units_or_shares, which sometimes hold raw
+    share counts rather than dollars and would be corrupted by scaling.
+    """
+    if scale_multiplier == 1:
+        return
+    raw = row.get("current_value", "")
+    if not raw:
+        return
+    cleaned = raw.replace(",", "").replace("$", "").strip()
+    try:
+        num = float(cleaned)
+    except ValueError:
+        return
+    scaled = num * scale_multiplier
+    row["current_value"] = str(int(scaled)) if scaled.is_integer() else str(scaled)
 
 
 def _process_page(pdf_path: str, pdf_stem: str, page_num: int, provider: str, model: str) -> dict:
@@ -152,13 +197,14 @@ def _process_page(pdf_path: str, pdf_stem: str, page_num: int, provider: str, mo
               f"{_MAX_ATTEMPTS} attempts: {last_exc}")
         return empty
 
-    llm_rows = _parse_llm_rows(raw)
+    scale_multiplier, llm_rows = _parse_llm_response(raw)
     mapped_rows = []
     for row_idx, llm_row in enumerate(llm_rows, start=1):
         row = {f: "" for f in _SCHEMA_FIELDS}
         for field in _SCHEMA_FIELDS:
             val = llm_row.get(field, "")
             row[field] = "" if val is None else str(val).strip()
+        _apply_scale(row, scale_multiplier)
 
         if not row["asset_type"]:
             # Deterministic backfill: don't trust the LLM to apply the heading
@@ -190,7 +236,8 @@ def _process_page(pdf_path: str, pdf_stem: str, page_num: int, provider: str, mo
         row["row_id"] = row_idx
         mapped_rows.append(row)
 
-    print(f"    [llm_row_extract] page {page_num}: {len(mapped_rows)} row(s) via {provider}/{model}")
+    scale_note = f", scale_multiplier={scale_multiplier:g}" if scale_multiplier != 1 else ""
+    print(f"    [llm_row_extract] page {page_num}: {len(mapped_rows)} row(s) via {provider}/{model}{scale_note}")
     return {
         "pdf": pdf_path, "pdf_stem": pdf_stem, "page_number": page_num,
         "mapped_rows": mapped_rows, "ocr_cells": [], "normalized_path": pdf_path,
