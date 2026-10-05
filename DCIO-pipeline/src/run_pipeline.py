@@ -430,6 +430,24 @@ def main():
                     provider=llm_full_extract_provider,
                     model=llm_full_extract_model,
                 )
+                # Manual page overrides often target scanned (no-text-layer) pages,
+                # which the text-based path above can't read at all (pdfplumber
+                # returns empty text, so the LLM gets nothing to extract). Retry
+                # those same pages via vision before falling through to the
+                # whole-document structural/simple fallbacks below, which would
+                # otherwise silently grab an unrelated page instead of the one
+                # actually requested.
+                if pdf_stem in page_overrides and not _has_useful_extracted_rows(page_data):
+                    print(f"    [LLM_FULL_EXTRACT] no usable rows from text layer, "
+                          f"retrying pages {supp_nums} via vision")
+                    from .llm_vision_extract import extract_investments_via_llm_vision
+                    vision_data = extract_investments_via_llm_vision(
+                        pdf_path, supp_nums,
+                        provider=llm_full_extract_provider,
+                        model=llm_full_extract_model,
+                    )
+                    if _has_useful_extracted_rows(vision_data):
+                        page_data = vision_data
             else:
                 plan_info, page_data = extract_tables_and_map(
                     pdf_path,
