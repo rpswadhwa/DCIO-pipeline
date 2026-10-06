@@ -18,6 +18,7 @@ Required env vars:
 """
 
 import logging
+import os
 import sqlite3
 from collections import defaultdict
 from datetime import datetime, timezone
@@ -899,12 +900,36 @@ def write_iceberg_via_athena(df: pd.DataFrame, glue_db: str, table: str,
                 ]
                 if include_asset_type:
                     _vals.append(q(row.get("asset_type", "")))
+                else:
+                    # Legacy direct write (no staging table): the staging+routing path
+                    # resolves sponsors in SQL via _mf_sponsor_case_sql; this path has no
+                    # SQL SELECT to attach that to, so mirror it in Python here instead --
+                    # same canon.json, same coalesce(raw_sponsor_name, raw_entity_name)
+                    # input, so MF rows land pre-matched regardless of which write path ran.
+                    _sponsor_input = row.get("raw_sponsor_name") or row.get("raw_entity_name")
+                    _match = _mf_sponsor_match(_sponsor_input)
+                    _canonical, _token = _match if _match else (None, None)
+                    _vals += [
+                        q(_canonical),
+                        q("MATCHED" if _canonical else "UNMATCHED"),
+                        ("CAST(0.90 AS decimal(5,4))" if _canonical else "NULL"),
+                        q(_token),
+                        q("canon.json" if _canonical else None),
+                        q("LOW" if _canonical else None),
+                        q("canon_brand_regex_v1" if _canonical else None),
+                        "current_timestamp",
+                        ("false" if _canonical else "true"),
+                    ]
                 values_parts.append("(" + ", ".join(_vals) + ")")
 
             _cols = ("ack_id, raw_entity_name, raw_sponsor_name, plan_investment_amt, "
                      "asset_class, asset_sub_class, validation_status")
             if include_asset_type:
                 _cols += ", asset_type"
+            else:
+                _cols += (", normalized_sponsor_name, sponsor_match_status, sponsor_match_confidence, "
+                          "sponsor_match_token, sponsor_match_source, sponsor_match_risk_level, "
+                          "sponsor_matched_by, sponsor_cleaned_at, needs_sponsor_cleaning_flag")
             sql = "INSERT INTO {}.{} ({}) VALUES {}".format(glue_db, table, _cols, ", ".join(values_parts))
             query_id = wr.athena.start_query_execution(
                 sql=sql,
@@ -1011,9 +1036,98 @@ def write_validation_summary_via_athena(df: pd.DataFrame, glue_db: str, table: s
 
     logger.info("Wrote %d validation summary rows to %s.%s", total, glue_db, table)
 
+def _mf_sponsor_tokens() -> List[Tuple[str, str]]:
+    """Flatten canon.json into (token, canonical) pairs for MF sponsor
+    matching, longest token first so a specific brand (e.g. "FIDELITY
+    INSTITUTIONAL") wins over a shorter one it happens to contain, when both
+    would otherwise match the same CASE expression's WHEN order."""
+    lookup = _load_canon_lookup()  # {UPPER token/alias/canonical: canonical}
+    pairs = [(tok, canon) for tok, canon in lookup.items() if tok]
+    pairs.sort(key=lambda p: -len(p[0]))
+    return pairs
+
+
+_mf_sponsor_patterns_cache: Optional[List[Tuple["_re.Pattern", str, str]]] = None
+
+
+def _mf_sponsor_patterns() -> List[Tuple["_re.Pattern", str, str]]:
+    """Compile _mf_sponsor_tokens() once into (pattern, token, canonical)
+    triples, for the legacy direct-write path below where rows are built as
+    literal Python values rather than a SQL SELECT -- keeps that path's
+    matching behavior identical to _mf_sponsor_case_sql without re-deriving
+    canon.json or recompiling a regex per row."""
+    global _mf_sponsor_patterns_cache
+    if _mf_sponsor_patterns_cache is not None:
+        return _mf_sponsor_patterns_cache
+    patterns = [(_re.compile(r"\b" + _re.escape(token.lower()) + r"\b"), token, canonical)
+                for token, canonical in _mf_sponsor_tokens()]
+    _mf_sponsor_patterns_cache = patterns
+    return patterns
+
+
+def _mf_sponsor_match(name: str) -> Optional[Tuple[str, str]]:
+    """Python-side mirror of _mf_sponsor_case_sql's matching: returns
+    (canonical, matched_token) for the first canon.json brand found in
+    `name`, or None. Used by write_iceberg_via_athena's legacy direct-write
+    path (no HOLDINGS_STAGING_TABLE), where _route_mf_from_staging's SQL
+    CASE approach doesn't apply."""
+    text = (name or "").strip().lower()
+    if not text:
+        return None
+    for pat, token, canonical in _mf_sponsor_patterns():
+        if pat.search(text):
+            return canonical, token
+    return None
+
+
+def _mf_sponsor_groups() -> List[Tuple[str, str, List[str]]]:
+    """Group _mf_sponsor_tokens() by canonical: one entry per canonical
+    (~152) instead of one per token (526). A CASE with a WHEN branch per
+    token throws Athena's INTERNAL_ERROR_QUERY_ENGINE past ~400 branches
+    (confirmed empirically: 400 runs fine, 450 fails) -- 526 tokens collapse
+    to ~152 canonicals, comfortably under that ceiling, by combining each
+    canonical's tokens into one regexp_like alternation per branch. Groups
+    are ordered by their longest token descending (tokens within a group are
+    already longest-first from _mf_sponsor_tokens(), so each group's first
+    token is its longest), preserving the original longest-token-wins
+    precedence at the canonical level. Returns (canonical, representative_
+    token, tokens) triples -- representative_token (the group's own longest
+    token) stands in for sponsor_match_token, which can no longer name the
+    exact token that matched once multiple tokens share a branch."""
+    groups: Dict[str, List[str]] = {}
+    for token, canonical in _mf_sponsor_tokens():  # already longest-first
+        groups.setdefault(canonical, []).append(token)
+    ordered = sorted(groups.items(), key=lambda kv: -len(kv[1][0]))
+    return [(canonical, tokens[0], tokens) for canonical, tokens in ordered]
+
+
+def _mf_sponsor_case_sql(column: str, return_token: bool = False) -> str:
+    """Build a CASE expression matching canon.json brand tokens, word-boundary,
+    against `column` (the caller passes coalesce(raw_sponsor_name,
+    raw_entity_name) -- raw_sponsor_name comes from the filing PDF's
+    issuer_name and is sometimes blank, in which case the fund's own name is
+    the next-best signal of its sponsor). Mirrors _alt_manager_case_sql's
+    mechanism (canon.json-driven CASE) but one WHEN branch per canonical via
+    _mf_sponsor_groups(), not one per token -- see that function's docstring
+    for why. return_token=True builds the parallel CASE that returns each
+    group's representative token (for sponsor_match_token) instead of the
+    canonical name."""
+    lines = ["CASE"]
+    for canonical, rep_token, tokens in _mf_sponsor_groups():
+        alts = "|".join(_re.escape(t.lower()).replace("'", "''") for t in tokens)
+        val = (rep_token if return_token else canonical).replace("'", "''")
+        lines.append(f"        WHEN regexp_like(lower(trim({column})), '\\b({alts})\\b') THEN '{val}'")
+    lines.append("        ELSE NULL END")
+    return "\n".join(lines)
+
+
 def _route_mf_from_staging(glue_db: str, staging_table: str, target_table: str, ack_ids: list) -> None:
     """Populate the MF table from staging: only rows whose file-derived asset_type is an MF type.
-    Deletes the run's acks from target first (idempotent), then inserts the MF subset (7 cols)."""
+    Deletes the run's acks from target first (idempotent), then inserts the MF subset, now
+    including the canon.json-driven sponsor-cleaning columns (normalized_sponsor_name,
+    sponsor_match_status/confidence/token/source/risk_level/matched_by/cleaned_at,
+    needs_sponsor_cleaning_flag) so MF rows arrive pre-matched at load time instead of
+    needing a cleanup pass later."""
     import awswrangler as wr
     import os
     if not ack_ids:
@@ -1023,14 +1137,46 @@ def _route_mf_from_staging(glue_db: str, staging_table: str, target_table: str, 
     ids = ", ".join("'" + str(a).replace("'", "''") + "'" for a in ack_ids)
     mf = ", ".join("'" + t + "'" for t in sorted(MF_ASSET_TYPES))
     excl = ", ".join("'" + t + "'" for t in sorted(MF_ROUTING_EXCLUDE_NAMES))
+
+    sponsor_input = "coalesce(raw_sponsor_name, raw_entity_name)"
+    mgr_case = _mf_sponsor_case_sql(sponsor_input, return_token=False)
+    token_case = _mf_sponsor_case_sql(sponsor_input, return_token=True)
+
+    insert_sql = """
+        WITH staged AS (
+            SELECT *,
+                {mgr_case} AS _norm_mgr,
+                {token_case} AS _norm_token
+            FROM {gd}.{st}
+            WHERE ack_id IN ({ids}) AND lower(trim(asset_type)) IN ({mf})
+              AND lower(trim(raw_entity_name)) NOT IN ({excl})
+        )
+        INSERT INTO {gd}.{tt} (
+            ack_id, raw_entity_name, raw_sponsor_name, plan_investment_amt,
+            asset_class, asset_sub_class, validation_status,
+            normalized_sponsor_name, sponsor_match_status, sponsor_match_confidence,
+            sponsor_match_token, sponsor_match_source, sponsor_match_risk_level,
+            sponsor_matched_by, sponsor_cleaned_at, needs_sponsor_cleaning_flag
+        )
+        SELECT
+            ack_id, raw_entity_name, raw_sponsor_name, plan_investment_amt,
+            asset_class, asset_sub_class, validation_status,
+            _norm_mgr AS normalized_sponsor_name,
+            CASE WHEN _norm_mgr IS NOT NULL THEN 'MATCHED' ELSE 'UNMATCHED' END AS sponsor_match_status,
+            CASE WHEN _norm_mgr IS NOT NULL THEN CAST(0.90 AS decimal(5,4)) ELSE NULL END AS sponsor_match_confidence,
+            _norm_token AS sponsor_match_token,
+            CASE WHEN _norm_mgr IS NOT NULL THEN 'canon.json' ELSE NULL END AS sponsor_match_source,
+            CASE WHEN _norm_mgr IS NOT NULL THEN 'LOW' ELSE NULL END AS sponsor_match_risk_level,
+            CASE WHEN _norm_mgr IS NOT NULL THEN 'canon_brand_regex_v1' ELSE NULL END AS sponsor_matched_by,
+            current_timestamp AS sponsor_cleaned_at,
+            CASE WHEN _norm_mgr IS NULL THEN true ELSE false END AS needs_sponsor_cleaning_flag
+        FROM staged
+    """.format(gd=glue_db, tt=target_table, st=staging_table, ids=ids, mf=mf, excl=excl,
+               mgr_case=mgr_case, token_case=token_case)
+
     stmts = [
         f"DELETE FROM {glue_db}.{target_table} WHERE ack_id IN ({ids})",
-        ("INSERT INTO {gd}.{tt} "
-         "(ack_id, raw_entity_name, raw_sponsor_name, plan_investment_amt, asset_class, asset_sub_class, validation_status) "
-         "SELECT ack_id, raw_entity_name, raw_sponsor_name, plan_investment_amt, asset_class, asset_sub_class, validation_status "
-         "FROM {gd}.{st} WHERE ack_id IN ({ids}) AND lower(trim(asset_type)) IN ({mf}) "
-         "AND lower(trim(raw_entity_name)) NOT IN ({excl})"
-         ).format(gd=glue_db, tt=target_table, st=staging_table, ids=ids, mf=mf, excl=excl),
+        insert_sql,
     ]
     for sql in stmts:
         qid = wr.athena.start_query_execution(sql=sql, database=glue_db, workgroup=wg, s3_output=s3)
@@ -1760,12 +1906,20 @@ ALT_BRAND_TERM_OVERRIDES: Dict[str, str] = {
 # private credit); fixed here so it can't recur on newly processed PDFs.
 ALT_BRAND_WORD_BOUNDARY_TERMS = {"gso"}
 
+# Same word-boundary protection, extended 2026-10-06 for ALT_MANAGER_ONLY_TERMS
+# bare terms short/common enough to collide mid-word: bare "ares" plain-substring
+# matched "Vanguard Real Estate Index Fund Admiral SHARES" (29 rows, ~$14M) in
+# verification -- "shares" contains "ares" with no word boundary around it under
+# plain strpos. "ifm" and "aqr" are defensively boundary-matched too since
+# they're 3-char bare terms, even though no live collision was found for them.
+ALT_MANAGER_ONLY_WORD_BOUNDARY_TERMS = {"ares", "ifm", "aqr"}
+
 # Sponsor-name fallback pass (added 2026-09-24, round 3): raw_sponsor_name
 # carries the real manager/fund name for rows where raw_entity_name is a
 # generic placeholder ("Partnership/joint venture interests", "N/A Limited
 # Partnerships", "Limited Liability Company") -- confirmed against 786 rows
 # across 50 such placeholder groups (see project_dcio_alternatives_router
-# memory). Reuses ALT_BRAND_PATTERNS/ALT_MANAGER_NAMES against raw_sponsor_
+# memory). Reuses ALT_BRAND_PATTERNS/_alt_manager_display_name against raw_sponsor_
 # name instead, but a sponsor field just as often names a custodian bank or
 # traditional (non-alternative) manager rather than an alt brand, so those
 # must be excluded here even though they'd never appear in ALT_BRAND_PATTERNS
@@ -1784,8 +1938,9 @@ ALT_SPONSOR_EXCLUDE_REGEX = (
 
 
 def _alt_brand_term_cond(term: str, column: str = "raw_entity_name") -> str:
-    """Shared condition-builder for one ALT_BRAND_PATTERNS/ALT_MANAGER_NAMES
-    term: word-boundary regex for terms in ALT_BRAND_WORD_BOUNDARY_TERMS,
+    """Shared condition-builder for one ALT_BRAND_PATTERNS term (consumed by
+    _alt_manager_case_sql/_alt_manager_display_name): word-boundary regex for
+    terms in ALT_BRAND_WORD_BOUNDARY_TERMS,
     plain substring otherwise, ANDed with ALT_BRAND_TERM_OVERRIDES when
     present. Centralizing this keeps asset_type/asset_class/classification_
     method/matched_manager_name from ever drifting out of sync on which rows
@@ -1799,7 +1954,7 @@ def _alt_brand_term_cond(term: str, column: str = "raw_entity_name") -> str:
     use per-term overrides today, but this keeps the override behavior
     unchanged if it ever does."""
     term_sql = term.replace("'", "''")
-    if term in ALT_BRAND_WORD_BOUNDARY_TERMS:
+    if term in ALT_BRAND_WORD_BOUNDARY_TERMS or term in ALT_MANAGER_ONLY_WORD_BOUNDARY_TERMS:
         cond = f"regexp_like(lower(trim({column})), '\\b{term_sql}\\b')"
     else:
         cond = f"strpos(lower(trim({column})), '{term_sql}') > 0"
@@ -2075,57 +2230,180 @@ def _alt_brand_method_case_sql(column: str = "raw_entity_name", method_prefix: s
 # ALT_BRAND_PATTERNS) still gets a manager label if the brand name is present.
 # Reuses the same 55-manager term list as ALT_BRAND_PATTERNS so the two never
 # drift apart on which brands are recognized.
+#
+# Display-string resolution order per term, aligned with CIT's canon.json
+# dictionary (ai-cit Glue job, core-data-platform) so the same real manager
+# doesn't get two different spellings depending on which table/pipeline
+# routed the row (e.g. HarbourVest Partners showing as "HARBOURVEST" in CIT
+# but "Harbourvest Partners" in ALT prior to this alignment):
+#   1. ALT_MANAGER_OVERRIDES  -- hand-researched, ALT-specific (fund-brand-
+#      to-true-manager resolutions that canon.json has no reason to carry,
+#      e.g. "madison core property" -> "NYL Investors")
+#   2. canon.json (S3, same CANON_BUCKET/CANON_KEY as ai-cit)
+#   3. term.title() -- last-resort naive casing
 # ---------------------------------------------------------------------------
-ALT_MANAGER_NAMES: Dict[str, str] = {
-    term: {
-        "gso": "GSO Capital Partners",
-        "onex": "Onex Partners",
-        "landmark": "Landmark Partners",
-        "tennenbaum": "Tennenbaum Capital",
-        "owl rock": "Owl Rock Capital",
-        "ipi data center": "IPI Partners",
-        "spf securitized products": "SPF Investment Management",
-        "ara core property": "American Realty Advisors",
-        "american core realty": "American Realty Advisors",
-        "madison core property": "NYL Investors",
-        "davidson kempner": "Davidson Kempner Capital Management",
-        "farallon": "Farallon Capital Management",
-        "entrustpermal": "EnTrust Global",
-        "bridgewater": "Bridgewater Associates",
-        "digitalbridge": "DigitalBridge",
-        "towerbrook": "TowerBrook Capital Partners",
-        "grosvenor wilmore": "GCM Grosvenor",
-        "goldentree": "GoldenTree Asset Management",
-        "encap": "EnCap Investments",
-        "ta realty": "TA Realty",
-        "gtcr": "GTCR LLC",
-        "hellman": "Hellman & Friedman",
-        "golden tree": "GoldenTree Asset Management",
-        "washington capital reef": "Washington Capital Management",
-        "washington capital": "Washington Capital Management",
-        "peak rock capital credit": "Peak Rock Capital",
-        "peak rock capital": "Peak Rock Capital",
-        "tcw direct lending": "TCW Group",
-        # Brand-router default (term.title()) previously diverged from the
-        # debt-carveout manager_name for these two terms (ALT_MANAGER_DEBT_
-        # PATTERNS above uses "Blue Owl Capital"/"Starwood Capital Group"),
-        # producing two matched_manager_name spellings for the same firm
-        # depending on which pass classified a given row. Confirmed via
-        # 2026-09-27 web + raw-data research that both spellings refer to one
-        # firm in each case; aligning here so future rows agree regardless of
-        # which pass routes them. See project_dcio_alternatives_router memory.
-        "blue owl": "Blue Owl Capital",
-        "starwood": "Starwood Capital Group",
-    }.get(term, term.title())
-    for term, _asset_type, _asset_class in ALT_BRAND_PATTERNS
+ALT_MANAGER_OVERRIDES: Dict[str, str] = {
+    "gso": "GSO Capital Partners",
+    "onex": "Onex Partners",
+    "landmark": "Landmark Partners",
+    "tennenbaum": "Tennenbaum Capital",
+    "owl rock": "Owl Rock Capital",
+    "ipi data center": "IPI Partners",
+    "spf securitized products": "SPF Investment Management",
+    "ara core property": "American Realty Advisors",
+    "american core realty": "American Realty Advisors",
+    "madison core property": "NYL Investors",
+    "davidson kempner": "Davidson Kempner Capital Management",
+    "farallon": "Farallon Capital Management",
+    "entrustpermal": "EnTrust Global",
+    "bridgewater": "Bridgewater Associates",
+    "digitalbridge": "DigitalBridge",
+    "towerbrook": "TowerBrook Capital Partners",
+    "grosvenor wilmore": "GCM Grosvenor",
+    "goldentree": "GoldenTree Asset Management",
+    "encap": "EnCap Investments",
+    "ta realty": "TA Realty",
+    "gtcr": "GTCR LLC",
+    "hellman": "Hellman & Friedman",
+    "golden tree": "GoldenTree Asset Management",
+    "washington capital reef": "Washington Capital Management",
+    "washington capital": "Washington Capital Management",
+    "peak rock capital credit": "Peak Rock Capital",
+    "peak rock capital": "Peak Rock Capital",
+    "tcw direct lending": "TCW Group",
+    # Brand-router default (term.title()) previously diverged from the
+    # debt-carveout manager_name for these two terms (ALT_MANAGER_DEBT_
+    # PATTERNS above uses "Blue Owl Capital"/"Starwood Capital Group"),
+    # producing two matched_manager_name spellings for the same firm
+    # depending on which pass classified a given row. Confirmed via
+    # 2026-09-27 web + raw-data research that both spellings refer to one
+    # firm in each case; aligning here so future rows agree regardless of
+    # which pass routes them. See project_dcio_alternatives_router memory.
+    "blue owl": "Blue Owl Capital",
+    "starwood": "Starwood Capital Group",
+    # Added 2026-10-06: these four have full-phrase terms in ALT_BRAND_PATTERNS
+    # already ("ares management", "corbin capital", "crescent capital"), but the
+    # 78.6%-of-rows ALT ledger missing-manager-record audit found most real rows
+    # for these managers don't include that qualifier word (e.g. "Ares Multi-
+    # Credit Fund LLC", "Corbin ERISA Opportunity Fund LP", "Crescent Direct
+    # Lending"). Bare terms below (ALT_MANAGER_ONLY_TERMS) catch those for
+    # matched_manager_name only -- deliberately NOT added to ALT_BRAND_PATTERNS
+    # itself so the asset-class router keeps using the existing, narrower,
+    # already-verified phrase for asset_type/asset_class assignment. canon.json
+    # has no bare "ARES"/"CORBIN"/"CRESCENT"/"IFM" token (by design, to avoid
+    # collisions in CIT/MF's broader matching), so these resolve here instead.
+    "ares": "Ares Management",
+    "corbin": "Corbin Capital Partners",
+    "crescent": "Crescent Capital Group",
+    "ifm": "IFM Investors",
 }
+
+# Terms used ONLY for matched_manager_name resolution (_alt_manager_case_sql),
+# never fed into the asset-class router's ALT_BRAND_PATTERNS -- added 2026-10-06
+# from the ALT ledger missing-manager-record audit (7,152/9,097 rows, 78.6%,
+# $53.55B unresolved). Each term below was verified against live
+# plan_alternatives_history data (see scratchpad verify_terms queries) to
+# confirm no false-positive collisions before being added. Kept out of
+# ALT_BRAND_PATTERNS specifically so a bad asset_type/asset_class guess never
+# gets forced onto a NEW staging row just because its manager name resolved --
+# same reasoning as the existing Crestline/Viking Global/Cerberus exclusion.
+ALT_MANAGER_ONLY_TERMS: List[str] = [
+    "blackstone",
+    "ifm",
+    "audax",
+    "pathway private equity",
+    "tudor bvi",
+    "forest investment advisors",
+    "lone star",
+    "ares",
+    "corbin",
+    "crescent",
+    "blackrock",
+    "tiaa",
+    "pgim",
+    "prudential",
+    "morgan stanley",
+    "aqr",
+    "invesco",
+]
+
+# S3 location of the shared canonical-manager dictionary -- same bucket/key
+# ai-cit's load_canonical_json() reads in core-data-platform, so ALT and CIT
+# draw display-string casing from one literal source instead of two copies
+# that can drift. Fetched lazily (first time a canon-dependent CASE is
+# actually built, not at module import) and cached for the process lifetime;
+# any failure (no creds, no network, missing key) degrades to the term.title()
+# fallback rather than breaking the pipeline run.
+_CANON_S3_BUCKET = "retirementinsights-reference"
+_CANON_S3_KEY = "manager_canonical/v1/manager_canonical.json"
+_canon_lookup_cache: Optional[Dict[str, str]] = None
+
+
+def _load_canon_lookup() -> Dict[str, str]:
+    """Fetch+flatten canon.json into {UPPERCASE token/alias/canonical: display}.
+    Cached after first call; returns {} on any failure so callers fall back
+    to term.title() instead of raising."""
+    global _canon_lookup_cache
+    if _canon_lookup_cache is not None:
+        return _canon_lookup_cache
+
+    lookup: Dict[str, str] = {}
+    try:
+        import json as _json
+
+        import boto3
+
+        region = os.environ.get("AWS_REGION", "us-east-1")
+        s3 = boto3.client("s3", region_name=region)
+        obj = s3.get_object(Bucket=_CANON_S3_BUCKET, Key=_CANON_S3_KEY)
+        entries = _json.loads(obj["Body"].read())
+        for entry in entries:
+            canonical = entry.get("canonical", "")
+            if not canonical:
+                continue
+            keys = [canonical] + entry.get("tokens", []) + entry.get("aliases", [])
+            for k in keys:
+                if k:
+                    lookup[k.strip().upper()] = canonical
+    except Exception as exc:
+        logging.warning("ALT manager crosswalk: canon.json fetch failed, "
+                         "falling back to term.title() for unmapped terms: %s", exc)
+        lookup = {}
+
+    _canon_lookup_cache = lookup
+    return lookup
+
+
+def _alt_manager_display_name(term: str) -> str:
+    """Resolve one ALT_BRAND_PATTERNS term to its display manager name using
+    the override -> canon.json -> term.title() order described above.
+    Computed lazily (not a module-level dict) so the canon.json S3 fetch
+    happens on first real use -- i.e. when a CASE expression is actually
+    built for a pipeline run -- not merely on importing this module."""
+    if term in ALT_MANAGER_OVERRIDES:
+        return ALT_MANAGER_OVERRIDES[term]
+    canon_hit = _load_canon_lookup().get(term.strip().upper())
+    if canon_hit:
+        return canon_hit
+    return term.title()
 
 
 def _alt_manager_case_sql(column: str = "raw_entity_name") -> str:
-    """Build the matched_manager_name CASE from ALT_MANAGER_NAMES, using the
-    same term-matching rules (word-boundary/override) as the brand router."""
+    """Build the matched_manager_name CASE, resolving each ALT_BRAND_PATTERNS
+    term's display name via _alt_manager_display_name (override -> canon.json
+    -> term.title()), using the same term-matching rules (word-boundary/
+    override) as the brand router. ALT_MANAGER_ONLY_TERMS branches are
+    appended after ALT_BRAND_PATTERNS (not mixed in) so any brand already
+    covered by the router's curated list keeps resolving the same way it
+    always has -- the extra terms only catch rows the curated list missed."""
     lines = ["CASE"]
-    for term, manager in ALT_MANAGER_NAMES.items():
+    for term, _asset_type, _asset_class in ALT_BRAND_PATTERNS:
+        manager = _alt_manager_display_name(term)
+        cond = _alt_brand_term_cond(term, column)
+        val = manager.replace("'", "''")
+        lines.append(f"        WHEN {cond} THEN '{val}'")
+    for term in ALT_MANAGER_ONLY_TERMS:
+        manager = _alt_manager_display_name(term)
         cond = _alt_brand_term_cond(term, column)
         val = manager.replace("'", "''")
         lines.append(f"        WHEN {cond} THEN '{val}'")
