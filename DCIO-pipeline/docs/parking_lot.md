@@ -1648,6 +1648,35 @@ affects future batches only, no historical rewrite. Deferred until the
 in-flight pipeline run (PID 353698, started 2026-09-25) finishes, to avoid
 touching shared config mid-run.
 
+**2026-10-07 update — blocker found for the above fix, do not flip
+`ALTERNATIVES_TABLE` on until this is resolved.** `_alt_manager_case_sql()`
+(the function `_route_alternatives_from_staging` calls to build the
+`matched_manager_name` CASE) now emits 725 WHEN clauses (647 before
+today's manager-matching rule update, 78 more added today). Re-testing
+both the pre-update 647-clause version and the current 725-clause version
+directly against Athena (plain SELECT, outside the pipeline) shows **both
+fail with `INTERNAL_ERROR_QUERY_ENGINE`** — confirmed via binary search to
+be a total-expression-complexity ceiling in the Trino/Athena engine
+(engine version 3, already on `AUTO`/latest — no version-pin fix exists)
+somewhere between 636 and 637 WHEN clauses in one compiled scalar
+expression. Splitting the WHEN list into several smaller CASE blocks
+wrapped in one `COALESCE(...)` does **not** help — tested directly, still
+fails — because the limit is on the total complexity of the whole
+compiled expression, not any individual CASE block's size. Net effect:
+**this function has never actually worked at its current size** (it was
+already over the line before today's rule update), it just never got
+exercised end-to-end in production because of the inert-router issue
+above. If `ALTERNATIVES_TABLE` is set without first fixing this, every
+`_route_alternatives_from_staging` call will throw on the `wr.athena.wait_query()`
+call (no try/except around it today) and the batch run will fail. Real
+fix needs one of: (a) run the override/phrase/brand/sponsor match
+strategies as separate Athena queries and combine client-side in pandas
+instead of one nested CASE, (b) emit several smaller independently-compiled
+CASE columns and `COALESCE`/pick-first in pandas after fetch (not in SQL),
+or (c) move `ALT_BRAND_PATTERNS`/`ALT_MANAGER_ONLY_TERMS` into a lookup
+table and JOIN instead of inlining as a scalar CASE. Not yet fixed —
+needs a decision on approach before `ALTERNATIVES_TABLE` is ever set.
+
 ---
 
 ## 30. Toyota Motor North America — OCR-path asset_type never populated; fix written, PARKED UNVERIFIED (2026-09-30)
