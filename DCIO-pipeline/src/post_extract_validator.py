@@ -1912,7 +1912,7 @@ ALT_BRAND_WORD_BOUNDARY_TERMS = {"gso"}
 # verification -- "shares" contains "ares" with no word boundary around it under
 # plain strpos. "ifm" and "aqr" are defensively boundary-matched too since
 # they're 3-char bare terms, even though no live collision was found for them.
-ALT_MANAGER_ONLY_WORD_BOUNDARY_TERMS = {"ares", "ifm", "aqr", "kkr"}
+ALT_MANAGER_ONLY_WORD_BOUNDARY_TERMS = {"ares", "ifm", "aqr", "kkr", "dfa"}
 
 # Sponsor-name fallback pass (added 2026-09-24, round 3): raw_sponsor_name
 # carries the real manager/fund name for rows where raw_entity_name is a
@@ -2366,6 +2366,46 @@ ALT_MANAGER_OVERRIDES: Dict[str, str] = {
     # there's no external "manager" relationship to resolve to; term is the
     # two-word phrase (not bare "alexandria") to stay unambiguous.
     "alexandria real estate": "Alexandria Real Estate Equities",
+    # Added 2026-10-06: Cohen & Steers Real Estate Securities / Global
+    # Infrastructure funds had zero override entry -- 238 rows/$81.4M,
+    # zero matched_manager_name. Bare "cohen" is safe as a plain substring
+    # (no word-boundary needed): verified against live raw_entity_name data,
+    # the only two non-"cohen steers"/"cohen & steers" spellings that contain
+    # "cohen" are "Cohen & Steer Real Estate" and "COHEN STRS REAL ESTATE SEC"
+    # -- both still Cohen & Steers, just further misspellings. No collisions.
+    "cohen": "Cohen & Steers",
+    # Added 2026-10-06: DFA / Dimensional Fund Advisors Real Estate Securities
+    # funds had zero override entry -- 173 rows, zero matched_manager_name.
+    # Two terms needed: some variants say only "DFA" (e.g. "DFA Real Estate
+    # Secs Port Ins"), others say only "Dimensional..." with no "DFA" at all
+    # (e.g. "Dimensional US Real Estate ETF"). "dfa" is bare/3-char so
+    # word-boundary protected below, same as kkr/ifm/aqr/ares. "dimensional"
+    # verified as a safe plain substring -- no non-Dimensional-Fund-Advisors
+    # collisions found in live data.
+    "dfa": "Dimensional Fund Advisors",
+    "dimensional": "Dimensional Fund Advisors",
+    # Added 2026-10-06: DWS RREEF Real Estate Securities funds had zero
+    # override entry -- 59 rows, zero matched_manager_name. "rreef" verified
+    # as a safe plain substring (distinctive brand term, no collisions).
+    "rreef": "DWS RREEF",
+    # Added 2026-10-06: Fidelity Real Estate / Advisor Real Estate / VIP Real
+    # Estate / Infrastructure funds had zero override entry -- 95 rows, zero
+    # matched_manager_name. Bare "fidelity" verified as a safe plain substring
+    # against live data: checked specifically for unrelated "Fidelity
+    # National"/"Fidelity Bond"/"Fidelity & (and) Guaranty" entities and found
+    # zero such rows in plan_alternatives_history -- every "fidelity" row is a
+    # genuine Fidelity Investments fund.
+    "fidelity": "Fidelity Investments",
+    # Added 2026-10-06: Global Infrastructure Partners (GIP) had zero override
+    # entry -- 24 rows, zero matched_manager_name. Bare "global infrastructure"
+    # was rejected as unsafe: it collides with IFM ("IFM Global
+    # Infrastructure..."), KKR ("KKR GLOBAL INFRASTRUCTURE IV"), Cohen & Steers
+    # ("Cohen Steers Global Infrastructure Fund..."), ISQ ("ISQ Global
+    # Infrastructure Fund..."), and DWS ("DWS Global Infrastructure Fund...").
+    # The narrower "global infrastructure part" substring (catches "PARTNERS"
+    # and the abbreviated "PART IVAB"/"PARTIV" spellings) was verified against
+    # live data to have zero collisions with any of the above managers.
+    "global infrastructure part": "Global Infrastructure Partners",
 }
 
 # Terms used ONLY for matched_manager_name resolution (_alt_manager_case_sql),
@@ -2397,6 +2437,12 @@ ALT_MANAGER_ONLY_TERMS: List[str] = [
     "invesco",
     "kkr",
     "alexandria real estate",
+    "cohen",
+    "dfa",
+    "dimensional",
+    "rreef",
+    "fidelity",
+    "global infrastructure part",
 ]
 
 # S3 location of the shared canonical-manager dictionary -- same bucket/key
