@@ -1143,6 +1143,13 @@ def _route_mf_from_staging(glue_db: str, staging_table: str, target_table: str, 
     token_case = _mf_sponsor_case_sql(sponsor_input, return_token=True)
 
     insert_sql = """
+        INSERT INTO {gd}.{tt} (
+            ack_id, raw_entity_name, raw_sponsor_name, plan_investment_amt,
+            asset_class, asset_sub_class, validation_status,
+            normalized_sponsor_name, sponsor_match_status, sponsor_match_confidence,
+            sponsor_match_token, sponsor_match_source, sponsor_match_risk_level,
+            sponsor_matched_by, sponsor_cleaned_at, needs_sponsor_cleaning_flag
+        )
         WITH staged AS (
             SELECT *,
                 {mgr_case} AS _norm_mgr,
@@ -1150,13 +1157,6 @@ def _route_mf_from_staging(glue_db: str, staging_table: str, target_table: str, 
             FROM {gd}.{st}
             WHERE ack_id IN ({ids}) AND lower(trim(asset_type)) IN ({mf})
               AND lower(trim(raw_entity_name)) NOT IN ({excl})
-        )
-        INSERT INTO {gd}.{tt} (
-            ack_id, raw_entity_name, raw_sponsor_name, plan_investment_amt,
-            asset_class, asset_sub_class, validation_status,
-            normalized_sponsor_name, sponsor_match_status, sponsor_match_confidence,
-            sponsor_match_token, sponsor_match_source, sponsor_match_risk_level,
-            sponsor_matched_by, sponsor_cleaned_at, needs_sponsor_cleaning_flag
         )
         SELECT
             ack_id, raw_entity_name, raw_sponsor_name, plan_investment_amt,
