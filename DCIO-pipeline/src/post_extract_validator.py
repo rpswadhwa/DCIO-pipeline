@@ -2437,15 +2437,23 @@ ALT_MANAGER_OVERRIDES: Dict[str, str] = {
     # "Fidelity Management Trust Company C & S Real Estate A").
     "c&s": "Cohen & Steers",
     "c & s": "Cohen & Steers",
-    # User asked for a bare "brookfield" term, but that collides with public
-    # Brookfield Infrastructure Partners/Corp (BIP/BIPC) securities held
-    # directly as stock/bonds -- confirmed live, same conflict documented in
-    # the 2026-09-30 decision above. Adding the narrower genuine-gap terms
-    # instead, same pattern used for "global infrastructure part".
+    # Narrower genuine-gap terms added first, same pattern used for "global
+    # infrastructure part", before the bare term below existed.
     "brookfield premier re": "Brookfield Asset Management",
     "brookfield us premier real estate": "Brookfield Asset Management",
     "brookfield real estate solutions": "Brookfield Asset Management",
     "brookfield reit": "Brookfield Asset Management",
+    # Bare "brookfield" (added 2026-10-07, per explicit user request after
+    # reviewing the live rows it catches): collides with publicly-traded
+    # Brookfield Infrastructure Partners/Corp (BIP/BIPC) stock/bond/preferred
+    # holdings -- confirmed live (13 rows, ~$8.6M) -- which get tagged
+    # "Brookfield Asset Management" as matched_manager_name even though
+    # they're direct public-security holdings, not a plan-menu fund managed
+    # by Brookfield. Deliberately kept OUT of ALT_BRAND_PATTERNS (same as
+    # "cbre"/"pimco"/"principal" above) so this never forces an asset_type/
+    # asset_class guess onto a new staging row -- manager-name-only risk,
+    # same reasoning as the Crestline/Viking Global/Cerberus exclusion.
+    "brookfield": "Brookfield Asset Management",
     # Carlyle's actual formal name is "The Carlyle Group", not "Carlyle
     # Global" (no such entity) -- using the correct name; all live rows are
     # genuine Carlyle fund variants, no collisions found.
@@ -2528,6 +2536,7 @@ ALT_MANAGER_ONLY_TERMS: List[str] = [
     "brookfield us premier real estate",
     "brookfield real estate solutions",
     "brookfield reit",
+    "brookfield",
     "carlyle",
     "cbre",
     "harbourvest",
