@@ -1797,6 +1797,11 @@ ALT_BRAND_TERM_OVERRIDES: Dict[str, str] = {
     # valid for legitimate future matches (Pure Alpha etc.) while permanently
     # blocking any future All Weather row from auto-routing the same way.
     "bridgewater": "NOT regexp_like(lower(raw_entity_name), 'all weather')",
+    # New 2026-10-07 bare "cbre" ALT_MANAGER_ONLY_TERMS entry (see
+    # ALT_MANAGER_OVERRIDES) -- excludes "CBRE Group Real estate investment
+    # trust" rows, which look like direct holdings of publicly-traded CBRE
+    # Group Inc (NYSE: CBRE) stock rather than a CBRE-managed fund.
+    "cbre": "NOT regexp_like(lower(raw_entity_name), 'cbre\\s+group')",
     # "Neuberger Berman" retail mutual fund / CIT share classes (Real Estate
     # R6, Mid Cap Growth, Genesis, Large Cap Value, Strategic MultiSector
     # Fixed Income Trust, etc.) legitimately contain "Fund"/"Trust" so they
@@ -1912,7 +1917,7 @@ ALT_BRAND_WORD_BOUNDARY_TERMS = {"gso"}
 # verification -- "shares" contains "ares" with no word boundary around it under
 # plain strpos. "ifm" and "aqr" are defensively boundary-matched too since
 # they're 3-char bare terms, even though no live collision was found for them.
-ALT_MANAGER_ONLY_WORD_BOUNDARY_TERMS = {"ares", "ifm", "aqr", "kkr", "dfa"}
+ALT_MANAGER_ONLY_WORD_BOUNDARY_TERMS = {"ares", "ifm", "aqr", "kkr", "dfa", "hcp"}
 
 # Sponsor-name fallback pass (added 2026-09-24, round 3): raw_sponsor_name
 # carries the real manager/fund name for rows where raw_entity_name is a
@@ -2296,7 +2301,13 @@ ALT_MANAGER_OVERRIDES: Dict[str, str] = {
     # correct firm here per 2026-10-06 decision (not yet re-verified against
     # the underlying rows -- see project_manager_canonicalization memory).
     "kayne anderson": "Kayne Anderson Capital Advisors",
-    "oaktree capital": "Oaktree Capital Management",
+    # Changed 2026-10-07 (per user request): Oaktree Capital Management has
+    # been majority-owned/controlled by Brookfield since 2019. Rolling the
+    # subsidiary's narrow phrase term up to the parent's canonical name here,
+    # same convention already used for "tennenbaum" -> "BlackRock". Paired
+    # with the new bare "oaktree" entry below so ALL Oaktree rows (not just
+    # ones literally containing "capital") resolve to one consistent name.
+    "oaktree capital": "Brookfield Asset Management",
     "ullico": "Ullico Investment Advisors",
     "windjammer capital": "Windjammer Capital Investors",
     "copperwood": "Copperwood Asset Management",
@@ -2406,6 +2417,70 @@ ALT_MANAGER_OVERRIDES: Dict[str, str] = {
     # and the abbreviated "PART IVAB"/"PARTIV" spellings) was verified against
     # live data to have zero collisions with any of the above managers.
     "global infrastructure part": "Global Infrastructure Partners",
+    # Added 2026-10-07 per user request, verified against live data (batch3/
+    # batch4 checks): each term below had either zero override entry or a
+    # too-narrow existing term, with genuine unmatched rows in
+    # plan_alternatives_history and no false-positive collisions found.
+    #
+    # Nuveen: canon.json already resolves bare "tiaa" -> "Nuveen" (confirmed
+    # live), so TIAA needed no fix. This bare "nuveen" term catches the
+    # separate "Nuveen Real Estate..." rows that don't also say "TIAA".
+    "nuveen": "Nuveen",
+    "american century": "American Century Investments",
+    # User said "apollo global" -- using the firm's actual formal name.
+    "apollo": "Apollo Global Management",
+    # C&S must be listed/checked before "fidelity" in ALT_MANAGER_ONLY_TERMS
+    # (CASE order = list order) -- fixes a bug from the "fidelity" backfill
+    # above, which plain-substring-matched 2 rows that are actually Cohen &
+    # Steers funds nested inside Fidelity BrokerageLink/Fidelity Management
+    # Trust Co platform wrappers ("Fidelity Brokeragelink C&S Real Estate Z",
+    # "Fidelity Management Trust Company C & S Real Estate A").
+    "c&s": "Cohen & Steers",
+    "c & s": "Cohen & Steers",
+    # User asked for a bare "brookfield" term, but that collides with public
+    # Brookfield Infrastructure Partners/Corp (BIP/BIPC) securities held
+    # directly as stock/bonds -- confirmed live, same conflict documented in
+    # the 2026-09-30 decision above. Adding the narrower genuine-gap terms
+    # instead, same pattern used for "global infrastructure part".
+    "brookfield premier re": "Brookfield Asset Management",
+    "brookfield us premier real estate": "Brookfield Asset Management",
+    "brookfield real estate solutions": "Brookfield Asset Management",
+    "brookfield reit": "Brookfield Asset Management",
+    # Carlyle's actual formal name is "The Carlyle Group", not "Carlyle
+    # Global" (no such entity) -- using the correct name; all live rows are
+    # genuine Carlyle fund variants, no collisions found.
+    "carlyle": "Carlyle Group",
+    # User asked for literal "CBRE to CBRE" (not "CBRE Investment
+    # Management") -- honoring that. The 4 narrow cbre-* terms above already
+    # take priority (checked first, in ALT_BRAND_PATTERNS) so those specific
+    # institutional funds keep the fuller "CBRE Investment Management" name;
+    # this bare term only catches everything else (retail CBRE-branded
+    # mutual fund share classes). Excludes "cbre group" rows ("CBRE Group
+    # Real estate investment trust") since those look like the publicly-
+    # traded CBRE Group Inc (NYSE: CBRE) stock, not a fund relationship.
+    "cbre": "CBRE",
+    "harbourvest": "HarbourVest Partners",
+    # 3-char acronym, word-boundary protected below (see
+    # ALT_MANAGER_ONLY_WORD_BOUNDARY_TERMS) same as kkr/dfa/ares/ifm/aqr.
+    "hcp": "HCP",
+    # Broader than the existing "neuberger berman" ALT_BRAND_PATTERNS term,
+    # which is deliberately allowlist-scoped to specific institutional
+    # product lines (crossroads/secondary opp/private debt/CLO/putwrite) to
+    # keep retail mutual funds out of the asset-class router. This bare term
+    # is for matched_manager_name only and is unrestricted, so retail
+    # Neuberger Berman Real Estate share classes also get the name. Using
+    # bare "neuberger" (not "neuberger berman") since several live variants
+    # drop "Berman" entirely (e.g. "Neuberger Real Estate R6") -- no
+    # unrelated "Neuberger"-branded manager found in the data.
+    "neuberger": "Neuberger Berman",
+    # Bare "oaktree" (see "oaktree capital" rename above for rationale) --
+    # catches the many Oaktree fund variants that don't say "capital".
+    "oaktree": "Brookfield Asset Management",
+    # Verified against live data (scratchpad pimco_principal_check.sql):
+    # every "pimco"/"principal" row is a genuine PIMCO / Principal Financial
+    # Group / Principal Real Estate Investors fund -- no collisions found.
+    "pimco": "PIMCO",
+    "principal": "Principal",
 }
 
 # Terms used ONLY for matched_manager_name resolution (_alt_manager_case_sql),
@@ -2441,8 +2516,26 @@ ALT_MANAGER_ONLY_TERMS: List[str] = [
     "dfa",
     "dimensional",
     "rreef",
+    # c&s / c & s MUST precede "fidelity" -- see ALT_MANAGER_OVERRIDES comment.
+    "c&s",
+    "c & s",
     "fidelity",
     "global infrastructure part",
+    "nuveen",
+    "american century",
+    "apollo",
+    "brookfield premier re",
+    "brookfield us premier real estate",
+    "brookfield real estate solutions",
+    "brookfield reit",
+    "carlyle",
+    "cbre",
+    "harbourvest",
+    "hcp",
+    "neuberger",
+    "oaktree",
+    "pimco",
+    "principal",
 ]
 
 # S3 location of the shared canonical-manager dictionary -- same bucket/key
