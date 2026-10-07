@@ -1430,6 +1430,19 @@ def _route_alternatives_from_staging(glue_db: str, staging_table: str, target_ta
              AND o.rn = 1
             WHERE s.ack_id IN ({ids})
         ),
+        entity_mgr_lookup AS (
+            -- manager_case is large (grows with ALT_BRAND_PATTERNS) and is needed
+            -- identically by both phrase_matches and brand_matches below; computing
+            -- it once here and reusing _mgr keeps it out of the combined query twice,
+            -- which is what pushed this INSERT past Athena's 262144-char query-string
+            -- limit once ALT_BRAND_PATTERNS grew past ~600 terms.
+            SELECT
+                s.ack_id, s.raw_entity_name, s.raw_sponsor_name, s.plan_investment_amt,
+                s.validation_status, s.asset_type,
+                {manager_case} AS _mgr
+            FROM {glue_db}.{staging_table} s
+            WHERE s.ack_id IN ({ids})
+        ),
         phrase_matches AS (
             SELECT
                 ack_id, raw_entity_name, raw_sponsor_name, plan_investment_amt,
@@ -1450,10 +1463,9 @@ def _route_alternatives_from_staging(glue_db: str, staging_table: str, target_ta
                     true AS manual_review_required,
                     current_timestamp AS routed_at,
                     'Alternatives' AS asset_class,
-                    {manager_case} AS _mgr
-                FROM {glue_db}.{staging_table} s
-                WHERE s.ack_id IN ({ids})
-                  AND lower(trim(s.asset_type)) NOT IN ({phrase_excluded})
+                    s._mgr AS _mgr
+                FROM entity_mgr_lookup s
+                WHERE lower(trim(s.asset_type)) NOT IN ({phrase_excluded})
                   AND NOT regexp_like(lower(s.raw_entity_name), '{ALT_ROLLUP_POINTER_REGEX}')
                   AND NOT EXISTS (
                       SELECT 1 FROM override_matches o
@@ -1526,10 +1538,9 @@ def _route_alternatives_from_staging(glue_db: str, staging_table: str, target_ta
                     true AS manual_review_required,
                     current_timestamp AS routed_at,
                     'Alternatives' AS asset_class,
-                    {manager_case} AS _mgr
-                FROM {glue_db}.{staging_table} s
-                WHERE s.ack_id IN ({ids})
-                  AND (lower(trim(s.asset_type)) IS NULL OR lower(trim(s.asset_type)) NOT IN ({brand_excluded}))
+                    s._mgr AS _mgr
+                FROM entity_mgr_lookup s
+                WHERE (lower(trim(s.asset_type)) IS NULL OR lower(trim(s.asset_type)) NOT IN ({brand_excluded}))
                   AND (
                       regexp_like(lower(s.raw_entity_name), '{ALT_BRAND_STRUCTURAL_MARKER_REGEX}')
                       OR lower(trim(s.asset_type)) IN ({trusted})
