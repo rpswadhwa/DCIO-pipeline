@@ -1286,6 +1286,100 @@ _ALT_INSERT_COLUMNS = (
 )
 
 
+def _alt_manager_lookup_map(glue_db: str, staging_table: str, ids: str, column: str,
+                             wg: str, s3: str) -> Dict[Tuple[str, str], str]:
+    """Resolve matched_manager_name for the batch's distinct (raw_entity_name,
+    raw_sponsor_name) pairs by running the full _alt_manager_case_sql() CASE
+    (725 branches across ALT_BRAND_PATTERNS + ALT_MANAGER_ONLY_TERMS) against a
+    literal VALUES list instead of a table-scanned column. Athena hits an
+    internal complexity ceiling compiling this CASE against a table scan --
+    INTERNAL_ERROR_QUERY_ENGINE, confirmed reproducible against the live
+    plan_alternatives_history table even at LIMIT 1 -- but the identical CASE
+    against a VALUES literal is unaffected (confirmed safe up to at least 209
+    rows with all 725 branches, correctly resolving both matches and
+    non-matches).
+
+    Keyed by the (entity, sponsor) pair rather than by `column` alone because
+    ALT_BRAND_TERM_OVERRIDES conditions are hardcoded to reference
+    raw_entity_name literally regardless of which column _alt_manager_case_sql
+    is matching against (see _alt_brand_term_cond) -- so the sponsor-name pass's
+    result for a given raw_sponsor_name value can still depend on that same
+    row's raw_entity_name. Pairing keeps this scoped lookup exactly equivalent
+    to running the real CASE row-by-row against the table scan, for both
+    passes. Scoping to the batch's own distinct pairs rather than every row
+    keeps each lookup query's row count small (a validation run covers one
+    batch of filings, not a full-table backfill)."""
+    import awswrangler as wr
+    pairs_sql = (
+        f"SELECT DISTINCT raw_entity_name, raw_sponsor_name FROM {glue_db}.{staging_table} "
+        f"WHERE ack_id IN ({ids}) AND {column} IS NOT NULL AND trim({column}) <> ''"
+    )
+    df = wr.athena.read_sql_query(sql=pairs_sql, database=glue_db, workgroup=wg, s3_output=s3)
+    seen = set()
+    pairs = []
+    for en, sp in zip(df["raw_entity_name"].tolist(), df["raw_sponsor_name"].tolist()):
+        key = (
+            str(en).strip().lower() if pd.notna(en) else "",
+            str(sp).strip().lower() if pd.notna(sp) else "",
+        )
+        if key not in seen:
+            seen.add(key)
+            pairs.append(key)
+    if not pairs:
+        return {}
+    manager_case = _alt_manager_case_sql(column)
+    result: Dict[Tuple[str, str], str] = {}
+    chunk_size = 200
+    for i in range(0, len(pairs), chunk_size):
+        chunk = pairs[i:i + chunk_size]
+        values_list = ", ".join(
+            "('" + en.replace("'", "''") + "', '" + sp.replace("'", "''") + "')"
+            for en, sp in chunk
+        )
+        lookup_sql = (
+            f"SELECT t.raw_entity_name AS _ekey, t.raw_sponsor_name AS _skey, {manager_case} AS _mgr "
+            f"FROM (VALUES {values_list}) AS t(raw_entity_name, raw_sponsor_name)"
+        )
+        lookup_df = wr.athena.read_sql_query(sql=lookup_sql, database=glue_db, workgroup=wg, s3_output=s3)
+        for _, row in lookup_df.iterrows():
+            # NULL _mgr (no match) comes back from awswrangler as float NaN, not None --
+            # `is not None` doesn't catch it, which would otherwise store the literal
+            # string "nan" as a matched_manager_name for every non-matching pair.
+            if pd.notna(row["_mgr"]):
+                ekey = str(row["_ekey"]).strip().lower()
+                skey = str(row["_skey"]).strip().lower()
+                result[(ekey, skey)] = str(row["_mgr"])
+    return result
+
+
+def _alt_manager_lookup_values_sql(mapping: Dict[Tuple[str, str], str]) -> str:
+    """VALUES-row list for a batch-scoped manager lookup built by
+    _alt_manager_lookup_map, meant to be JOINed (not CASE-matched) against
+    staging in the main routing query -- see _alt_manager_lookup_map for why
+    the lookup itself has to be scoped to the batch's distinct pairs.
+
+    A JOIN against a VALUES-derived table compiles as a runtime hash join
+    regardless of row count. A CASE with one WHEN per row does not: each
+    WHEN becomes its own branch in the compiled query plan, and a 25-ack_id
+    batch alone was enough to resolve so many distinct matched pairs that a
+    literal-equality CASE over them hit the exact same Athena complexity
+    ceiling (INTERNAL_ERROR_QUERY_ENGINE) that the original unscoped
+    725-branch _alt_manager_case_sql() table-scan CASE hit -- shrinking the
+    CASE's branch count with scoping and chunking wasn't enough, since the
+    ceiling is on total compiled query complexity, not on any one CASE.
+    Switching the lookup from a CASE to a JOIN sidesteps that ceiling
+    instead of just pushing the branch count down."""
+    if not mapping:
+        return "(CAST(NULL AS VARCHAR), CAST(NULL AS VARCHAR), CAST(NULL AS VARCHAR))"
+    rows = []
+    for (en, sp), manager in mapping.items():
+        e = en.replace("'", "''")
+        s = sp.replace("'", "''")
+        v = manager.replace("'", "''")
+        rows.append(f"('{e}', '{s}', '{v}')")
+    return ", ".join(rows)
+
+
 def _route_alternatives_from_staging(glue_db: str, staging_table: str, target_table: str, ack_ids: list) -> None:
     """Populate the alternatives table from staging in a single pass with
     an override lookup plus four match strategies -- override first, then
@@ -1369,17 +1463,42 @@ def _route_alternatives_from_staging(glue_db: str, staging_table: str, target_ta
     manual_review_required is unconditionally true for the four pattern
     passes for now: these patterns are unproven against real data, so every
     routed row should get a first look before this flips to a
-    confidence-based rule."""
-    import awswrangler as wr
-    import os
+    confidence-based rule.
+
+    Processes ack_ids in sub-batches of _ALT_ROUTE_CHUNK_SIZE rather than
+    one combined query for the whole call: the manager lookup VALUES list
+    spliced into combined_sql (see _alt_manager_lookup_values_sql) has one
+    row per distinct (raw_entity_name, raw_sponsor_name) pair the batch
+    resolves to a manager, and that count scales with how many distinct
+    holdings are in scope, not with the fixed ALT_BRAND_PATTERNS vocabulary
+    -- a real 150-ack_id batch resolved thousands of pairs and the
+    resulting query exceeded Athena's 262144-character query-string limit
+    (the same limit class commit 3778b8b fixed for the old, unscoped regex
+    CASE). Chunking keeps each individual combined query's embedded lookup
+    small regardless of how many ack_ids the caller passes in one call."""
     if not ack_ids:
         return
+    chunk_size = _ALT_ROUTE_CHUNK_SIZE
+    for i in range(0, len(ack_ids), chunk_size):
+        _route_alternatives_chunk(glue_db, staging_table, target_table, ack_ids[i:i + chunk_size])
+
+
+_ALT_ROUTE_CHUNK_SIZE = 25
+
+
+def _route_alternatives_chunk(glue_db: str, staging_table: str, target_table: str, ack_ids: list) -> None:
+    """One sub-batch's worth of _route_alternatives_from_staging -- see that
+    function's docstring for the full routing logic and why this is chunked."""
+    import awswrangler as wr
+    import os
     wg = os.getenv("ATHENA_WORKGROUP", "primary")
     s3 = os.getenv("ATHENA_STAGING_S3")
     ids = ", ".join("'" + str(a).replace("'", "''") + "'" for a in ack_ids)
-    manager_case = _alt_manager_case_sql()
+    entity_mgr_map = _alt_manager_lookup_map(glue_db, staging_table, ids, "raw_entity_name", wg, s3)
+    entity_mgr_values = _alt_manager_lookup_values_sql(entity_mgr_map)
     vehicle_case = _alt_vehicle_case_sql()
-    manager_case_sponsor = _alt_manager_case_sql("raw_sponsor_name")
+    sponsor_mgr_map = _alt_manager_lookup_map(glue_db, staging_table, ids, "raw_sponsor_name", wg, s3)
+    sponsor_mgr_values = _alt_manager_lookup_values_sql(sponsor_mgr_map)
     vehicle_case_sponsor = _alt_vehicle_case_sql("raw_sponsor_name")
     debt_manager_case = _alt_debt_carveout_manager_sql()
 
@@ -1430,17 +1549,35 @@ def _route_alternatives_from_staging(glue_db: str, staging_table: str, target_ta
              AND o.rn = 1
             WHERE s.ack_id IN ({ids})
         ),
+        entity_mgr_values(_ekey, _skey, _mgr) AS (
+            VALUES {entity_mgr_values}
+        ),
+        sponsor_mgr_values(_ekey, _skey, _mgr) AS (
+            VALUES {sponsor_mgr_values}
+        ),
         entity_mgr_lookup AS (
-            -- manager_case is large (grows with ALT_BRAND_PATTERNS) and is needed
-            -- identically by both phrase_matches and brand_matches below; computing
-            -- it once here and reusing _mgr keeps it out of the combined query twice,
-            -- which is what pushed this INSERT past Athena's 262144-char query-string
-            -- limit once ALT_BRAND_PATTERNS grew past ~600 terms.
+            -- _mgr is needed identically by both phrase_matches and brand_matches
+            -- below; computing it once here and reusing it keeps the lookup out of
+            -- the combined query twice. Resolved via a JOIN against entity_mgr_values
+            -- (this batch's distinct raw_entity_name/raw_sponsor_name pairs, looked up
+            -- against the full ~725-branch _alt_manager_case_sql() vocabulary in Python
+            -- -- see _alt_manager_lookup_map) rather than embedding that vocabulary as a
+            -- CASE run directly against this table-scanned column. Athena's query engine
+            -- can't compile a CASE that large against a table scan
+            -- (INTERNAL_ERROR_QUERY_ENGINE, confirmed reproducible even at LIMIT 1), and
+            -- a literal-equality CASE scoped to just this batch's matched pairs isn't a
+            -- fix either -- a 25-ack_id batch alone resolved enough pairs to hit the same
+            -- ceiling. A JOIN against a VALUES-derived table compiles as a runtime hash
+            -- join independent of row count, which sidesteps the ceiling instead of
+            -- trying to stay under it.
             SELECT
                 s.ack_id, s.raw_entity_name, s.raw_sponsor_name, s.plan_investment_amt,
                 s.validation_status, s.asset_type,
-                {manager_case} AS _mgr
+                v._mgr AS _mgr
             FROM {glue_db}.{staging_table} s
+            LEFT JOIN entity_mgr_values v
+              ON lower(trim(s.raw_entity_name)) = v._ekey
+             AND coalesce(lower(trim(s.raw_sponsor_name)), '') = v._skey
             WHERE s.ack_id IN ({ids})
         ),
         phrase_matches AS (
@@ -1586,8 +1723,11 @@ def _route_alternatives_from_staging(glue_db: str, staging_table: str, target_ta
                     true AS manual_review_required,
                     current_timestamp AS routed_at,
                     'Alternatives' AS asset_class,
-                    {manager_case_sponsor} AS _mgr
+                    v._mgr AS _mgr
                 FROM {glue_db}.{staging_table} s
+                LEFT JOIN sponsor_mgr_values v
+                  ON lower(trim(s.raw_entity_name)) = v._ekey
+                 AND coalesce(lower(trim(s.raw_sponsor_name)), '') = v._skey
                 WHERE s.ack_id IN ({ids})
                   AND s.raw_sponsor_name IS NOT NULL AND trim(s.raw_sponsor_name) <> ''
                   AND (lower(trim(s.asset_type)) IS NULL OR lower(trim(s.asset_type)) NOT IN ({brand_excluded}))

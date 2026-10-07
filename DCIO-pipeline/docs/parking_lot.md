@@ -1637,45 +1637,65 @@ parallel prototype, not a live competing system — no data, no scheduled
 job, nothing downstream can be reading from it. No action needed; noting
 here so it isn't rediscovered and mistaken for something active.
 
-Separately (same investigation): the real `plan_alternatives_history`
-(plural) router (`_route_alternatives_from_staging`) is deployed and
-correct but was found to be **inert in production** — its call site is
-gated behind `ALTERNATIVES_TABLE`, an env var that is set nowhere in the
-EC2 `.env` (only `HOLDINGS_STAGING_TABLE` is set, which lights up MF
-routing but not alt routing). Fix: add `ALTERNATIVES_TABLE=plan_alternatives_history`
-to `/home/ec2-user/DCIO-pipeline/DCIO-pipeline/.env` — additive-only,
-affects future batches only, no historical rewrite. Deferred until the
-in-flight pipeline run (PID 353698, started 2026-09-25) finishes, to avoid
-touching shared config mid-run.
+Separately (same investigation, **correction below — the "inert" framing
+here was wrong**): the real `plan_alternatives_history` (plural) router
+(`_route_alternatives_from_staging`) was believed to be **inert in
+production** — its call site reportedly gated behind `ALTERNATIVES_TABLE`,
+an env var believed to be set nowhere in the EC2 `.env` (only
+`HOLDINGS_STAGING_TABLE` set, lighting up MF routing but not alt routing).
+The user corrected this during the 2026-10-07 investigation below: ALT data
+*is* getting loaded in production in other cases, so this router is not
+simply inert — the `ALTERNATIVES_TABLE` gating claim has NOT been
+re-verified against the current EC2 `.env` this session and should not be
+trusted at face value; treat it as an open question, not a confirmed fact,
+until someone actually checks the live `.env`.
 
-**2026-10-07 update — blocker found for the above fix, do not flip
-`ALTERNATIVES_TABLE` on until this is resolved.** `_alt_manager_case_sql()`
-(the function `_route_alternatives_from_staging` calls to build the
-`matched_manager_name` CASE) now emits 725 WHEN clauses (647 before
-today's manager-matching rule update, 78 more added today). Re-testing
-both the pre-update 647-clause version and the current 725-clause version
-directly against Athena (plain SELECT, outside the pipeline) shows **both
-fail with `INTERNAL_ERROR_QUERY_ENGINE`** — confirmed via binary search to
-be a total-expression-complexity ceiling in the Trino/Athena engine
-(engine version 3, already on `AUTO`/latest — no version-pin fix exists)
-somewhere between 636 and 637 WHEN clauses in one compiled scalar
-expression. Splitting the WHEN list into several smaller CASE blocks
-wrapped in one `COALESCE(...)` does **not** help — tested directly, still
-fails — because the limit is on the total complexity of the whole
-compiled expression, not any individual CASE block's size. Net effect:
-**this function has never actually worked at its current size** (it was
-already over the line before today's rule update), it just never got
-exercised end-to-end in production because of the inert-router issue
-above. If `ALTERNATIVES_TABLE` is set without first fixing this, every
-`_route_alternatives_from_staging` call will throw on the `wr.athena.wait_query()`
-call (no try/except around it today) and the batch run will fail. Real
-fix needs one of: (a) run the override/phrase/brand/sponsor match
-strategies as separate Athena queries and combine client-side in pandas
-instead of one nested CASE, (b) emit several smaller independently-compiled
-CASE columns and `COALESCE`/pick-first in pandas after fetch (not in SQL),
-or (c) move `ALT_BRAND_PATTERNS`/`ALT_MANAGER_ONLY_TERMS` into a lookup
-table and JOIN instead of inlining as a scalar CASE. Not yet fixed —
-needs a decision on approach before `ALTERNATIVES_TABLE` is ever set.
+**2026-10-07 update — SQL-complexity blocker below is now FIXED and
+verified end-to-end against live Athena.** `_alt_manager_case_sql()` (the
+function `_route_alternatives_from_staging` used to call to build the
+`matched_manager_name` CASE) had grown to 725 WHEN clauses (647 before the
+2026-10-07 manager-matching rule update, 78 more added that day). Both the
+647-clause and 725-clause versions failed with `INTERNAL_ERROR_QUERY_ENGINE`
+when tested directly against Athena (plain SELECT, outside the pipeline) —
+confirmed via binary search to be a total-expression-complexity ceiling in
+the Trino/Athena engine (engine version 3, already on `AUTO`/latest — no
+version-pin fix exists) somewhere between 636 and 637 WHEN clauses in one
+compiled scalar expression, where the ceiling is on the whole compiled
+query's total complexity, not any individual CASE block's size (splitting
+into several CASE blocks combined via `COALESCE` was tried and does not
+help — still fails).
+
+**Fix implemented**: approach (c) below — replaced the literal-equality
+`matched_manager_name` CASE with a JOIN against a `VALUES(...)`-derived
+lookup table built from the batch's distinct `(raw_entity_name,
+raw_sponsor_name)` pairs (resolved against the full
+`ALT_BRAND_PATTERNS`/`ALT_MANAGER_ONLY_TERMS` vocabulary in Python, not SQL)
+— a hash join's compile-time cost doesn't scale with row count the way a
+CASE's does, so this sidesteps the ceiling instead of trying to stay under
+it. Combined with chunking `_route_alternatives_from_staging`'s ack_ids into
+sub-batches of 25 (`_ALT_ROUTE_CHUNK_SIZE`, needed separately to stay under
+Athena's independent 262,144-character query-string limit as the per-batch
+lookup grows), **verified end-to-end (read-only, no live writes) against
+150 real `ack_id`s from `plan_holdings_staging`**: all 6 chunks of 25
+succeeded, no `INTERNAL_ERROR_QUERY_ENGINE`, query lengths 162,810–207,237
+chars (safely under the 262,144 limit), 52 rows routed, 40 resolving a
+`matched_manager_name`. This is the first time the real combined
+ALT-routing query has been confirmed to execute successfully against live
+Athena at its current vocabulary size — previously it had never actually
+worked at this size, whether or not the router was being invoked in
+production.
+
+Candidates (a) running match strategies as separate queries combined in
+pandas, and (b) several independently-compiled CASE columns combined in
+pandas, were not needed once (c) proved sufficient.
+
+**Still open, not addressed by this fix**: whether `_route_alternatives_from_staging`'s
+call site is actually reached in production at all (the `ALTERNATIVES_TABLE`
+gating question above) — that's a separate question from whether the SQL
+it runs is correct, and needs its own check against the live EC2 `.env`
+before concluding the router is fully fixed end-to-end in production.
+Fix is also still local-only: uncommitted, not pushed, not deployed to EC2
+— pending explicit approval before any commit/push/deploy.
 
 ---
 
