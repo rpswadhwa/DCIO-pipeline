@@ -1912,7 +1912,7 @@ ALT_BRAND_WORD_BOUNDARY_TERMS = {"gso"}
 # verification -- "shares" contains "ares" with no word boundary around it under
 # plain strpos. "ifm" and "aqr" are defensively boundary-matched too since
 # they're 3-char bare terms, even though no live collision was found for them.
-ALT_MANAGER_ONLY_WORD_BOUNDARY_TERMS = {"ares", "ifm", "aqr"}
+ALT_MANAGER_ONLY_WORD_BOUNDARY_TERMS = {"ares", "ifm", "aqr", "kkr"}
 
 # Sponsor-name fallback pass (added 2026-09-24, round 3): raw_sponsor_name
 # carries the real manager/fund name for rows where raw_entity_name is a
@@ -2243,11 +2243,11 @@ def _alt_brand_method_case_sql(column: str = "raw_entity_name", method_prefix: s
 #   3. term.title() -- last-resort naive casing
 # ---------------------------------------------------------------------------
 ALT_MANAGER_OVERRIDES: Dict[str, str] = {
-    "gso": "GSO Capital Partners",
-    "onex": "Onex Partners",
+    "gso": "Blackstone Credit",
+    "onex": "Onex",
     "landmark": "Landmark Partners",
-    "tennenbaum": "Tennenbaum Capital",
-    "owl rock": "Owl Rock Capital",
+    "tennenbaum": "BlackRock",
+    "owl rock": "Blue Owl Capital",
     "ipi data center": "IPI Partners",
     "spf securitized products": "SPF Investment Management",
     "ara core property": "American Realty Advisors",
@@ -2263,14 +2263,71 @@ ALT_MANAGER_OVERRIDES: Dict[str, str] = {
     "goldentree": "GoldenTree Asset Management",
     "encap": "EnCap Investments",
     "ta realty": "TA Realty",
-    "gtcr": "GTCR LLC",
+    "gtcr": "GTCR",
     "hellman": "Hellman & Friedman",
     "golden tree": "GoldenTree Asset Management",
     "washington capital reef": "Washington Capital Management",
     "washington capital": "Washington Capital Management",
     "peak rock capital credit": "Peak Rock Capital",
     "peak rock capital": "Peak Rock Capital",
-    "tcw direct lending": "TCW Group",
+    "tcw direct lending": "TCW",
+    # Added 2026-10-06: manager_canonical_hierarchy round-3 collapse (see
+    # project_manager_canonicalization memory) -- these terms previously had
+    # no override and fell through to canon.json/.title(), producing raw/
+    # inconsistent display names ("Gcm Grosvenor", "Boyd Watterson", "Ullico",
+    # "Brookfield Cap Ptnrs", etc.) that the live table's 623-row backfill UPDATE
+    # already corrected retroactively. These entries make new rows resolve to
+    # the same canonical name directly, so the backfill doesn't have to be
+    # re-run after every future load.
+    "alcentra": "Benefit Street Partners",
+    "basalt": "Basalt Infrastructure Partners",
+    "clearlake capital": "Clearlake Capital Group",
+    "eagle point": "Eagle Point Credit Management",
+    "frazier": "Frazier Healthcare Partners",
+    "gcm grosvenor": "GCM Grosvenor",
+    "goldpoint partners": "Apogem Capital",
+    "hancock natural resource group": "Manulife Investment Management",
+    "intercontinental": "Intercontinental Real Estate Corporation",
+    # "kayne anderson" (Infrastructure Fund asset_type) targets Kayne Anderson
+    # Capital Advisors' energy/infra funds -- a different firm from Kayne
+    # Anderson Rudnick Investment Management (Virtus-owned equity SMA manager).
+    # canon.json previously resolved this bare term to "Kayne Anderson Rudnick",
+    # which looks like a conflation of the two distinct firms; forcing the
+    # correct firm here per 2026-10-06 decision (not yet re-verified against
+    # the underlying rows -- see project_manager_canonicalization memory).
+    "kayne anderson": "Kayne Anderson Capital Advisors",
+    "oaktree capital": "Oaktree Capital Management",
+    "ullico": "Ullico Investment Advisors",
+    "windjammer capital": "Windjammer Capital Investors",
+    "copperwood": "Copperwood Asset Management",
+    "ironwood": "Ironwood Capital Management",
+    "horsley bridge": "Horsley Bridge Partners",
+    "balyasny": "Balyasny Asset Management",
+    "primavera capital": "Primavera Capital Group",
+    "whitebox": "Whitebox Advisors",
+    "systematica": "Systematica Investments",
+    "alphadyne": "AlphaDyne Asset Management",
+    "vitruvian": "Vitruvian Partners",
+    "boyd watterson": "Boyd Watterson Asset Management",
+    "waud capital": "Waud Capital Partners",
+    "patriot financial": "Patriot Financial Partners",
+    "cendana": "Cendana Capital",
+    "american securities partners": "American Securities",
+    "green equity investors": "Leonard Green & Partners",
+    "coller credit": "Coller Capital",
+    "forest investment advisors": "Forest Investment Associates",
+    "brookfield capital partners": "Brookfield Asset Management",
+    "brookfield cap ptnrs": "Brookfield Asset Management",
+    "brookfield special investments": "Brookfield Asset Management",
+    "brookfield strategic re": "Brookfield Asset Management",
+    "brookfield infra fund": "Brookfield Asset Management",
+    "cbre us logistics partners": "CBRE Investment Management",
+    "cbre gip": "CBRE Investment Management",
+    "cbre strategic ptr": "CBRE Investment Management",
+    "cbre strategic partners": "CBRE Investment Management",
+    "adams street partnership": "Adams Street Partners",
+    "adams street co-investment": "Adams Street Partners",
+    "blackrock": "BlackRock",
     # Brand-router default (term.title()) previously diverged from the
     # debt-carveout manager_name for these two terms (ALT_MANAGER_DEBT_
     # PATTERNS above uses "Blue Owl Capital"/"Starwood Capital Group"),
@@ -2296,6 +2353,19 @@ ALT_MANAGER_OVERRIDES: Dict[str, str] = {
     "corbin": "Corbin Capital Partners",
     "crescent": "Crescent Capital Group",
     "ifm": "IFM Investors",
+    # Added 2026-10-06: no-match-bucket review (see project_manager_
+    # canonicalization memory) -- $206.9M/23 rows of real KKR fund names
+    # (KKR Diversified Core Infrastructure, KKR Global Infrastructure IV,
+    # KKR Asia Real Estate Partners, etc.) had zero override entry and
+    # zero matched_manager_name. "kkr" is bare/3-char so word-boundary
+    # protected below, same defensive treatment as "ifm"/"aqr".
+    "kkr": "KKR",
+    # Alexandria Real Estate Equities (NYSE: ARE) is a publicly-traded REIT
+    # held directly as a stock/bond security in these plans, not a fund
+    # sponsor -- $149.6M/259 rows, all unmatched. Mapped to itself since
+    # there's no external "manager" relationship to resolve to; term is the
+    # two-word phrase (not bare "alexandria") to stay unambiguous.
+    "alexandria real estate": "Alexandria Real Estate Equities",
 }
 
 # Terms used ONLY for matched_manager_name resolution (_alt_manager_case_sql),
@@ -2325,6 +2395,8 @@ ALT_MANAGER_ONLY_TERMS: List[str] = [
     "morgan stanley",
     "aqr",
     "invesco",
+    "kkr",
+    "alexandria real estate",
 ]
 
 # S3 location of the shared canonical-manager dictionary -- same bucket/key
