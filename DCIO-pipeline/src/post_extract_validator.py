@@ -1432,146 +1432,178 @@ def _route_alternatives_from_staging(glue_db: str, staging_table: str, target_ta
         ),
         phrase_matches AS (
             SELECT
-                s.ack_id, s.raw_entity_name, s.raw_sponsor_name, s.plan_investment_amt,
-                {_alt_case_sql(2)} AS asset_sub_class,
-                s.validation_status,
-                {vehicle_case} AS asset_type,
-                {_alt_case_sql(3)} AS classification_confidence,
-                {_alt_case_sql(4)} AS classification_method,
-                true AS manual_review_required,
-                current_timestamp AS routed_at,
-                'Alternatives' AS asset_class,
-                {manager_case} AS matched_manager_name,
-                CASE WHEN {manager_case} IS NOT NULL THEN 'HIGH' ELSE NULL END AS manager_match_confidence,
-                CASE WHEN {manager_case} IS NOT NULL THEN 'brand_regex_v1' ELSE NULL END AS manager_match_method
-            FROM {glue_db}.{staging_table} s
-            WHERE s.ack_id IN ({ids})
-              AND lower(trim(s.asset_type)) NOT IN ({phrase_excluded})
-              AND NOT regexp_like(lower(s.raw_entity_name), '{ALT_ROLLUP_POINTER_REGEX}')
-              AND NOT EXISTS (
-                  SELECT 1 FROM override_matches o
-                  WHERE o.ack_id = s.ack_id
-                    AND o.raw_entity_name = s.raw_entity_name
-                    AND o.raw_sponsor_name IS NOT DISTINCT FROM s.raw_sponsor_name
-                    AND o.plan_investment_amt IS NOT DISTINCT FROM s.plan_investment_amt
-              )
+                ack_id, raw_entity_name, raw_sponsor_name, plan_investment_amt,
+                asset_sub_class, validation_status, asset_type,
+                classification_confidence, classification_method,
+                manual_review_required, routed_at, asset_class,
+                _mgr AS matched_manager_name,
+                CASE WHEN _mgr IS NOT NULL THEN 'HIGH' ELSE NULL END AS manager_match_confidence,
+                CASE WHEN _mgr IS NOT NULL THEN 'brand_regex_v1' ELSE NULL END AS manager_match_method
+            FROM (
+                SELECT
+                    s.ack_id, s.raw_entity_name, s.raw_sponsor_name, s.plan_investment_amt,
+                    {_alt_case_sql(2)} AS asset_sub_class,
+                    s.validation_status,
+                    {vehicle_case} AS asset_type,
+                    {_alt_case_sql(3)} AS classification_confidence,
+                    {_alt_case_sql(4)} AS classification_method,
+                    true AS manual_review_required,
+                    current_timestamp AS routed_at,
+                    'Alternatives' AS asset_class,
+                    {manager_case} AS _mgr
+                FROM {glue_db}.{staging_table} s
+                WHERE s.ack_id IN ({ids})
+                  AND lower(trim(s.asset_type)) NOT IN ({phrase_excluded})
+                  AND NOT regexp_like(lower(s.raw_entity_name), '{ALT_ROLLUP_POINTER_REGEX}')
+                  AND NOT EXISTS (
+                      SELECT 1 FROM override_matches o
+                      WHERE o.ack_id = s.ack_id
+                        AND o.raw_entity_name = s.raw_entity_name
+                        AND o.raw_sponsor_name IS NOT DISTINCT FROM s.raw_sponsor_name
+                        AND o.plan_investment_amt IS NOT DISTINCT FROM s.plan_investment_amt
+                  )
+            )
         ),
         phrase_matched_rows AS (
             SELECT * FROM phrase_matches WHERE asset_sub_class IS NOT NULL
         ),
         debt_carveout_matches AS (
             SELECT
-                s.ack_id, s.raw_entity_name, s.raw_sponsor_name, s.plan_investment_amt,
-                {_alt_debt_carveout_subclass_sql()} AS asset_sub_class,
-                s.validation_status,
-                {_alt_debt_carveout_instrument_type_sql()} AS asset_type,
-                'MEDIUM' AS classification_confidence,
-                {_alt_debt_carveout_method_sql()} AS classification_method,
-                true AS manual_review_required,
-                current_timestamp AS routed_at,
-                'Alternatives' AS asset_class,
-                {debt_manager_case} AS matched_manager_name,
-                CASE WHEN {debt_manager_case} IS NOT NULL THEN 'HIGH' ELSE NULL END AS manager_match_confidence,
-                CASE WHEN {debt_manager_case} IS NOT NULL THEN 'debt_carveout_regex_v1' ELSE NULL END AS manager_match_method
-            FROM {glue_db}.{staging_table} s
-            WHERE s.ack_id IN ({ids})
-              AND NOT EXISTS (
-                  SELECT 1 FROM phrase_matched_rows p
-                  WHERE p.ack_id = s.ack_id AND p.raw_entity_name = s.raw_entity_name
-              )
-              AND NOT EXISTS (
-                  SELECT 1 FROM override_matches o
-                  WHERE o.ack_id = s.ack_id
-                    AND o.raw_entity_name = s.raw_entity_name
-                    AND o.raw_sponsor_name IS NOT DISTINCT FROM s.raw_sponsor_name
-                    AND o.plan_investment_amt IS NOT DISTINCT FROM s.plan_investment_amt
-              )
+                ack_id, raw_entity_name, raw_sponsor_name, plan_investment_amt,
+                asset_sub_class, validation_status, asset_type,
+                classification_confidence, classification_method,
+                manual_review_required, routed_at, asset_class,
+                _mgr AS matched_manager_name,
+                CASE WHEN _mgr IS NOT NULL THEN 'HIGH' ELSE NULL END AS manager_match_confidence,
+                CASE WHEN _mgr IS NOT NULL THEN 'debt_carveout_regex_v1' ELSE NULL END AS manager_match_method
+            FROM (
+                SELECT
+                    s.ack_id, s.raw_entity_name, s.raw_sponsor_name, s.plan_investment_amt,
+                    {_alt_debt_carveout_subclass_sql()} AS asset_sub_class,
+                    s.validation_status,
+                    {_alt_debt_carveout_instrument_type_sql()} AS asset_type,
+                    'MEDIUM' AS classification_confidence,
+                    {_alt_debt_carveout_method_sql()} AS classification_method,
+                    true AS manual_review_required,
+                    current_timestamp AS routed_at,
+                    'Alternatives' AS asset_class,
+                    {debt_manager_case} AS _mgr
+                FROM {glue_db}.{staging_table} s
+                WHERE s.ack_id IN ({ids})
+                  AND NOT EXISTS (
+                      SELECT 1 FROM phrase_matched_rows p
+                      WHERE p.ack_id = s.ack_id AND p.raw_entity_name = s.raw_entity_name
+                  )
+                  AND NOT EXISTS (
+                      SELECT 1 FROM override_matches o
+                      WHERE o.ack_id = s.ack_id
+                        AND o.raw_entity_name = s.raw_entity_name
+                        AND o.raw_sponsor_name IS NOT DISTINCT FROM s.raw_sponsor_name
+                        AND o.plan_investment_amt IS NOT DISTINCT FROM s.plan_investment_amt
+                  )
+            )
         ),
         debt_carveout_matched_rows AS (
             SELECT * FROM debt_carveout_matches WHERE asset_sub_class IS NOT NULL
         ),
         brand_matches AS (
             SELECT
-                s.ack_id, s.raw_entity_name, s.raw_sponsor_name, s.plan_investment_amt,
-                {_alt_brand_case_sql(2)} AS asset_sub_class,
-                s.validation_status,
-                {vehicle_case} AS asset_type,
-                'MEDIUM' AS classification_confidence,
-                {_alt_brand_method_case_sql()} AS classification_method,
-                true AS manual_review_required,
-                current_timestamp AS routed_at,
-                'Alternatives' AS asset_class,
-                {manager_case} AS matched_manager_name,
-                CASE WHEN {manager_case} IS NOT NULL THEN 'HIGH' ELSE NULL END AS manager_match_confidence,
-                CASE WHEN {manager_case} IS NOT NULL THEN 'brand_regex_v1' ELSE NULL END AS manager_match_method
-            FROM {glue_db}.{staging_table} s
-            WHERE s.ack_id IN ({ids})
-              AND (lower(trim(s.asset_type)) IS NULL OR lower(trim(s.asset_type)) NOT IN ({brand_excluded}))
-              AND (
-                  regexp_like(lower(s.raw_entity_name), '{ALT_BRAND_STRUCTURAL_MARKER_REGEX}')
-                  OR lower(trim(s.asset_type)) IN ({trusted})
-              )
-              AND NOT regexp_like(lower(s.raw_entity_name), '{ALT_BRAND_NOISE_REGEX}')
-              AND NOT EXISTS (
-                  SELECT 1 FROM phrase_matched_rows p
-                  WHERE p.ack_id = s.ack_id AND p.raw_entity_name = s.raw_entity_name
-              )
-              AND NOT EXISTS (
-                  SELECT 1 FROM debt_carveout_matched_rows d
-                  WHERE d.ack_id = s.ack_id AND d.raw_entity_name = s.raw_entity_name
-              )
-              AND NOT EXISTS (
-                  SELECT 1 FROM override_matches o
-                  WHERE o.ack_id = s.ack_id
-                    AND o.raw_entity_name = s.raw_entity_name
-                    AND o.raw_sponsor_name IS NOT DISTINCT FROM s.raw_sponsor_name
-                    AND o.plan_investment_amt IS NOT DISTINCT FROM s.plan_investment_amt
-              )
+                ack_id, raw_entity_name, raw_sponsor_name, plan_investment_amt,
+                asset_sub_class, validation_status, asset_type,
+                classification_confidence, classification_method,
+                manual_review_required, routed_at, asset_class,
+                _mgr AS matched_manager_name,
+                CASE WHEN _mgr IS NOT NULL THEN 'HIGH' ELSE NULL END AS manager_match_confidence,
+                CASE WHEN _mgr IS NOT NULL THEN 'brand_regex_v1' ELSE NULL END AS manager_match_method
+            FROM (
+                SELECT
+                    s.ack_id, s.raw_entity_name, s.raw_sponsor_name, s.plan_investment_amt,
+                    {_alt_brand_case_sql(2)} AS asset_sub_class,
+                    s.validation_status,
+                    {vehicle_case} AS asset_type,
+                    'MEDIUM' AS classification_confidence,
+                    {_alt_brand_method_case_sql()} AS classification_method,
+                    true AS manual_review_required,
+                    current_timestamp AS routed_at,
+                    'Alternatives' AS asset_class,
+                    {manager_case} AS _mgr
+                FROM {glue_db}.{staging_table} s
+                WHERE s.ack_id IN ({ids})
+                  AND (lower(trim(s.asset_type)) IS NULL OR lower(trim(s.asset_type)) NOT IN ({brand_excluded}))
+                  AND (
+                      regexp_like(lower(s.raw_entity_name), '{ALT_BRAND_STRUCTURAL_MARKER_REGEX}')
+                      OR lower(trim(s.asset_type)) IN ({trusted})
+                  )
+                  AND NOT regexp_like(lower(s.raw_entity_name), '{ALT_BRAND_NOISE_REGEX}')
+                  AND NOT EXISTS (
+                      SELECT 1 FROM phrase_matched_rows p
+                      WHERE p.ack_id = s.ack_id AND p.raw_entity_name = s.raw_entity_name
+                  )
+                  AND NOT EXISTS (
+                      SELECT 1 FROM debt_carveout_matched_rows d
+                      WHERE d.ack_id = s.ack_id AND d.raw_entity_name = s.raw_entity_name
+                  )
+                  AND NOT EXISTS (
+                      SELECT 1 FROM override_matches o
+                      WHERE o.ack_id = s.ack_id
+                        AND o.raw_entity_name = s.raw_entity_name
+                        AND o.raw_sponsor_name IS NOT DISTINCT FROM s.raw_sponsor_name
+                        AND o.plan_investment_amt IS NOT DISTINCT FROM s.plan_investment_amt
+                  )
+            )
         ),
         brand_matched_rows AS (
             SELECT * FROM brand_matches WHERE asset_sub_class IS NOT NULL
         ),
         sponsor_matches AS (
             SELECT
-                s.ack_id, s.raw_entity_name, s.raw_sponsor_name, s.plan_investment_amt,
-                {_alt_brand_case_sql(2, "raw_sponsor_name")} AS asset_sub_class,
-                s.validation_status,
-                {vehicle_case_sponsor} AS asset_type,
-                'LOW' AS classification_confidence,
-                {_alt_brand_method_case_sql("raw_sponsor_name", "manual:sponsor_brand_match:")} AS classification_method,
-                true AS manual_review_required,
-                current_timestamp AS routed_at,
-                'Alternatives' AS asset_class,
-                {manager_case_sponsor} AS matched_manager_name,
-                CASE WHEN {manager_case_sponsor} IS NOT NULL THEN 'HIGH' ELSE NULL END AS manager_match_confidence,
-                CASE WHEN {manager_case_sponsor} IS NOT NULL THEN 'sponsor_brand_regex_v1' ELSE NULL END AS manager_match_method
-            FROM {glue_db}.{staging_table} s
-            WHERE s.ack_id IN ({ids})
-              AND s.raw_sponsor_name IS NOT NULL AND trim(s.raw_sponsor_name) <> ''
-              AND (lower(trim(s.asset_type)) IS NULL OR lower(trim(s.asset_type)) NOT IN ({brand_excluded}))
-              AND regexp_like(lower(s.raw_sponsor_name), '{ALT_BRAND_STRUCTURAL_MARKER_REGEX}')
-              AND NOT regexp_like(lower(s.raw_sponsor_name), '{ALT_BRAND_NOISE_REGEX}')
-              AND NOT regexp_like(lower(s.raw_sponsor_name), '{ALT_SPONSOR_EXCLUDE_REGEX}')
-              AND lower(trim(regexp_replace(s.raw_sponsor_name, '[0-9\\s]+$', ''))) <> lower(trim(s.raw_entity_name))
-              AND NOT EXISTS (
-                  SELECT 1 FROM phrase_matched_rows p
-                  WHERE p.ack_id = s.ack_id AND p.raw_entity_name = s.raw_entity_name
-              )
-              AND NOT EXISTS (
-                  SELECT 1 FROM debt_carveout_matched_rows d
-                  WHERE d.ack_id = s.ack_id AND d.raw_entity_name = s.raw_entity_name
-              )
-              AND NOT EXISTS (
-                  SELECT 1 FROM brand_matched_rows b
-                  WHERE b.ack_id = s.ack_id AND b.raw_entity_name = s.raw_entity_name
-              )
-              AND NOT EXISTS (
-                  SELECT 1 FROM override_matches o
-                  WHERE o.ack_id = s.ack_id
-                    AND o.raw_entity_name = s.raw_entity_name
-                    AND o.raw_sponsor_name IS NOT DISTINCT FROM s.raw_sponsor_name
-                    AND o.plan_investment_amt IS NOT DISTINCT FROM s.plan_investment_amt
-              )
+                ack_id, raw_entity_name, raw_sponsor_name, plan_investment_amt,
+                asset_sub_class, validation_status, asset_type,
+                classification_confidence, classification_method,
+                manual_review_required, routed_at, asset_class,
+                _mgr AS matched_manager_name,
+                CASE WHEN _mgr IS NOT NULL THEN 'HIGH' ELSE NULL END AS manager_match_confidence,
+                CASE WHEN _mgr IS NOT NULL THEN 'sponsor_brand_regex_v1' ELSE NULL END AS manager_match_method
+            FROM (
+                SELECT
+                    s.ack_id, s.raw_entity_name, s.raw_sponsor_name, s.plan_investment_amt,
+                    {_alt_brand_case_sql(2, "raw_sponsor_name")} AS asset_sub_class,
+                    s.validation_status,
+                    {vehicle_case_sponsor} AS asset_type,
+                    'LOW' AS classification_confidence,
+                    {_alt_brand_method_case_sql("raw_sponsor_name", "manual:sponsor_brand_match:")} AS classification_method,
+                    true AS manual_review_required,
+                    current_timestamp AS routed_at,
+                    'Alternatives' AS asset_class,
+                    {manager_case_sponsor} AS _mgr
+                FROM {glue_db}.{staging_table} s
+                WHERE s.ack_id IN ({ids})
+                  AND s.raw_sponsor_name IS NOT NULL AND trim(s.raw_sponsor_name) <> ''
+                  AND (lower(trim(s.asset_type)) IS NULL OR lower(trim(s.asset_type)) NOT IN ({brand_excluded}))
+                  AND regexp_like(lower(s.raw_sponsor_name), '{ALT_BRAND_STRUCTURAL_MARKER_REGEX}')
+                  AND NOT regexp_like(lower(s.raw_sponsor_name), '{ALT_BRAND_NOISE_REGEX}')
+                  AND NOT regexp_like(lower(s.raw_sponsor_name), '{ALT_SPONSOR_EXCLUDE_REGEX}')
+                  AND lower(trim(regexp_replace(s.raw_sponsor_name, '[0-9\\s]+$', ''))) <> lower(trim(s.raw_entity_name))
+                  AND NOT EXISTS (
+                      SELECT 1 FROM phrase_matched_rows p
+                      WHERE p.ack_id = s.ack_id AND p.raw_entity_name = s.raw_entity_name
+                  )
+                  AND NOT EXISTS (
+                      SELECT 1 FROM debt_carveout_matched_rows d
+                      WHERE d.ack_id = s.ack_id AND d.raw_entity_name = s.raw_entity_name
+                  )
+                  AND NOT EXISTS (
+                      SELECT 1 FROM brand_matched_rows b
+                      WHERE b.ack_id = s.ack_id AND b.raw_entity_name = s.raw_entity_name
+                  )
+                  AND NOT EXISTS (
+                      SELECT 1 FROM override_matches o
+                      WHERE o.ack_id = s.ack_id
+                        AND o.raw_entity_name = s.raw_entity_name
+                        AND o.raw_sponsor_name IS NOT DISTINCT FROM s.raw_sponsor_name
+                        AND o.plan_investment_amt IS NOT DISTINCT FROM s.plan_investment_amt
+                  )
+            )
         ),
         sponsor_matched_rows AS (
             SELECT * FROM sponsor_matches WHERE asset_sub_class IS NOT NULL
