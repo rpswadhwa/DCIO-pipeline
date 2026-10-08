@@ -1645,10 +1645,8 @@ an env var believed to be set nowhere in the EC2 `.env` (only
 `HOLDINGS_STAGING_TABLE` set, lighting up MF routing but not alt routing).
 The user corrected this during the 2026-10-07 investigation below: ALT data
 *is* getting loaded in production in other cases, so this router is not
-simply inert — the `ALTERNATIVES_TABLE` gating claim has NOT been
-re-verified against the current EC2 `.env` this session and should not be
-trusted at face value; treat it as an open question, not a confirmed fact,
-until someone actually checks the live `.env`.
+inert. Per explicit user direction, the `ALTERNATIVES_TABLE` env-var
+question is not being tracked as a blocker here — not relevant to this fix.
 
 **2026-10-07 update — SQL-complexity blocker below is now FIXED and
 verified end-to-end against live Athena.** `_alt_manager_case_sql()` (the
@@ -1689,13 +1687,8 @@ Candidates (a) running match strategies as separate queries combined in
 pandas, and (b) several independently-compiled CASE columns combined in
 pandas, were not needed once (c) proved sufficient.
 
-**Still open, not addressed by this fix**: whether `_route_alternatives_from_staging`'s
-call site is actually reached in production at all (the `ALTERNATIVES_TABLE`
-gating question above) — that's a separate question from whether the SQL
-it runs is correct, and needs its own check against the live EC2 `.env`
-before concluding the router is fully fixed end-to-end in production.
-Fix is also still local-only: uncommitted, not pushed, not deployed to EC2
-— pending explicit approval before any commit/push/deploy.
+Committed locally (`0b825c56`, 2026-10-07) — not yet pushed or deployed to
+EC2, pending explicit approval for each.
 
 ---
 

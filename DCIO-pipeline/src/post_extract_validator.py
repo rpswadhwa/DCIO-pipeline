@@ -1570,14 +1570,26 @@ def _route_alternatives_chunk(glue_db: str, staging_table: str, target_table: st
             -- ceiling. A JOIN against a VALUES-derived table compiles as a runtime hash
             -- join independent of row count, which sidesteps the ceiling instead of
             -- trying to stay under it.
+            --
+            -- _mgr falls back to the raw_sponsor_name lookup (sponsor_mgr_values) when
+            -- the raw_entity_name lookup comes back NULL -- a row that classifies via
+            -- entity name below (phrase_matches/brand_matches) but whose entity name
+            -- doesn't itself contain a manager term still needs its sponsor name
+            -- checked, otherwise that lookup (computed for this exact batch) is
+            -- silently discarded: sponsor_matches further down only reconsiders rows
+            -- that failed phrase/debt/brand matching entirely, so a row that already
+            -- classified via entity name never reaches it.
             SELECT
                 s.ack_id, s.raw_entity_name, s.raw_sponsor_name, s.plan_investment_amt,
                 s.validation_status, s.asset_type,
-                v._mgr AS _mgr
+                coalesce(v._mgr, v2._mgr) AS _mgr
             FROM {glue_db}.{staging_table} s
             LEFT JOIN entity_mgr_values v
               ON lower(trim(s.raw_entity_name)) = v._ekey
              AND coalesce(lower(trim(s.raw_sponsor_name)), '') = v._skey
+            LEFT JOIN sponsor_mgr_values v2
+              ON lower(trim(s.raw_entity_name)) = v2._ekey
+             AND coalesce(lower(trim(s.raw_sponsor_name)), '') = v2._skey
             WHERE s.ack_id IN ({ids})
         ),
         phrase_matches AS (
@@ -3395,6 +3407,33 @@ ALT_MANAGER_OVERRIDES: Dict[str, str] = {
     "centre globalinfrastructure": "Centre Asset Management",
     "catalyst mlp and infrastructure": "Catalyst Funds",
     "c&h steers": "Cohen & Steers",
+
+    # added 2026-10-07 from facets_full_values_3.txt manager-matching update
+    # (21 reviewed rules; 20 agreed/implemented, 1 skipped as redundant with
+    # existing "ishares"/"blackrock" coverage -- see ALT_MANAGER_ONLY_TERMS'
+    # matching addition below for the skipped rule's note)
+    "childrens invt fd": "TCI Fund Management",
+    "nb private debt": "Neuberger Berman",
+    "true north real estate": "True North Management Group",
+    "lcm partner": "LCM Partners",
+    "gilde buy": "Gilde Buy Out Partners",
+    "fpa apartment": "FPA Multifamily",
+    "sre opportunity fund": "Singerman Real Estate",
+    "sroa capital": "SROA Capital",
+    "srao capital": "SROA Capital",
+    "access real estate sec": "TIAA/Nuveen",
+    "access nuv real estate": "TIAA/Nuveen",
+    "stg vii": "STG Partners",
+    "ta core real estate": "TA Realty",
+    "global renewable power infrastructure fund iii": "BlackRock",
+    "global diversified infrastructure fund": "First Sentier Investors",
+    "cpg focused access": "Central Park Group",
+    "real estate index fund investor shares": "Vanguard",
+    "lvip real estate": "Lincoln Financial",
+    "transamerica financial life ins co": "Transamerica",
+    "vy crbe": "CBRE Investment Management",
+    "crbe global real estate": "CBRE Investment Management",
+    "compadfa": "Dimensional Fund Advisors",
 }
 
 # Terms used ONLY for matched_manager_name resolution (_alt_manager_case_sql),
@@ -4018,6 +4057,38 @@ ALT_MANAGER_ONLY_TERMS: List[str] = [
     "centre globalinfrastructure",
     "catalyst mlp and infrastructure",
     "c&h steers",
+
+    # added 2026-10-07 from facets_full_values_3.txt manager-matching update
+    # (21 reviewed rules; 20 agreed/implemented here. R461/R484/R497/R511
+    # widened beyond the submitted pattern -- live plan_holdings_staging data
+    # showed fund-number variants (III/IV/V, CO III/COPS 4, abbreviated
+    # "OPP"/"OPPO" fund-name forms) that the narrower literal pattern would
+    # have missed, all unambiguously the same manager. R619 ("developed real
+    # estate index fund k" -> BlackRock) skipped: every live sample row
+    # already contains "ishares" or "blackrock" literally and is already
+    # matched by those existing bare terms, so it adds no new coverage.)
+    "childrens invt fd",
+    "nb private debt",
+    "true north real estate",
+    "lcm partner",
+    "gilde buy",
+    "fpa apartment",
+    "sre opportunity fund",
+    "sroa capital",
+    "srao capital",
+    "access real estate sec",
+    "access nuv real estate",
+    "stg vii",
+    "ta core real estate",
+    "global renewable power infrastructure fund iii",
+    "global diversified infrastructure fund",
+    "cpg focused access",
+    "real estate index fund investor shares",
+    "lvip real estate",
+    "transamerica financial life ins co",
+    "vy crbe",
+    "crbe global real estate",
+    "compadfa",
 ]
 
 # S3 location of the shared canonical-manager dictionary -- same bucket/key
