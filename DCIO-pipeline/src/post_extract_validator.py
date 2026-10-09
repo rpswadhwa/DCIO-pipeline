@@ -2270,6 +2270,19 @@ ALT_MANAGER_ONLY_WORD_BOUNDARY_TERMS = {"ares", "ifm", "aqr", "kkr", "dfa", "hcp
     "northern trust government short term", "nvit real estate",
     "nationwide nvit real estate", "ecofin global reninfrastructure", "recurrent mlp",
     "centre globalinfrastructure", "catalyst mlp and infrastructure", "c&h steers",
+} | {
+    # added 2026-10-08 from facets_full_values_4.txt round 5 review.
+    # Bare "mfs" plain-substring matched a live CUSIP-like identifier
+    # ("SBMFSDJ2 PVTPL STACK INFRASTRUCTURE...") -- no word boundary exists
+    # there since 'B' and 'M' are both word chars, so \bmfs\b is required.
+    # "lgima" is the same short-bare-acronym risk class (mfs/ares/ifm/aqr
+    # precedent), defensively boundary-matched though no live collision was
+    # found. "w capital partners" is a real, live collision: "ShoreView
+    # Capital Partners" contains the literal substring "w capital partners"
+    # (the trailing "...vieW CAPITAL PARTNERS") -- \b fails to match there
+    # since the preceding 'e' is a word char, but correctly matches the
+    # standalone "W Capital Partners III LP" rows.
+    "mfs", "lgima", "w capital partners",
 }
 
 # Sponsor-name fallback pass (added 2026-09-24, round 3): raw_sponsor_name
@@ -2602,7 +2615,13 @@ def _alt_brand_method_case_sql(column: str = "raw_entity_name", method_prefix: s
 # ---------------------------------------------------------------------------
 ALT_MANAGER_OVERRIDES: Dict[str, str] = {
     "gso": "Blackstone Credit",
-    "onex": "Onex",
+    # Renamed 2026-10-08 (facets_full_values_4.txt round 5 review, R706):
+    # ALT_BRAND_TERM_OVERRIDES["onex"] above already restricts this bare term
+    # to only ever fire on the literal substring "onex partners", so the
+    # plain "Onex" display name was never actually reachable -- corrected to
+    # match what it really resolves. Also makes R706's proposed "onex
+    # partners" -> "Onex Partners" entry redundant; not added separately.
+    "onex": "Onex Partners",
     "landmark": "Landmark Partners",
     "tennenbaum": "BlackRock",
     "owl rock": "Blue Owl Capital",
@@ -2841,7 +2860,12 @@ ALT_MANAGER_OVERRIDES: Dict[str, str] = {
     # every "pimco"/"principal" row is a genuine PIMCO / Principal Financial
     # Group / Principal Real Estate Investors fund -- no collisions found.
     "pimco": "PIMCO",
-    "principal": "Principal",
+    # Fixed 2026-10-08 (facets_full_values_4.txt round 5 review): this had
+    # been plain "Principal" since round 1 while every phrase variant below
+    # ("princial real estate", "pri real estate", "pgi us real estate", etc.)
+    # resolves to "Principal Asset Management" -- round 5's "prinicpal" typo
+    # term surfaced the inconsistency. Aligned to match.
+    "principal": "Principal Asset Management",
 
     # --- 2026-10-07: facets_full_values.txt 551-rule candidate audit ---
     # (matched_manager_name IS NULL backfill; see analysis_551_results.json)
@@ -3434,6 +3458,167 @@ ALT_MANAGER_OVERRIDES: Dict[str, str] = {
     "vy crbe": "CBRE Investment Management",
     "crbe global real estate": "CBRE Investment Management",
     "compadfa": "Dimensional Fund Advisors",
+
+    # added 2026-10-08 from facets_full_values_4.txt round 5 review (159
+    # rules: 153 added + 6 revised). R691 ("lexington capital partners"),
+    # R737 ("valinor capital partners"), R746 ("alliancebernstein") skipped
+    # as redundant -- already covered by the existing shorter "lexington
+    # cap"/"valinor cap"/"alliancebern" entries above, same canonical. R706
+    # ("onex partners") skipped -- see the "onex" rename above instead.
+    # R772/R763/R776/R784/R789 originally listed multiple "|"-joined
+    # alternatives in one keyword cell (a shorthand for the regex alternation
+    # in their pattern column); split into individual literal terms below,
+    # each sharing one canonical. Every bare/short term here was live-
+    # verified against plan_alternatives_history before inclusion.
+    "a m capital partners": "A&M Capital Partners",
+    "abry": "Abry Partners",
+    "abs capital partners": "ABS Capital Partners",
+    "adage capital partners": "Adage Capital Management",
+    "almanac realty": "Almanac Realty Investors",
+    "aurora equity partners": "Aurora Capital Partners",
+    "bertram growth capital": "Bertram Capital",
+    "blocktower capital": "BlockTower Capital",
+    "baupost value partners": "The Baupost Group",
+    "benchmark capital partners": "Benchmark",
+    "benchmark plus": "Benchmark Plus Management",
+    "center rock capital": "Center Rock Capital Partners",
+    "arrowstreet": "Arrowstreet Capital",
+    "ejf debt opportunities": "EJF Capital",
+    "helikon long short": "Helikon Investments",
+    "comvest capital": "Comvest Partners",
+    "comvest credit partners": "Comvest Partners",
+    "cvc capital partners": "CVC Capital Partners",
+    "cvc european equity partners": "CVC Capital Partners",
+    "deerfield partners": "Deerfield Management",
+    "denham commodity partners": "Denham Capital",
+    "egerton investment partners": "Egerton Capital",
+    "ecor1 capital": "EcoR1 Capital",
+    "endeavour associates": "Endeavour Capital",
+    "energy minerals group": "The Energy & Minerals Group",
+    "formation8 partners": "Formation 8",
+    "hps mezzanine partners": "HPS Investment Partners",
+    "institutional venture partners": "IVP",
+    "intandem capital": "InTandem Capital Partners",
+    "kelso investment associates": "Kelso & Company",
+    "kennedy lewis capital partners": "Kennedy Lewis Investment Management",
+    "king street capital": "King Street Capital Management",
+    "king street partners": "King Street Capital Management",
+    "madison dearborn capital partners": "Madison Dearborn Partners",
+    "metropolitan partners fund": "Metropolitan Partners Group",
+    "montagu iv": "Montagu Private Equity",
+    "new mountain partners": "New Mountain Capital",
+    "ngp energy technology partners": "NGP Energy Technology Partners",
+    "northedge capital": "NorthEdge Capital",
+    "oak hill capital partners": "Oak Hill Capital",
+    "oak invest partners": "Oak Investment Partners",
+    "penzance dc real estate": "Penzance",
+    "polaris venture partners": "Polaris Partners",
+    "quadc partners": "Quad-C Management",
+    "ra capital healthcare": "RA Capital Management",
+    "roark capital partners": "Roark Capital Group",
+    "resource capital fund": "Resource Capital Funds",
+    "roundtable healthcare partners": "RoundTable Healthcare Partners",
+    "sandton capital solutions": "Sandton Capital Partners",
+    "sandton credit solutions": "Sandton Capital Partners",
+    # Casing/name differs entirely from the term -- not a simple title-case
+    # gap: "ShoreView Industries" is the manager, "Capital Partners" is just
+    # this particular fund's name. See the "w capital partners" word-
+    # boundary note above for the live substring-collision this created.
+    "shoreview capital partners": "ShoreView Industries",
+    "siris partners": "Siris Capital Group",
+    "social capital prtnrshp": "Social Capital",
+    "strategic value special sit": "Strategic Value Partners",
+    "stellus credit vcoc": "Stellus Capital Management",
+    "tcv ix": "TCV",
+    "tpg partners": "TPG",
+    "transom capital": "Transom Capital Group",
+    "virage capital partners": "Virage Capital Management",
+    "wellspring capital partners": "Wellspring Capital Management",
+    "american funds": "Capital Group",
+    # Naming-consistency fixes agreed before implementing (not literally
+    # what facets_full_values_4.txt proposed) -- see round-5 review notes:
+    # "bny mellon" would otherwise resolve via canon.json to "BNY Mellon
+    # Investment Management", but the existing phrase overrides ("bny
+    # mellon developed", "mellon eb us real estate", etc.) already use "BNY
+    # Investments" as this dictionary's chosen display name.
+    "bny mellon": "BNY Investments",
+    # "black rock" (with space) would otherwise resolve via canon.json to
+    # "Blackrock" (lowercase r) -- the existing no-space bare term uses
+    # "blackrock": "BlackRock". Aligned to match.
+    "black rock": "BlackRock",
+    "duffphelps": "Duff & Phelps Investment Management",
+    "gqg partners": "GQG Partners",
+    "mutual of america": "Mutual of America",
+    # facets_full_values_4.txt proposed "Legal & General Asset Management"
+    # for R756, but that isn't a real registered entity name -- live data
+    # ("LGIMA LONG DURATION GOVERNMENT CREDIT FUND", "Lgima Infra Cit") is
+    # Legal & General Investment Management America. Aligned to canon.json's
+    # existing simpler "Legal & General" instead of inventing a third name.
+    "lgima": "Legal & General",
+    "mfs investment management": "MFS Investment Management",
+    # facets_full_values_4.txt proposed bare "SEI" for R758, but canon.json's
+    # actual SEI entry is "SEI Investments" -- aligned to match.
+    "sei vista fund": "SEI Investments",
+    # Bare "mfs" -- same canonical as the existing "massachusetts financial
+    # services" entry above; word-boundary protected (see
+    # ALT_MANAGER_ONLY_WORD_BOUNDARY_TERMS).
+    "mfs": "MFS Investment Management",
+    "prinicpal": "Principal Asset Management",
+    # facets_full_values_4.txt proposed "Northern Trust" for R785 (which
+    # would already resolve correctly via term.title()), but the existing
+    # phrase overrides ("northern trust investments", "nt collective
+    # global", etc.) use the fuller "Northern Trust Asset Management" --
+    # aligned for consistency.
+    "northern trust": "Northern Trust Asset Management",
+    "ag credit solutions": "Angelo Gordon",
+    "ag csf2a": "Angelo Gordon",
+    "biopharma credit investments": "Pharmakon Advisors",
+    "black bay energy": "Black Bay Energy Capital",
+    "dover st vii cayman": "HarbourVest Partners",
+    "hipep vi cayman": "HarbourVest Partners",
+    "gof ii feeder": "Glendon Capital Management",
+    "gof iii feeder": "Glendon Capital Management",
+    "krg capital fund iv": "KRG Capital Partners",
+    "sofinnova venture partners": "Sofinnova Investments",
+    # R772 ("scfvii|scfviia|scfviii|scfix") split: "scfvii" substring-covers
+    # scfvii/scfviia/scfviii (all share this canonical anyway), "scfix" is
+    # the one variant that doesn't contain "scfvii". Live-verified clean
+    # (SCFVII/SCFVIIA/SCFVIII/SCFIX LP, no collisions).
+    "scfvii": "SCF Partners",
+    "scfix": "SCF Partners",
+    "trident vii": "Stone Point Capital",
+    "veld credit opportunities iv": "Veld Capital",
+    "nmas1 private equity fund ii": "Alantra",
+    # R776 split into its 3 literal alternatives.
+    "peg us corporate finance": "J.P. Morgan Asset Management",
+    "peg us direct corporate finance": "J.P. Morgan Asset Management",
+    "peg us pooled corp fin": "J.P. Morgan Asset Management",
+    "pa small company coinvestment fund ii": "Apogem Capital",
+    "pinnbrook partners": "PinnBrook Capital Management",
+    "cloud capital feeder on": "Cloud Capital Advisors",
+    "amv partners ii": "Accuitive Medical Ventures",
+    "gec partners iii": "GEC Advisors",
+    "khp strategic 7": "Kline Hill Partners",
+    # R784 split into its 3 literal alternatives.
+    "truebridgebvp": "TrueBridge Capital Partners",
+    "truebridgebain": "TrueBridge Capital Partners",
+    "truebridgeredpoint": "TrueBridge Capital Partners",
+    "orthogon partners sif": "Orthogon Partners Investment Management",
+    # R789 split into its 3 literal alternatives.
+    "private equity partners 2004": "Goldman Sachs Asset Management",
+    "private equity partners 2005": "Goldman Sachs Asset Management",
+    "private equity partners ix direct": "Goldman Sachs Asset Management",
+
+    # REVISED rules from facets_full_values_4.txt (R437/R547/R549/R517/R510/
+    # R430) -- despite the "REVISED" label these terms were not previously
+    # in this dictionary under any name (confirmed via direct grep); treated
+    # as first-time additions like everything else above.
+    "hl venture capital": "Hamilton Lane",
+    "usaa eagle real estate": "Affinius Capital (USAA Real Estate legacy)",
+    "building for america": "American Realty Advisors",
+    "sequoia china": "HongShan",
+    "ahl alpha cayman": "Man Group",
+    "peg venture capital": "J.P. Morgan Asset Management",
 }
 
 # Terms used ONLY for matched_manager_name resolution (_alt_manager_case_sql),
@@ -4089,6 +4274,181 @@ ALT_MANAGER_ONLY_TERMS: List[str] = [
     "vy crbe",
     "crbe global real estate",
     "compadfa",
+
+    # added 2026-10-08 from facets_full_values_4.txt round 5 review (159
+    # rules: 153 added + 6 revised; 155 agreed, 4 skipped as redundant --
+    # "lexington capital partners"/"valinor capital partners"/
+    # "alliancebernstein"/"onex partners", see ALT_MANAGER_OVERRIDES notes
+    # above). Every bare/short/pipe-delimited term was live-verified against
+    # plan_alternatives_history before inclusion; "mfs", "lgima", and "w
+    # capital partners" are word-boundary matched (see
+    # ALT_MANAGER_ONLY_WORD_BOUNDARY_TERMS) rather than plain substring.
+    "1315 capital",
+    "a m capital partners",
+    "abry",
+    "abs capital partners",
+    "adage capital partners",
+    "almanac realty",
+    "asana partners",
+    "ascendent capital partners",
+    "aurora equity partners",
+    "arbor investments",
+    "benefit street partners",
+    "bertram capital",
+    "bertram growth capital",
+    "blocktower capital",
+    "blue point capital partners",
+    "balderton capital",
+    "baupost value partners",
+    "benchmark capital partners",
+    "benchmark plus",
+    "blue delta capital",
+    "center rock capital",
+    "arrowstreet",
+    "ejf debt opportunities",
+    "helikon long short",
+    "chequers capital",
+    "comvest capital",
+    "comvest credit partners",
+    "cvc capital partners",
+    "cvc european equity partners",
+    "court square capital partners",
+    "d1 capital partners",
+    "deerfield partners",
+    "denham commodity partners",
+    "egerton investment partners",
+    "ecor1 capital",
+    "elsewhere partners",
+    "endeavour associates",
+    "endeavour capital",
+    "energy minerals group",
+    "fortissimo capital",
+    "foundation capital",
+    "formation8 partners",
+    "foundry group",
+    "general catalyst",
+    "hps mezzanine partners",
+    "institutional venture partners",
+    "intandem capital",
+    "intersouth partners",
+    "incus capital",
+    "janchor partners",
+    "kelso investment associates",
+    "kennedy lewis capital partners",
+    "king street capital",
+    "king street partners",
+    "kline hill partners",
+    "kepha partners",
+    "lightspeed china partners",
+    "lime rock partners",
+    "madison dearborn capital partners",
+    "metropolitan partners fund",
+    "montagu iv",
+    "new enterprise associates",
+    "new mountain partners",
+    "ngp energy technology partners",
+    "nordic capital",
+    "northedge capital",
+    "oak hill capital partners",
+    "oak investment partners",
+    "oak invest partners",
+    "odyssey investment partners",
+    "pathlight capital",
+    "penzance dc real estate",
+    "platinum equity",
+    "polaris venture partners",
+    "peppertree capital",
+    "quadc partners",
+    "ra capital healthcare",
+    "redview capital",
+    "ridgemont equity partners",
+    "roark capital partners",
+    "resource capital fund",
+    "roundtable healthcare partners",
+    "sandton capital solutions",
+    "sandton credit solutions",
+    "shoreview capital partners",
+    "siris partners",
+    "social capital prtnrshp",
+    "spark capital",
+    "strategic value special sit",
+    "sylebra capital",
+    "serent capital",
+    "silversmith capital partners",
+    "sixth street",
+    "stellus credit vcoc",
+    "tcv ix",
+    "tenaya capital",
+    "tpg partners",
+    "transom capital",
+    "telegraph hill partners",
+    "true west capital partners",
+    "vector capital",
+    "vista equity partners",
+    "virage capital partners",
+    "w capital partners",
+    "water street healthcare partners",
+    "wavecrest growth partners",
+    "wind point partners",
+    "wellspring capital partners",
+    "american funds",
+    "bny mellon",
+    "black rock",
+    "duffphelps",
+    "empower",
+    "gqg partners",
+    "independent franchise partners",
+    "mutual of america",
+    "john hancock",
+    "lgima",
+    "mfs investment management",
+    "sei vista fund",
+    "transamerica",
+    "mfs",
+    "prinicpal",
+    "ag credit solutions",
+    "ag csf2a",
+    "biopharma credit investments",
+    "black bay energy",
+    "dover st vii cayman",
+    "hipep vi cayman",
+    "gof ii feeder",
+    "gof iii feeder",
+    "krg capital fund iv",
+    "sofinnova venture partners",
+    "scfvii",
+    "scfix",
+    "trident vii",
+    "veld credit opportunities iv",
+    "nmas1 private equity fund ii",
+    "peg us corporate finance",
+    "peg us direct corporate finance",
+    "peg us pooled corp fin",
+    "pa small company coinvestment fund ii",
+    "old farm partners",
+    "pinnbrook partners",
+    "cloud capital feeder on",
+    "amv partners ii",
+    "gec partners iii",
+    "khp strategic 7",
+    "truebridgebvp",
+    "truebridgebain",
+    "truebridgeredpoint",
+    "northern trust",
+    "elevate capital",
+    "orthogon partners sif",
+    "private equity partners 2004",
+    "private equity partners 2005",
+    "private equity partners ix direct",
+
+    # REVISED rules R437/R547/R549/R517/R510/R430 -- see ALT_MANAGER_OVERRIDES
+    # note above on why these are treated as first-time additions.
+    "hl venture capital",
+    "usaa eagle real estate",
+    "building for america",
+    "sequoia china",
+    "ahl alpha cayman",
+    "peg venture capital",
 ]
 
 # S3 location of the shared canonical-manager dictionary -- same bucket/key
