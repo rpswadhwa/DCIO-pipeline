@@ -1502,7 +1502,6 @@ def _route_alternatives_chunk(glue_db: str, staging_table: str, target_table: st
     vehicle_case_sponsor = _alt_vehicle_case_sql("raw_sponsor_name")
     debt_manager_case = _alt_debt_carveout_manager_sql()
 
-    phrase_excluded = ", ".join("'" + t + "'" for t in sorted(ALT_EXCLUDED_ASSET_TYPES | ALT_NOISE_ASSET_TYPES))
     # brand_excluded is a hard, marker-independent block -- reserved for ALT_EXCLUDED_ASSET_TYPES
     # only, since that's the one set that protects against colliding with a DIFFERENT router that
     # already owns those literal asset_type values (MF_ASSET_TYPES -> plan_mf_history_v3;
@@ -1510,16 +1509,24 @@ def _route_alternatives_chunk(glue_db: str, staging_table: str, target_table: st
     # sampling both tables against real Boyd Watterson/Harrison Street/Washington Capital rows: 35
     # "mutual fund"-tagged rows and 6+ "common/collective trust fund" rows for these exact ack_ids
     # were already present in those tables, so routing them here too would double-count the same
-    # dollars across two target tables. ALT_NOISE_ASSET_TYPES and ALT_BRAND_EXTRA_EXCLUDED_ASSET_TYPES
-    # are a different kind of thing -- a heuristic veto against bare public securities that happen to
-    # share a brand name (e.g. "Sterling Infrastructure Inc" filed as common stock), with no other
-    # router claiming those asset_type values -- so for the brand pass they're demoted from a hard
-    # exclusion to a normal marker requirement below: real LP-fund rows mistagged as "common stock"/
-    # "bond"/etc. by the filer (same ack_id-and-name evidence as above -- 87/99 mislabeled rows carry
-    # a clean "LP"/"Fund"/"Trust" structural marker) still route once the marker is present, while a
-    # bare brand name with no marker and no trusted asset_type is still blocked by the unchanged
-    # marker-or-trusted gate and noise regex below.
+    # dollars across two target tables. ALT_NOISE_ASSET_TYPES is a different kind of thing -- a
+    # heuristic veto against bare public securities that happen to share a brand name or generic
+    # fund-type phrase (e.g. "Sterling Infrastructure Inc" filed as common stock), with no other
+    # router claiming those asset_type values -- so it's demoted from a hard exclusion to a normal
+    # marker requirement for both the phrase pass and the brand pass below: real LP-fund rows
+    # mistagged as "common stock"/"bond"/etc. by the filer (same ack_id-and-name evidence as above --
+    # 87/99 mislabeled rows carry a clean "LP"/"Fund"/"Trust" structural marker) still route once the
+    # marker is present, while a bare match with no marker and no trusted asset_type is still blocked
+    # by the marker-or-trusted gate and noise regex below. Originally brand-pass-only; extended to the
+    # phrase pass 2026-10-09 after a live staging gap-check found ~$7.1B of real alt-fund holdings
+    # (HarbourVest, Carlyle, Brookfield, KKR, Bain, Apollo, Oaktree, Clarion, etc. -- e.g. $1.35B of
+    # HarbourVest Buyout/Venture Fund interests under ack_id 20251015155523NAL0005344769001 alone)
+    # blocked solely because the filer recorded their asset_type as "common stock"/"bond"/etc. The
+    # phrase pass's match signal -- an explicit fund-type phrase like "buyout fund" found directly in
+    # raw_entity_name -- is at least as strong as the brand pass's bare brand-name match, so it should
+    # never have been held to a stricter (hard-block) asset_type bar than the brand pass.
     brand_excluded = ", ".join("'" + t + "'" for t in sorted(ALT_EXCLUDED_ASSET_TYPES))
+    noise_only = ", ".join("'" + t + "'" for t in sorted(ALT_NOISE_ASSET_TYPES))
     trusted = ", ".join("'" + t + "'" for t in sorted(ALT_BRAND_TRUSTED_ASSET_TYPES))
 
     combined_sql = f"""
@@ -1614,7 +1621,14 @@ def _route_alternatives_chunk(glue_db: str, staging_table: str, target_table: st
                     'Alternatives' AS asset_class,
                     s._mgr AS _mgr
                 FROM entity_mgr_lookup s
-                WHERE lower(trim(s.asset_type)) NOT IN ({phrase_excluded})
+                WHERE (lower(trim(s.asset_type)) IS NULL OR lower(trim(s.asset_type)) NOT IN ({brand_excluded}))
+                  AND (
+                      lower(trim(s.asset_type)) IS NULL
+                      OR lower(trim(s.asset_type)) NOT IN ({noise_only})
+                      OR regexp_like(lower(s.raw_entity_name), '{ALT_BRAND_STRUCTURAL_MARKER_REGEX}')
+                      OR lower(trim(s.asset_type)) IN ({trusted})
+                  )
+                  AND NOT regexp_like(lower(s.raw_entity_name), '{ALT_BRAND_NOISE_REGEX}')
                   AND NOT regexp_like(lower(s.raw_entity_name), '{ALT_ROLLUP_POINTER_REGEX}')
                   AND NOT EXISTS (
                       SELECT 1 FROM override_matches o
