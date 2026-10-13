@@ -1274,7 +1274,20 @@ ALT_NOISE_ASSET_TYPES = frozenset({
 ALT_ROUTED_ASSET_TYPES: Dict[str, str] = {
     "hedge fund": "Hedge Fund",
     "partnership interest": "Private Investments",
+    # Added 2026-10-13: the Schedule H line 1c(5) "Partnership/joint venture
+    # interests" category, as filers and the cleaner label it. $38B sat unrouted
+    # in staging under these two values (IUOE 210 rows = exactly its certified
+    # amt_joint_venture of $5,085M).
+    "joint venture": "Private Investments",
+    "partnership/joint venture interest": "Private Investments",
 }
+
+# Rows the router can regenerate on a re-route: its own pass methods, plus any
+# override-table method on a row still present in staging. Everything else in
+# the target (e.g. manual:appendix_x_decomposition rows typed from a filing
+# appendix that staging never sees) is kept by the DELETE and the re-insert
+# skips names it already holds -- see _alt_route_delete_sql (2026-10-13).
+ALT_ROUTER_METHOD_REGEX = r"^(keyword:|asset_type:|debt_carveout|manual:brand_match:|manual:sponsor_brand_match:)"
 
 
 def _alt_case_sql(value_index: int) -> str:
@@ -1497,6 +1510,26 @@ def _route_alternatives_from_staging(glue_db: str, staging_table: str, target_ta
 
 
 _ALT_ROUTE_CHUNK_SIZE = 25
+
+
+def _alt_route_delete_sql(glue_db: str, staging_table: str, target_table: str, ids: str) -> str:
+    """DELETE half of the re-route: drop only rows the INSERT below will
+    regenerate (ALT_ROUTER_METHOD_REGEX methods, blank methods, and override-
+    table methods on rows still in staging). Before 2026-10-13 this deleted
+    every row for the acks, which wiped Western Teamsters' 126 hand-typed
+    Appendix X rows ($14.58B) on a single re-route."""
+    return f"""
+        DELETE FROM {glue_db}.{target_table} WHERE ack_id IN ({ids}) AND (
+            coalesce(classification_method, '') = ''
+            OR regexp_like(classification_method, '{ALT_ROUTER_METHOD_REGEX}')
+            OR (concat(ack_id, '|', raw_entity_name) IN (
+                    SELECT concat(ack_id, '|', raw_entity_name) FROM {glue_db}.{staging_table}
+                    WHERE ack_id IN ({ids}))
+                AND classification_method IN (
+                    SELECT DISTINCT classification_method FROM {glue_db}.alt_manual_research_overrides
+                    WHERE classification_method IS NOT NULL))
+        )
+    """
 
 
 def _route_alternatives_chunk(glue_db: str, staging_table: str, target_table: str, ack_ids: list) -> None:
@@ -1887,10 +1920,17 @@ def _route_alternatives_chunk(glue_db: str, staging_table: str, target_table: st
                  THEN l.method ELSE r.manager_match_method END AS manager_match_method
         FROM all_rows r
         LEFT JOIN llm_lookup l ON l.name_key = lower(trim(r.raw_entity_name))
+        -- Runs after the guarded DELETE, so the only rows left for these acks are
+        -- ones the router can't regenerate; never insert a second copy of them.
+        WHERE NOT EXISTS (
+            SELECT 1 FROM {glue_db}.{target_table} k
+            WHERE k.ack_id IN ({ids}) AND k.ack_id = r.ack_id
+              AND lower(trim(k.raw_entity_name)) = lower(trim(r.raw_entity_name))
+        )
     """
     insert_sql = f"INSERT INTO {glue_db}.{target_table} ({_ALT_INSERT_COLUMNS}) {combined_sql}"
     stmts = [
-        f"DELETE FROM {glue_db}.{target_table} WHERE ack_id IN ({ids})",
+        _alt_route_delete_sql(glue_db, staging_table, target_table, ids),
         insert_sql,
     ]
     for sql in stmts:
