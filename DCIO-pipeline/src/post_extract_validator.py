@@ -1282,6 +1282,39 @@ ALT_ROUTED_ASSET_TYPES: Dict[str, str] = {
     "partnership/joint venture interest": "Private Investments",
 }
 
+# Block-list for the asset_type pass (added 2026-10-13). A filer's asset_type
+# is trusted, but the line it sits on isn't always a holding: $14.3B of the
+# ~$107B staged under ALT_ROUTED_ASSET_TYPES was carry/total lines, public
+# stocks (e.g. Liberty Media/Thermo Fisher typed 'joint venture'), Treasuries
+# and CIT/separate-account lines. No fund-marker requirement here: hedge fund
+# and offshore names (SEI HDG SPC $6.0B, Farallon, Elliott, Brevan Howard)
+# often carry none, and that gate would drop ~$33B of real holdings.
+ALT_ASSET_TYPE_CARRY_REGEX = (
+    r"^\s*(sub-?\s*)?totals?\b|\btotals?\s+(united|investments?)|"
+    r"brought\s+forward|\bforwarded\b|^\s*see\s+attach"
+)
+# ALT_BRAND_NOISE_REGEX minus '%': real fund names carry fee/ownership
+# percentages ("... Fund IV B, SCSp 0.86% ownership"); Treasuries are caught
+# by the other-router regex instead.
+ALT_ASSET_TYPE_NOISE_REGEX = (
+    r"\bsr\.?\s+unsecured\b|\bcallable\s+notes?\b|\bdue\s+\d|"
+    r"\bcorp\.?\s+debt\b|\bcorporate\s+(bond|debt)\b|\bcom\b|\badr\b|"
+    r"\bcusip\b|\bsedol\b|\bnew\s+issue\b|\bcorporation\b\s*$"
+)
+ALT_ASSET_TYPE_OTHER_ROUTER_REGEX = (
+    r"\btreas(ury)?\b|\bseparate\s+account\b|\bcit\b|\bcommingled\b|\bcollective\b"
+)
+# Public company name: ends in Corp/Inc/PLC (incl. a glued suffix like
+# "CHARLES SCHWAB CORPTHE" or "LIBERTY MEDIA CORPLIBERTY FOR"). Applied only
+# when the name has no fund marker, so "Marshall Wace Funds PLC" survives.
+ALT_ASSET_TYPE_STOCK_REGEX = (
+    r"(\bcorp[a-z]{0,8}(\s+\w{1,4})?|\binc\.?|\bplc|\bincorporated)\s*$"
+)
+ALT_ASSET_TYPE_FUND_MARKER_REGEX = (
+    r"\b(l\.?p\.?|llc|funds?|fd|partners?|partnership|trust|ltd|joint\s+venture|"
+    r"jv|capital|feeder|offshore|reif|spc|scsp|limited\s+partnership)\b"
+)
+
 # Rows the router can regenerate on a re-route: its own pass methods, plus any
 # override-table method on a row still present in staging. Everything else in
 # the target (e.g. manual:appendix_x_decomposition rows typed from a filing
@@ -1860,6 +1893,11 @@ def _route_alternatives_chunk(glue_db: str, staging_table: str, target_table: st
             FROM entity_mgr_lookup s
             WHERE lower(trim(s.asset_type)) IN ({routed_types})
               AND NOT regexp_like(lower(s.raw_entity_name), '{ALT_ROLLUP_POINTER_REGEX}')
+              AND NOT regexp_like(lower(s.raw_entity_name), '{ALT_ASSET_TYPE_CARRY_REGEX}')
+              AND NOT regexp_like(lower(s.raw_entity_name), '{ALT_ASSET_TYPE_NOISE_REGEX}')
+              AND NOT regexp_like(lower(s.raw_entity_name), '{ALT_ASSET_TYPE_OTHER_ROUTER_REGEX}')
+              AND NOT (regexp_like(lower(s.raw_entity_name), '{ALT_ASSET_TYPE_STOCK_REGEX}')
+                       AND NOT regexp_like(lower(s.raw_entity_name), '{ALT_ASSET_TYPE_FUND_MARKER_REGEX}'))
               AND NOT EXISTS (
                   SELECT 1 FROM phrase_matched_rows p
                   WHERE p.ack_id = s.ack_id AND p.raw_entity_name = s.raw_entity_name
@@ -1922,10 +1960,14 @@ def _route_alternatives_chunk(glue_db: str, staging_table: str, target_table: st
         LEFT JOIN llm_lookup l ON l.name_key = lower(trim(r.raw_entity_name))
         -- Runs after the guarded DELETE, so the only rows left for these acks are
         -- ones the router can't regenerate; never insert a second copy of them.
+        -- Keyed on name AND sponsor: boilerplate labels ("Partnership/joint
+        -- venture interests") repeat across distinct funds named only in
+        -- raw_sponsor_name, so one kept row must not block its siblings.
         WHERE NOT EXISTS (
             SELECT 1 FROM {glue_db}.{target_table} k
             WHERE k.ack_id IN ({ids}) AND k.ack_id = r.ack_id
               AND lower(trim(k.raw_entity_name)) = lower(trim(r.raw_entity_name))
+              AND lower(trim(k.raw_sponsor_name)) IS NOT DISTINCT FROM lower(trim(r.raw_sponsor_name))
         )
     """
     insert_sql = f"INSERT INTO {glue_db}.{target_table} ({_ALT_INSERT_COLUMNS}) {combined_sql}"
