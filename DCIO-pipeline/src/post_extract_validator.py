@@ -1757,7 +1757,13 @@ def _route_alternatives_chunk(glue_db: str, staging_table: str, target_table: st
                 WHERE s.ack_id IN ({ids})
                   AND s.raw_sponsor_name IS NOT NULL AND trim(s.raw_sponsor_name) <> ''
                   AND (lower(trim(s.asset_type)) IS NULL OR lower(trim(s.asset_type)) NOT IN ({brand_excluded}))
-                  AND regexp_like(lower(s.raw_sponsor_name), '{ALT_BRAND_STRUCTURAL_MARKER_REGEX}')
+                  -- 2026-10-11: marker checked against sponsor+entity combined, not sponsor
+                  -- alone -- issuer-group extractions (manager name in raw_sponsor_name,
+                  -- generic "Fund XV, L.P." wrapper in raw_entity_name) were blocking
+                  -- already-approved ALT_BRAND_PATTERNS brands from ever reaching this gate
+                  -- (Western Conference of Teamsters Pension Plan verification; see
+                  -- project_dcio_alternatives_router memory).
+                  AND regexp_like(lower(s.raw_sponsor_name) || ' ' || lower(s.raw_entity_name), '{ALT_BRAND_STRUCTURAL_MARKER_REGEX}')
                   AND NOT regexp_like(lower(s.raw_sponsor_name), '{ALT_BRAND_NOISE_REGEX}')
                   AND NOT regexp_like(lower(s.raw_sponsor_name), '{ALT_SPONSOR_EXCLUDE_REGEX}')
                   AND lower(trim(regexp_replace(s.raw_sponsor_name, '[0-9\\s]+$', ''))) <> lower(trim(s.raw_entity_name))
@@ -1989,6 +1995,49 @@ ALT_BRAND_PATTERNS: List[Tuple[str, str, str]] = [
     ("green equity investors", "Private Equity Fund", "Private Equity"),  # Leonard Green's fund brand
     ("coller credit", "Private Credit Fund", "Private Credit"),
     ("coller capital", "Private Equity Fund", "Private Equity"),  # secondaries feeder funds
+    # Added 2026-10-11: Western Conference of Teamsters Pension Plan gap-closing
+    # research (see project_dcio_alternatives_router memory). Each confirmed via
+    # independent web research before being added, per this file's standing
+    # convention; scoped/overridden below where a bare name would collide with
+    # an unrelated public security or a different product line from the same
+    # manager.
+    ("audax mezzanine", "Private Credit Fund", "Private Credit"),  # ordered ahead of
+    # bare "audax" below -- Audax's credit arm (now "Audax Private Debt", formerly
+    # "Audax Mezzanine") is a distinct product line from its PE business.
+    ("audax", "Private Equity Fund", "Private Equity"),
+    ("apax partners", "Private Equity Fund", "Private Equity"),
+    ("centerbridge capital partners", "Private Equity Fund", "Private Equity"),
+    ("greenbriar equity", "Private Equity Fund", "Private Equity"),
+    ("clayton dubilier rice", "Private Equity Fund", "Private Equity"),  # no-punctuation
+    # variant of the existing "clayton, dubilier & rice" entry above -- same firm.
+    ("freeman spogli", "Private Equity Fund", "Private Equity"),
+    ("innovatus", "Private Credit Fund", "Private Credit"),  # life-sciences lending specialist
+    ("white oak", "Private Credit Fund", "Private Credit"),  # overridden below -- bare form of
+    # the existing "white oak global advisors" entry above, same firm.
+    ("unigestion akina", "Private Equity Fund", "Private Equity"),  # scoped to Akina,
+    # Unigestion's PE/fund-of-funds product line; bare "unigestion" not added
+    # (scope elsewhere unconfirmed).
+    ("forest investment advisors", "Infrastructure Fund", "Infrastructure"),  # FIA, confirmed
+    # $5.2B timberland/natural-resources manager serving pension clients.
+    ("eig energy", "Infrastructure Fund", "Infrastructure"),  # EIG Global Energy Partners,
+    # confirmed energy/energy-infrastructure private investment firm.
+    ("yucaipa american alliance", "Private Equity Fund", "Private Equity"),  # scoped to this
+    # confirmed buyout fund series rather than bare "yucaipa".
+    ("waterfall victoria", "Private Credit Fund", "Private Credit"),  # scoped narrow -- bare
+    # "waterfall" is a dictionary word with real collision risk; Waterfall Asset
+    # Management's structured/ABS credit strategy is the confirmed manager here.
+    ("monarch capital partners", "Private Credit Fund", "Private Credit"),  # scoped to this
+    # product name, not bare "monarch" -- Monarch Alternative Capital is explicitly
+    # multi-strategy (distressed debt, structured credit, real estate, special situations).
+    ("md sass", "Hedge Fund", "Hedge Fund"),  # Government Agency Portable Alpha strategy --
+    # MBS/CMO + derivative-overlay absolute-return product, not a plain credit fund.
+    ("lone star", "Private Equity Fund", "Private Equity"),  # some collision risk as a
+    # generic name; relying on the structural-marker gate + noise regex + asset-type
+    # exclusions elsewhere in this router rather than skipping the confirmed Lone Star
+    # Fund VIII-XI rows.
+    ("ta associates", "Private Credit Fund", "Private Credit"),  # overridden below -- TA's
+    # flagship business is growth equity, so this is scoped to its debt-fund product
+    # line only.
 ]
 
 # Per-term extra restriction, ANDed onto that term's match only. Both entries
@@ -2110,6 +2159,15 @@ ALT_BRAND_TERM_OVERRIDES: Dict[str, str] = {
     # "holding"/"hlg"/"fleetpartners"/"financial partners group", so this is
     # safe to key on rather than the narrower "...stock"-suffix-only shape.
     "partners group": r"NOT regexp_like(lower(raw_entity_name), '^(\S+\s+)?partners group (holding|hlg)\b|fleetpartners group|financial partners group')",
+    # Added 2026-10-11 (Western Conference of Teamsters gap-closing, Fix B).
+    # TA Associates' flagship business is growth equity, not credit -- scoping
+    # the bare "ta associates" brand term to its confirmed debt-fund product
+    # line only (Western's rows are "Debt Fund"/"Subordinated Debt Fund")
+    # avoids mis-tagging any future growth-equity TA Associates row as credit.
+    "ta associates": r"regexp_like(lower(raw_entity_name), 'debt')",
+    # Reuses the same Dreyfus/cash-sweep guard already applied to "white oak
+    # global advisors" above, now that bare "white oak" is also a brand term.
+    "white oak": r"NOT regexp_like(lower(raw_entity_name), 'dreyfus|government cash management|short term investment fund')",
 }
 
 # Terms that need a word-boundary match rather than plain substring -- "gso"
@@ -2118,7 +2176,15 @@ ALT_BRAND_TERM_OVERRIDES: Dict[str, str] = {
 # 2026-09-21 backfill verification (3 confirmed false positives: a HK-listed
 # stock and an interest rate swap had been routed in as GSO Capital Partners
 # private credit); fixed here so it can't recur on newly processed PDFs.
-ALT_BRAND_WORD_BOUNDARY_TERMS = {"gso"}
+ALT_BRAND_WORD_BOUNDARY_TERMS = {
+    "gso",
+    # Added 2026-10-11 (Western gap-closing, Fix B): "ares" bare-substring
+    # matched "...SHARES" the same way documented for
+    # ALT_MANAGER_ONLY_WORD_BOUNDARY_TERMS below; "kps" is a 3-char term with
+    # the same collision risk, boundary-matched defensively.
+    "ares",
+    "kps",
+}
 
 # Same word-boundary protection, extended 2026-10-06 for ALT_MANAGER_ONLY_TERMS
 # bare terms short/common enough to collide mid-word: bare "ares" plain-substring
