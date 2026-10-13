@@ -379,6 +379,15 @@ def remove_metadata_rows(rows, preserve_loans=True, verbose=True):
         # Skip if both issuer and description are empty
         if not issuer and not description:
             continue
+
+        # Rows from the deterministic Schedule 4i parser were taken from below
+        # the column header and reconciled to the printed subtotals, so a
+        # header keyword in them is part of a real holding's name (Mayo 2025:
+        # "Blackstone Real Estate Partners X.TE.3 L.P. Collateral Account",
+        # $5,981,456, was being dropped on "collateral").
+        if row.get('extraction_method') == 'sch4i_text':
+            filtered_rows.append(row)
+            continue
         
         # Continuation-page header boilerplate ("...collateral, par, or maturity
         # value.") sometimes bleeds into a legitimate row's description column

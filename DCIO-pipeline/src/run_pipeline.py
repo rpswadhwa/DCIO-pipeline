@@ -256,6 +256,21 @@ def main():
     if page_overrides:
         print(f"  Loaded manual page overrides for {len(page_overrides)} plan(s)")
 
+    # Deterministic Schedule H 4i text parser (src/schedule_4i_text_parser.py),
+    # registered per plan_master plan_id so it follows a plan across years
+    # (new ack_id, new page numbers): for a registered plan's filing it finds
+    # its own pages and, when every section reconciles to its printed
+    # subtotal, replaces the LLM/Camelot paths below; otherwise those run
+    # unchanged. A failed plan_master lookup just disables it for this run.
+    sch4i_ack_ids = {}
+    try:
+        from .schedule_4i_text_parser import registered_ack_ids
+        sch4i_ack_ids = registered_ack_ids(
+            read_env("ATHENA_WORKGROUP", "primary"), read_env("ATHENA_STAGING_S3", ""))
+        print(f"  Schedule 4i text parser registered for {len(sch4i_ack_ids)} filing(s)")
+    except Exception as exc:
+        print(f"  [sch4i_text_parser] plan_master lookup failed, parser disabled this run: {exc}")
+
     llm_batch_size = int(read_env("POST_LLM_BATCH_SIZE", "10"))
     llm_max_batches_raw = read_env("POST_LLM_MAX_BATCHES", "")
     llm_max_batches = int(llm_max_batches_raw) if llm_max_batches_raw else None
@@ -420,7 +435,31 @@ def main():
                 supp_nums = expanded_supp_nums
                 print(f"    Supplemental pages: {supp_nums}")
 
-            if llm_full_extract and supp_nums and llm_full_extract_count < llm_full_extract_limit:
+            sch4i_result = None
+            if pdf_stem in sch4i_ack_ids:
+                from .schedule_4i_text_parser import (
+                    PLAN_PARSERS, find_schedule_4i_pages, is_trustworthy,
+                    parse_schedule_4i_pages, print_parse_report,
+                )
+                plan_id = sch4i_ack_ids[pdf_stem]
+                sch4i_pages = find_schedule_4i_pages(pdf_path, PLAN_PARSERS[plan_id]["start_heading"])
+                print(f"    [sch4i_text_parser] plan_id {plan_id}: schedule pages {sch4i_pages}")
+                if sch4i_pages:
+                    sch4i_result = parse_schedule_4i_pages(pdf_path, sch4i_pages)
+                if sch4i_result is None:
+                    print("    [sch4i_text_parser] WARNING: schedule not found/recognized, falling through")
+                else:
+                    print_parse_report(sch4i_result)
+                    if not is_trustworthy(sch4i_result):
+                        print("    [sch4i_text_parser] WARNING: totals do not reconcile, falling through")
+                        sch4i_result = None
+                    else:
+                        supp_nums = sch4i_pages
+
+            if sch4i_result is not None:
+                plan_info = {}
+                page_data = sch4i_result["pages"]
+            elif llm_full_extract and supp_nums and llm_full_extract_count < llm_full_extract_limit:
                 llm_full_extract_count += 1
                 print(f"    [LLM_FULL_EXTRACT {llm_full_extract_count}/{llm_full_extract_limit}] "
                       f"extracting rows via {llm_full_extract_provider}/{llm_full_extract_model}")

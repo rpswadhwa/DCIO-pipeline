@@ -1263,6 +1263,19 @@ ALT_NOISE_ASSET_TYPES = frozenset({
     "common stock", "employer stock", "exchange traded funds", "stocks",
 })
 
+# Staging asset_type values that route to alternatives on their own, with no
+# name/brand/sponsor match needed -> asset_sub_class (added 2026-10-12). Set
+# from the section heading by a parser we trust, e.g. the deterministic
+# Schedule 4i parser's "Absolute return" -> hedge fund and "Private
+# Investments" -> partnership interest (Mayo Pension Plan 2025). Lowest-
+# priority pass: a row any other pass claims keeps that pass's more specific
+# sub-class. "Private Investments" is generic on purpose -- the source mixes
+# PE/real estate/infrastructure/credit LPs under one heading.
+ALT_ROUTED_ASSET_TYPES: Dict[str, str] = {
+    "hedge fund": "Hedge Fund",
+    "partnership interest": "Private Investments",
+}
+
 
 def _alt_case_sql(value_index: int) -> str:
     """Build a CASE expression picking ALT_FUND_PATTERNS[*][value_index] for the
@@ -1528,6 +1541,11 @@ def _route_alternatives_chunk(glue_db: str, staging_table: str, target_table: st
     brand_excluded = ", ".join("'" + t + "'" for t in sorted(ALT_EXCLUDED_ASSET_TYPES))
     noise_only = ", ".join("'" + t + "'" for t in sorted(ALT_NOISE_ASSET_TYPES))
     trusted = ", ".join("'" + t + "'" for t in sorted(ALT_BRAND_TRUSTED_ASSET_TYPES))
+    routed_types = ", ".join("'" + t + "'" for t in sorted(ALT_ROUTED_ASSET_TYPES))
+    routed_subclass_case = "CASE " + " ".join(
+        f"WHEN lower(trim(s.asset_type)) = '{t}' THEN '{c}'"
+        for t, c in sorted(ALT_ROUTED_ASSET_TYPES.items())
+    ) + " ELSE NULL END"
 
     combined_sql = f"""
         WITH override_lookup AS (
@@ -1790,16 +1808,85 @@ def _route_alternatives_chunk(glue_db: str, staging_table: str, target_table: st
         ),
         sponsor_matched_rows AS (
             SELECT * FROM sponsor_matches WHERE asset_sub_class IS NOT NULL
+        ),
+        asset_type_matched_rows AS (
+            -- 5. asset_type pass: see ALT_ROUTED_ASSET_TYPES
+            SELECT
+                s.ack_id, s.raw_entity_name, s.raw_sponsor_name, s.plan_investment_amt,
+                {routed_subclass_case} AS asset_sub_class,
+                s.validation_status,
+                {vehicle_case} AS asset_type,
+                'LOW' AS classification_confidence,
+                concat('asset_type:', lower(trim(s.asset_type))) AS classification_method,
+                true AS manual_review_required,
+                current_timestamp AS routed_at,
+                'Alternatives' AS asset_class,
+                s._mgr AS matched_manager_name,
+                CASE WHEN s._mgr IS NOT NULL THEN 'HIGH' ELSE NULL END AS manager_match_confidence,
+                CASE WHEN s._mgr IS NOT NULL THEN 'brand_regex_v1' ELSE NULL END AS manager_match_method
+            FROM entity_mgr_lookup s
+            WHERE lower(trim(s.asset_type)) IN ({routed_types})
+              AND NOT regexp_like(lower(s.raw_entity_name), '{ALT_ROLLUP_POINTER_REGEX}')
+              AND NOT EXISTS (
+                  SELECT 1 FROM phrase_matched_rows p
+                  WHERE p.ack_id = s.ack_id AND p.raw_entity_name = s.raw_entity_name
+              )
+              AND NOT EXISTS (
+                  SELECT 1 FROM debt_carveout_matched_rows d
+                  WHERE d.ack_id = s.ack_id AND d.raw_entity_name = s.raw_entity_name
+              )
+              AND NOT EXISTS (
+                  SELECT 1 FROM brand_matched_rows b
+                  WHERE b.ack_id = s.ack_id AND b.raw_entity_name = s.raw_entity_name
+              )
+              AND NOT EXISTS (
+                  SELECT 1 FROM sponsor_matched_rows sp
+                  WHERE sp.ack_id = s.ack_id AND sp.raw_entity_name = s.raw_entity_name
+              )
+              AND NOT EXISTS (
+                  SELECT 1 FROM override_matches o
+                  WHERE o.ack_id = s.ack_id
+                    AND o.raw_entity_name = s.raw_entity_name
+                    AND o.raw_sponsor_name IS NOT DISTINCT FROM s.raw_sponsor_name
+                    AND o.plan_investment_amt IS NOT DISTINCT FROM s.plan_investment_amt
+              )
         )
-        SELECT {_ALT_INSERT_COLUMNS} FROM override_matches
-        UNION ALL
-        SELECT {_ALT_INSERT_COLUMNS} FROM phrase_matched_rows
-        UNION ALL
-        SELECT {_ALT_INSERT_COLUMNS} FROM debt_carveout_matched_rows
-        UNION ALL
-        SELECT {_ALT_INSERT_COLUMNS} FROM brand_matched_rows
-        UNION ALL
-        SELECT {_ALT_INSERT_COLUMNS} FROM sponsor_matched_rows
+        ,
+        all_rows AS (
+            SELECT {_ALT_INSERT_COLUMNS} FROM override_matches
+            UNION ALL
+            SELECT {_ALT_INSERT_COLUMNS} FROM phrase_matched_rows
+            UNION ALL
+            SELECT {_ALT_INSERT_COLUMNS} FROM debt_carveout_matched_rows
+            UNION ALL
+            SELECT {_ALT_INSERT_COLUMNS} FROM brand_matched_rows
+            UNION ALL
+            SELECT {_ALT_INSERT_COLUMNS} FROM sponsor_matched_rows
+            UNION ALL
+            SELECT {_ALT_INSERT_COLUMNS} FROM asset_type_matched_rows
+        ),
+        llm_lookup AS (
+            -- Name-keyed Gemini answers (src/alt_manager_llm.py). Filling from the
+            -- cache here keeps LLM-found managers across this DELETE+INSERT
+            -- re-route; never overrides a manager a pass above already set.
+            SELECT name_key, manager, match_confidence, method FROM (
+                SELECT name_key, manager, match_confidence, method,
+                       row_number() OVER (PARTITION BY name_key ORDER BY looked_up_at DESC) AS rn
+                FROM {glue_db}.alt_manager_llm_lookup
+                WHERE status = 'ACCEPTED' AND manager IS NOT NULL
+            ) WHERE rn = 1
+        )
+        SELECT
+            r.ack_id, r.raw_entity_name, r.raw_sponsor_name, r.plan_investment_amt,
+            r.asset_sub_class, r.validation_status, r.asset_type, r.classification_confidence,
+            r.classification_method, r.manual_review_required, r.routed_at, r.asset_class,
+            coalesce(r.matched_manager_name, l.manager) AS matched_manager_name,
+            CASE WHEN r.matched_manager_name IS NULL AND l.manager IS NOT NULL
+                 THEN l.match_confidence ELSE r.manager_match_confidence END AS manager_match_confidence,
+            CASE WHEN r.matched_manager_name IS NULL AND l.manager IS NOT NULL
+                 THEN l.method ELSE r.manager_match_method END AS manager_match_method
+        FROM all_rows r
+        LEFT JOIN llm_lookup l ON l.name_key = lower(trim(r.raw_entity_name))
     """
     insert_sql = f"INSERT INTO {glue_db}.{target_table} ({_ALT_INSERT_COLUMNS}) {combined_sql}"
     stmts = [
@@ -4887,6 +4974,12 @@ def run_post_extract_validation(
             if alt_table:
                 alt_ack_ids = combined["ack_id"].dropna().unique().tolist()
                 _route_alternatives_from_staging(validated_glue_db, staging_table, alt_table, alt_ack_ids)
+                if _os.getenv("ALT_MANAGER_LLM", "1") != "0":
+                    try:
+                        from .alt_manager_llm import fill_managers
+                        fill_managers(validated_glue_db, alt_table, alt_ack_ids)
+                    except Exception:  # manager fill is best-effort; routing already succeeded
+                        logger.exception("alt manager LLM fill failed for %d acks", len(alt_ack_ids))
         else:
             write_iceberg_via_athena(combined, validated_glue_db, validated_table)
 

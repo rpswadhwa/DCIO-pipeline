@@ -109,6 +109,19 @@ ASSET_TYPE_PATTERNS = [
     (r'Real\s+Estate(?!\s+(?:Funds?|Securit|Index|Mutual|Stock))', 'Real Estate'),
     (r'Funds?\s+of\s+Hedge\s+Funds?',                           'Hedge Fund'),
     (r'Hedge\s+Funds?',                                         'Hedge Fund'),
+    # Large DB/Master Trust Schedule H 4i filings commonly group the PE/RE/VC/infra
+    # tail under these two literal headings instead of "Partnership Interests"/"Hedge
+    # Funds" -- e.g. Mayo Pension Plan: "Absolute return:" (a book of hedge-fund-style
+    # LP vehicles) and "Private Investments:" (PE/RE/VC/infra LPs), each followed by a
+    # subtotal line. Neither phrase was in this table before 2026-10-12, so every row
+    # under them extracted with asset_type empty -- correct dollar amounts landed in
+    # staging but with no vehicle-type tag, which is both why they couldn't be
+    # excluded from the MF table by name and why the alternatives router had no
+    # declared-type signal to fall back on for names its phrase/brand vocabulary
+    # doesn't recognize. Mapped to the nearest existing canonical labels rather than
+    # inventing new ones so downstream routing/exclusion logic needs no changes.
+    (r'Absolute\s+Returns?',                                    'Hedge Fund'),
+    (r'Private\s+Investments?',                                 'Partnership Interest'),
     (r'Corporate\s+Debt\s+Instruments?',                        'Bond'),
     (r'Corporate\s+Debt',                                       'Bond'),
     (r'Corporate\s+Bonds?',                                     'Bond'),
@@ -269,6 +282,12 @@ ROW_TYPE_PATTERNS = [
     # not leads it, so a real mutual fund's share count was slipping through as Employer Stock.
     (r'(?:corporation|incorporated|\bcorp\b|\binc\b|\bplc\b|\bco\b|company)\b(?![^\d]*\b(?:fund|trust|account|portfolio|index)\b)[^\d]*\d[\d,]*\s*shares?\b(?!\s*(?:of\s+)?[A-Za-z0-9 &,.\-]{0,60}\b(?:fund|trust|portfolio|index)\b)', 'Employer Stock'),
     (r'mutual\s+funds?',                               'Mutual Fund'),
+    # OCR-tolerant: this filer's embedded font renders with stray mid-word spaces
+    # ("M ut ual fund", "Mut ual Funds") identically in the native PDF text layer
+    # and in PaddleOCR output -- a true rendering artifact, not an encoding bug
+    # (Toyota Motor North America, ack_id 20251008114247NAL0009333472001).
+    # \s* between every letter of "mutual" tolerates any such split point.
+    (r'\bm\s*u\s*t\s*u\s*a\s*l\s*fund\s*s?\b',          'Mutual Fund'),
 ]
 
 

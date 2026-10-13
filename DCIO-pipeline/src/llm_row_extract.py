@@ -16,6 +16,7 @@ extraction call and the rest of the pipeline (dedup, cleanup, validation, load)
 runs unmodified.
 """
 import json
+import os
 import re
 import time
 from concurrent.futures import ThreadPoolExecutor
@@ -25,7 +26,7 @@ import pdfplumber
 from .asset_type_patterns import detect_asset_type
 from .llm_provider import call_llm_json
 
-_MAX_WORKERS = 6
+_MAX_WORKERS = int(os.environ.get("LLM_ROW_EXTRACT_MAX_WORKERS", "6"))
 _MAX_ATTEMPTS = 3
 _RETRY_BACKOFF_SEC = [3, 8]
 
@@ -38,7 +39,10 @@ _KNOWN_ASSET_TYPES = [
     "Mutual Fund", "Common/Collective Trust Fund", "Money Market Fund",
     "Stable Value Fund", "Separate Account", "Group Annuity Contract",
     "Variable Annuity Contract", "Self-Directed Brokerage Account",
-    "Stock", "Bond", "Participant Loan",
+    "Insurance General Account", "Commingled Fund", "Separately Managed Account",
+    "Short-Term Investment Fund", "Employer Stock", "Preferred Stock", "Common Stock",
+    "103-12 Investment Entity", "Partnership Interest", "Joint Venture", "Real Estate",
+    "Hedge Fund", "Bond", "Derivative", "Participant Loan", "ETF", "Currency", "Cash",
 ]
 
 _KNOWN_ASSET_TYPE_SOURCES = ["row", "heading", "total", "inferred", "none"]
