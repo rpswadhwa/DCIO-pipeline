@@ -6,6 +6,7 @@ import os
 import pickle
 import resource
 import subprocess
+from datetime import datetime, timezone
 from typing import Dict, List
 
 
@@ -798,28 +799,60 @@ def main():
     else:
         print("\n[STEP 9] S3 upload skipped (S3_BUCKET_PATH not set)")
 
+    from .stable_value_pipeline_hook import batch_ack_ids, run_stable_value_pipeline_step
+    current_batch_acks = batch_ack_ids(clean_rows)
+    downstream_errors = []
+    staging_completed = False
+    validation_start = validation_end = None
+    counts = dict(passed=0, failed=0, skipped=0)
+
+    def route_current_batch():
+        return run_stable_value_pipeline_step(
+            ack_ids=current_batch_acks, staging_completed=staging_completed,
+            output_dir=output_dir,
+            database=read_env("VALIDATED_GLUE_DB", "default"),
+            workgroup=read_env("ATHENA_WORKGROUP", "primary"),
+            athena_output=read_env("ATHENA_STAGING_S3", "") or "s3://retirementinsights-reference/athena-results/",
+            region=read_env("AWS_REGION", "us-east-1"),
+            summary_database=read_env("VALIDATION_SUMMARY_GLUE_DB", read_env("VALIDATED_GLUE_DB", "default")),
+            summary_table=read_env("VALIDATION_SUMMARY_TABLE", "plan_mf_history_validation_summary"),
+            validation_start=validation_start, validation_end=validation_end,
+            validation_count=sum(counts.values()), upstream_errors=downstream_errors,
+            warehouse=read_env("STABLE_VALUE_WAREHOUSE", "") or None,
+            report_bucket=read_env("STABLE_VALUE_REPORT_BUCKET", "retirementinsights-reference"),
+        )
+
     if validation_enabled:
         from .post_extract_validator import run_post_extract_validation
         print("\n[STEP 10] Post-extraction validation")
-        counts = run_post_extract_validation(
-            db_path=db_path,
-            glue_db=read_env("VALIDATION_REF_DB", "default"),
-            ref_table=read_env("VALIDATION_REF_TABLE", "plan_master_index_universe"),
-            workgroup=read_env("ATHENA_WORKGROUP", "primary"),
-            s3_staging=read_env("ATHENA_STAGING_S3", ""),
-            tolerance=float(read_env("VALIDATION_TOLERANCE", "0.05")),
-            validated_s3=read_env("VALIDATED_S3_PATH",
-                "s3://retirementinsights-silver/tables/plan_mf_history_v3/"),
-            error_s3=read_env("VALIDATION_ERROR_S3_PATH",
-                "s3://retirementinsights-silver/tables/plan_mf_history_validation_errors/"),
-            validated_glue_db=read_env("VALIDATED_GLUE_DB", "default"),
-            validated_table=read_env("VALIDATED_TABLE", "plan_mf_history_v3"),
-            error_table=read_env("VALIDATION_ERROR_TABLE", "plan_mf_history_validation_errors"),
-            summary_table=read_env("VALIDATION_SUMMARY_TABLE", "plan_mf_history_validation_summary"),
-            summary_glue_db=read_env("VALIDATION_SUMMARY_GLUE_DB",
-                read_env("VALIDATED_GLUE_DB", "default")),
-            manual_review_tolerance=float(read_env("MANUAL_REVIEW_TOLERANCE", "0.10")),
-        )
+        validation_start = datetime.now(timezone.utc).isoformat()
+        try:
+            counts = run_post_extract_validation(
+                db_path=db_path,
+                glue_db=read_env("VALIDATION_REF_DB", "default"),
+                ref_table=read_env("VALIDATION_REF_TABLE", "plan_master_index_universe"),
+                workgroup=read_env("ATHENA_WORKGROUP", "primary"),
+                s3_staging=read_env("ATHENA_STAGING_S3", ""),
+                tolerance=float(read_env("VALIDATION_TOLERANCE", "0.05")),
+                validated_s3=read_env("VALIDATED_S3_PATH",
+                    "s3://retirementinsights-silver/tables/plan_mf_history_v3/"),
+                error_s3=read_env("VALIDATION_ERROR_S3_PATH",
+                    "s3://retirementinsights-silver/tables/plan_mf_history_validation_errors/"),
+                validated_glue_db=read_env("VALIDATED_GLUE_DB", "default"),
+                validated_table=read_env("VALIDATED_TABLE", "plan_mf_history_v3"),
+                error_table=read_env("VALIDATION_ERROR_TABLE", "plan_mf_history_validation_errors"),
+                summary_table=read_env("VALIDATION_SUMMARY_TABLE", "plan_mf_history_validation_summary"),
+                summary_glue_db=read_env("VALIDATION_SUMMARY_GLUE_DB",
+                    read_env("VALIDATED_GLUE_DB", "default")),
+                manual_review_tolerance=float(read_env("MANUAL_REVIEW_TOLERANCE", "0.10")),
+            )
+        except Exception as exc:
+            downstream_errors.append(f"Staging/validation failed: {exc}")
+            route_current_batch()
+            print("PIPELINE INCOMPLETE: staging/validation failed", flush=True)
+            raise SystemExit(1) from exc
+        validation_end = datetime.now(timezone.utc).isoformat()
+        staging_completed = bool(read_env("HOLDINGS_STAGING_TABLE", "").strip())
         print(f"  {counts['passed']} passed, {counts['failed']} failed, {counts['skipped']} skipped")
 
         # Step 11: Copy asset_class/sub_asset_class into MF table and backfill mapping
@@ -845,6 +878,7 @@ def main():
                 print(f"  ✓ Unmapped names backfilled to mapping: {to_backfill}")
             except Exception as exc:
                 print(f"  ⚠ MF enrichment step failed: {exc}")
+                downstream_errors.append(f"MF enrichment failed: {exc}")
         else:
             print("\n[STEP 11] MF enrichment skipped (ENRICH_MF_ENABLED=0)")
     else:
@@ -870,9 +904,13 @@ def main():
         )
         if result.returncode != 0:
             print(f"  ⚠ Classification step failed (exit {result.returncode}) for {ack_ids_csv}")
+            downstream_errors.append(f"Classification failed with exit code {result.returncode}")
         else:
             print(f"  ✓ Classification complete for {ack_ids_csv}")
 
+
+    print("\n[STEP 13] Stable value routing (mandatory, current batch)")
+    routing_report = route_current_batch()
 
     if read_env("STAGE_REPORT_ENABLED", "0") == "1":
         print("\n[STEP 12] Stage comparison reports")
@@ -892,6 +930,10 @@ def main():
         print("\n[STEP 12] Stage comparison reports skipped (STAGE_REPORT_ENABLED=0)")
 
     print("\n" + "=" * 60)
+    if routing_report['status'] != 'COMPLETED':
+        print("PIPELINE INCOMPLETE: downstream processing did not complete")
+        print("=" * 60)
+        raise SystemExit(1)
     print("PIPELINE COMPLETE")
     print("=" * 60)
 
