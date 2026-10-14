@@ -1315,6 +1315,73 @@ ALT_ASSET_TYPE_FUND_MARKER_REGEX = (
     r"jv|capital|feeder|offshore|reif|spc|scsp|limited\s+partnership)\b"
 )
 
+# Row + plan rules for the asset_type pass (jv_rules_v1, added 2026-10-13).
+# Worked out by hand on JV-gap bucket 1 (2,378 typed-but-unrouted rows, 41
+# plans) and backfilled there as manual:jv_rules_v1:<rule> (378 rows/$3.44B);
+# the same rules now run here so a re-route regenerates (and dedupes against)
+# those rows. Rule ids land in classification_method as asset_type:<type>:<rule>.
+#   R00 amt <= 0                       -> skip
+#   R01 total/carry/adjustment line    -> skip (entity or sponsor)
+#   R02 same amount already routed     -> skip (within max($1, 0.01%))
+#   R03 same normalized name routed    -> skip
+#   R04 entity is a category label, sponsor is a real fund name -> route as sponsor
+#   R05 label with no usable sponsor   -> skip (needs re-extraction)
+#   R06 cash / individual security with no strong alt marker, or block-list -> skip
+#   R07 long-only strategy (index, bond, equity fund, CIT...), even LP-wrapped -> hold
+#   R08 strong alt marker              -> route
+#   R09 weak marker (Ltd/LLC/Fund/class) or no evidence -> route
+# Plan level, against Sch H line 1c(5) plan_asset_allocation.amt_joint_venture
+# ("cert"), where alt = JV-typed rows other passes already hold:
+#   P0 >= half the plan's candidates (min 4) are R06 -> R09 held (schedule typed JV
+#      by heading inheritance, so the typing is worthless)
+#   P1 alt + R04/R08 + R09 > 110% cert -> R09 held
+#   P2 else, under 90% cert and alt + routed + held <= 110% cert -> R07 + P0 holds route
+# P1/P2 are skipped when the ack has no plan_asset_allocation row.
+ALT_JV_TOTAL_REGEX = (
+    r"\b(sub)?total\b|brought\s+forward|carried\s+forward|balance\s+forward|"
+    r"fair\s+value\s+adj|^\s*(net\s+)?(unrealized|accrued)|grand\s+total"
+)
+# Whole name is only category words ("Partnership/Joint Venture Interests",
+# "Limited Partnership Units 1,234") or blank; or one of the label phrases.
+ALT_JV_LABEL_REGEX = (
+    r"^[^a-z]*((partnerships?|joint|ventures?|interests?|limited|lp|llc|llp|units?|and|"
+    r"companies|liability|other|ownership|of|in|hedge|funds?|na|n|a|investments?|shares)"
+    r"\b[^a-z]*)*$|^\s*(ownership\s+interest|[\d,.]+\s+units?\b|partnership\s+interests?\s+n/?a)"
+)
+ALT_JV_CASH_REGEX = r"^\s*cash\b|\bcash\s+held\b|\bcash\s+equivalents?\b"
+ALT_JV_SECURITY_REGEX = (
+    r"\btreasury\b|\bt-?bills?\b|\bstrips?\b|\bnotes?\s+\d|\d+\.\d+\s*%|\d{2}/\d{2}/\d{2,4}|\bdd\s+\d|"
+    r"\bcorp(oration)?\s*(com|the)?\s*$|\binc\.?\s*(com)?\s*$|\bcom\s*$|\bco\s*(/the)?\s*$|\badr\b|\bplc\s*$|"
+    r"\bholdings?\s+(inc|ltd|plc)\b|\bsciences?\s+(inc|ltd)\b|\btreas\b|government\s+(and\s+)?agency|"
+    r"\bforeign\s+stock\b|\bshs\b|\bgrp\s+ltd\b|"
+    r"\bcorporate\s+(stock|bonds?)\b|\bpreferred\b|\bcommon\b|^\s*[\d.,]+\s+[a-z]"
+)
+ALT_JV_STRONG_REGEX = (
+    r"\bl\.?\s?p\.?\b|\blimited\s+partnership|\bpartners\b|\boffshore\b|\bcayman\b|\bspc\b|segregated\s+portfolio|"
+    r"\bventure|\bhedge|private\s+(equity|credit|debt|markets)|\bcapital\s+(partners|fund|opportunit)|\bopportunit|"
+    r"\bmezzanine\b|\bsecondar|\bcrossroads\b|\bco-?invest|\bmulti-?strat|\bmacro\b|\babsolute\s+return|"
+    r"\binfrastructure\b|\binfra\b|\bfund\s+[ivx]+\b|\bfund\s+\d+\b|\b[ivx]+\s+(a\s+)?l\.?p\b|\bscsp\b|"
+    r"\bdirect\s+lending\b|\bcredit\s+(fund|solutions|opportunit)|\bproperty\s+fund\b|\breal\s+estate\s+fund\b|"
+    r"\bindustrial\s+(value\s+)?fund\b|\bcatastrophe\b|\blongevity\b"
+)
+# Legal-form words operating companies use too (Wave Life Sciences Ltd).
+ALT_JV_WEAK_REGEX = r"\bltd\.?\b|\blimited\b|\bllc\b|\bclass\s+[a-z0-9]+\b|\bfund\b"
+# Strong markers that are only the wrapper (LSV International Equity Fund LP):
+# with a long-only term present, a strong marker must survive their removal.
+ALT_JV_LP_WRAPPER_REGEX = r"\bl\.?\s?p\.?\b|\blimited\s+partnership|\bpartners\b|\bfund\s+[ivx]+\b|\bclass\b"
+ALT_JV_LONG_ONLY_REGEX = (
+    r"\bindex\b|\bstock\s+index\b|\bcore\s+(fixed|bond|plus)|\bfixed\s+income\b|\bbond\s+fund\b|"
+    r"\b(n\.?a\.?)\s*$|\bcit\b|collective|\bjpmcb\b|-i\s*$|\binstl?\b|\bmutual\b|\bmoney\s+market|"
+    r"\bintermediate\s+duration\b|\bgold\s+fund\b|\bequity\s+(fund|fnd|long\s+only|ext)|\beq\s+fnd\b|"
+    r"\bhigh\s+(yield|income)\b|\bemerging\s+markets?\s+(equity|bond|eq)\b|\bstock\s*-?\s*i?\b\s*$|"
+    r"\bbank\s+loan\s+fund\b|\bmulti-?asset\s+credit\b"
+)
+# Words dropped before comparing names for R03 / the sponsor-echo check.
+ALT_JV_NORM_STOPWORDS_REGEX = (
+    r"\b(l\.?\s?p|ltd|limited|llc|inc|the|fund|class|series|plan|offshore|international|intl|"
+    r"partnership|partnerships|interests?|units?|cf|sub)\b"
+)
+
 # Rows the router can regenerate on a re-route: its own pass methods, plus any
 # override-table method on a row still present in staging. Everything else in
 # the target (e.g. manual:appendix_x_decomposition rows typed from a filing
@@ -1543,6 +1610,7 @@ def _route_alternatives_from_staging(glue_db: str, staging_table: str, target_ta
 
 
 _ALT_ROUTE_CHUNK_SIZE = 25
+_ALT_ROUTE_MAX_SQL_CHARS = 250000  # Athena caps queryString at 262144; keep headroom
 
 
 def _alt_route_delete_sql(glue_db: str, staging_table: str, target_table: str, ids: str) -> str:
@@ -1563,6 +1631,164 @@ def _alt_route_delete_sql(glue_db: str, staging_table: str, target_table: str, i
                     WHERE classification_method IS NOT NULL))
         )
     """
+
+
+def _alt_jv_norm_sql(expr: str) -> str:
+    """SQL twin of the R03 name normalizer: lower, drop digits and
+    ALT_JV_NORM_STOPWORDS_REGEX words, keep letters only."""
+    return (
+        "trim(regexp_replace(regexp_replace(regexp_replace(regexp_replace("
+        f"lower(coalesce({expr}, '')), '[\\d,.]+', ' '), '{ALT_JV_NORM_STOPWORDS_REGEX}', ' '), "
+        "'[^a-z]+', ' '), '\\s+', ' '))"
+    )
+
+
+def _alt_jv_strong_sql(expr: str) -> str:
+    """Strong alt marker that isn't just an LP wrapper on a long-only strategy."""
+    return (
+        f"(regexp_like({expr}, '{ALT_JV_STRONG_REGEX}') AND (NOT regexp_like({expr}, '{ALT_JV_LONG_ONLY_REGEX}')"
+        f" OR regexp_like(regexp_replace({expr}, '{ALT_JV_LP_WRAPPER_REGEX}', ' '), '{ALT_JV_STRONG_REGEX}')))"
+    )
+
+
+def _alt_asset_type_pass_sql(glue_db: str, source: str, routed_sql: str, vehicle_column_case) -> str:
+    """CTEs for the asset_type pass (pass 5) applying the jv_rules_v1 row and
+    plan rules documented at ALT_JV_TOTAL_REGEX. Ends in a CTE named
+    asset_type_matched_rows with the _ALT_INSERT_COLUMNS.
+
+    source      -- relation with ack_id, raw_entity_name, raw_sponsor_name,
+                   plan_investment_amt, validation_status, asset_type, _mgr
+    routed_sql  -- SELECT of (ack_id, raw_entity_name, plan_investment_amt) for
+                   rows already routed for these acks (other passes + kept rows)
+    vehicle_column_case -- callable(column) -> vehicle CASE (_alt_vehicle_case_sql)
+    """
+    routed_types = ", ".join("'" + t + "'" for t in sorted(ALT_ROUTED_ASSET_TYPES))
+    subclass_case = "CASE " + " ".join(
+        f"WHEN atype = '{t}' THEN '{c}'" for t, c in sorted(ALT_ROUTED_ASSET_TYPES.items())
+    ) + " ELSE NULL END"
+    n = "lower(c.raw_entity_name)"
+    sp = "lower(c.sponsor_clean)"
+    label = lambda x: f"regexp_like({x}, '{ALT_JV_LABEL_REGEX}')"
+    # Trino inlines every CTE reference, and atr_routed re-runs passes 1-4, so
+    # it is read exactly once: typed and routed rows share one relation and the
+    # by-name / by-norm / by-amount (R02) matches are window lookups over it.
+    # Plan totals are windows too, so atr_rule is also read once.
+    w = "OVER (PARTITION BY c.ack_id)"
+    return f"""
+        atr_routed AS ({routed_sql}),
+        atr_typed AS (
+            SELECT s.ack_id, s.raw_entity_name, s.raw_sponsor_name, s.plan_investment_amt,
+                   s.validation_status, s.asset_type, s._mgr,
+                   lower(trim(s.asset_type)) AS atype,
+                   CAST(s.plan_investment_amt AS double) AS amt_d,
+                   trim(regexp_replace(coalesce(s.raw_sponsor_name, ''), '(\\s+[\\d,.]+)+\\s*$', '')) AS sponsor_clean,
+                   {_alt_jv_norm_sql('s.raw_entity_name')} AS norm,
+                   false AS is_r
+            FROM {source} s
+            WHERE lower(trim(s.asset_type)) IN ({routed_types})
+            UNION ALL
+            SELECT r.ack_id, r.raw_entity_name, NULL, NULL, NULL, NULL, NULL, NULL,
+                   CAST(r.plan_investment_amt AS double), NULL,
+                   {_alt_jv_norm_sql('r.raw_entity_name')}, true
+            FROM atr_routed r
+        ),
+        atr_flag AS (
+            SELECT u.*,
+                max(CASE WHEN u.is_r THEN 1 ELSE 0 END) OVER (PARTITION BY u.ack_id, u.raw_entity_name) AS by_name,
+                max(CASE WHEN u.is_r THEN 1 ELSE 0 END) OVER (PARTITION BY u.ack_id, u.norm) AS by_norm,
+                -- nearest routed amount on each side; R02 holds iff either is within tolerance
+                last_value(CASE WHEN u.is_r THEN u.amt_d END) IGNORE NULLS OVER (
+                    PARTITION BY u.ack_id ORDER BY u.amt_d ROWS BETWEEN UNBOUNDED PRECEDING AND CURRENT ROW) AS r_lo,
+                first_value(CASE WHEN u.is_r THEN u.amt_d END) IGNORE NULLS OVER (
+                    PARTITION BY u.ack_id ORDER BY u.amt_d ROWS BETWEEN CURRENT ROW AND UNBOUNDED FOLLOWING) AS r_hi
+            FROM atr_typed u
+        ),
+        atr_rule AS (
+            SELECT c.*, TRY_CAST(a.amt_joint_venture AS double) AS cert,
+                CASE
+                    -- JV-typed row another pass (or a kept row) already holds by name
+                    WHEN c.by_name = 1 THEN 'HELD'
+                    WHEN coalesce(c.amt_d, 0) <= 0 THEN 'R00'
+                    WHEN regexp_like({n}, '{ALT_JV_TOTAL_REGEX}') OR regexp_like({sp}, '{ALT_JV_TOTAL_REGEX}')
+                      OR regexp_like({n}, '{ALT_ROLLUP_POINTER_REGEX}')
+                      OR regexp_like({n}, '{ALT_ASSET_TYPE_CARRY_REGEX}') THEN 'R01'
+                    WHEN abs(c.r_lo - c.amt_d) <= greatest(1e0, 1e-4 * c.amt_d)
+                      OR abs(c.r_hi - c.amt_d) <= greatest(1e0, 1e-4 * c.amt_d) THEN 'R02'
+                    WHEN length(c.norm) >= 6 AND c.by_norm = 1 THEN 'R03'
+                    WHEN {label(n)} AND c.sponsor_clean <> '' AND NOT {label(sp)}
+                      AND {_alt_jv_norm_sql('c.sponsor_clean')} <> c.norm
+                      AND NOT (regexp_like({sp}, '^[a-z&.\\s]{{2,20}}$')
+                               AND regexp_like(trim({sp}), '^\\S+(\\s+\\S+)?$')
+                               AND NOT regexp_like({sp}, '{ALT_JV_STRONG_REGEX}')) THEN 'R04'
+                    WHEN {label(n)} THEN 'R05'
+                    WHEN regexp_like({n}, '{ALT_JV_CASH_REGEX}')
+                      OR regexp_like({n}, '{ALT_ASSET_TYPE_NOISE_REGEX}')
+                      OR regexp_like({n}, '{ALT_ASSET_TYPE_OTHER_ROUTER_REGEX}')
+                      OR (regexp_like({n}, '{ALT_ASSET_TYPE_STOCK_REGEX}')
+                          AND NOT regexp_like({n}, '{ALT_ASSET_TYPE_FUND_MARKER_REGEX}'))
+                      OR (regexp_like({n}, '{ALT_JV_SECURITY_REGEX}') AND NOT {_alt_jv_strong_sql(n)}) THEN 'R06'
+                    WHEN regexp_like({n}, '{ALT_JV_LONG_ONLY_REGEX}') AND NOT {_alt_jv_strong_sql(n)} THEN 'R07'
+                    WHEN {_alt_jv_strong_sql(n)} THEN 'R08'
+                    ELSE 'R09'
+                END AS rule
+            FROM atr_flag c
+            LEFT JOIN {glue_db}.plan_asset_allocation a ON a.ack_id = c.ack_id
+            WHERE NOT c.is_r
+        ),
+        atr_plan AS (
+            SELECT c.*,
+                   sum(CASE WHEN c.rule <> 'HELD' THEN 1 ELSE 0 END) {w} AS n_all,
+                   sum(CASE WHEN c.rule = 'R06' THEN 1 ELSE 0 END) {w} AS n_sec,
+                   sum(CASE WHEN c.rule IN ('R04', 'R08') THEN c.amt_d ELSE 0e0 END) {w} AS strong,
+                   sum(CASE WHEN c.rule = 'R09' THEN c.amt_d ELSE 0e0 END) {w} AS weak,
+                   sum(CASE WHEN c.rule = 'R07' THEN c.amt_d ELSE 0e0 END) {w} AS held,
+                   -- JV money already in the target: held by name, or a duplicate
+                   -- (R02/R03) of a routed row -- e.g. an R04 row routed under its
+                   -- sponsor's fund name, which no longer matches the label by name
+                   sum(CASE WHEN c.rule IN ('HELD', 'R02', 'R03') THEN c.amt_d ELSE 0e0 END) {w} AS alt
+            FROM atr_rule c
+        ),
+        atr_plan_rule AS (
+            SELECT p.*,
+                   p.n_sec >= 0.5 * p.n_all AND p.n_all >= 4 AS p0,
+                   p.cert IS NOT NULL AND p.alt + p.strong
+                       + CASE WHEN p.n_sec >= 0.5 * p.n_all AND p.n_all >= 4 THEN 0 ELSE p.weak END
+                       > 1.1 * p.cert AS p1
+            FROM atr_plan p
+        ),
+        atr_final AS (
+            SELECT p.*,
+                CASE
+                    WHEN p.rule = 'R09' AND p.p0 THEN 'P0'
+                    WHEN p.rule = 'R09' AND p.p1 THEN 'P1'
+                    WHEN p.rule = 'R07' AND p.cert IS NOT NULL AND NOT p.p1
+                     AND p.alt + p.strong + CASE WHEN p.p0 THEN 0 ELSE p.weak END < 0.9 * p.cert
+                     AND p.alt + p.strong + p.weak + p.held <= 1.1 * p.cert THEN 'P2'
+                    ELSE p.rule
+                END AS final_rule
+            FROM atr_plan_rule p
+        ),
+        asset_type_matched_rows AS (
+            -- 5. asset_type pass: see ALT_ROUTED_ASSET_TYPES / ALT_JV_TOTAL_REGEX
+            SELECT
+                f.ack_id,
+                CASE WHEN f.final_rule = 'R04' THEN f.sponsor_clean ELSE f.raw_entity_name END AS raw_entity_name,
+                f.raw_sponsor_name, f.plan_investment_amt,
+                {subclass_case} AS asset_sub_class,
+                f.validation_status,
+                CASE WHEN f.final_rule = 'R04' THEN {vehicle_column_case('f.sponsor_clean')}
+                     ELSE {vehicle_column_case('f.raw_entity_name')} END AS asset_type,
+                'LOW' AS classification_confidence,
+                concat('asset_type:', f.atype, ':', f.final_rule) AS classification_method,
+                true AS manual_review_required,
+                current_timestamp AS routed_at,
+                'Alternatives' AS asset_class,
+                f._mgr AS matched_manager_name,
+                CASE WHEN f._mgr IS NOT NULL THEN 'HIGH' ELSE NULL END AS manager_match_confidence,
+                CASE WHEN f._mgr IS NOT NULL THEN 'brand_regex_v1' ELSE NULL END AS manager_match_method
+            FROM atr_final f
+            WHERE f.final_rule IN ('R04', 'R08', 'R09', 'P2')
+        )"""
 
 
 def _route_alternatives_chunk(glue_db: str, staging_table: str, target_table: str, ack_ids: list) -> None:
@@ -1607,11 +1833,18 @@ def _route_alternatives_chunk(glue_db: str, staging_table: str, target_table: st
     brand_excluded = ", ".join("'" + t + "'" for t in sorted(ALT_EXCLUDED_ASSET_TYPES))
     noise_only = ", ".join("'" + t + "'" for t in sorted(ALT_NOISE_ASSET_TYPES))
     trusted = ", ".join("'" + t + "'" for t in sorted(ALT_BRAND_TRUSTED_ASSET_TYPES))
-    routed_types = ", ".join("'" + t + "'" for t in sorted(ALT_ROUTED_ASSET_TYPES))
-    routed_subclass_case = "CASE " + " ".join(
-        f"WHEN lower(trim(s.asset_type)) = '{t}' THEN '{c}'"
-        for t, c in sorted(ALT_ROUTED_ASSET_TYPES.items())
-    ) + " ELSE NULL END"
+    # Pass 5 dedupes against every row the other passes route plus the rows the
+    # guarded DELETE kept (manual:*), so a re-route can't double-insert them.
+    asset_type_pass = _alt_asset_type_pass_sql(
+        glue_db, "entity_mgr_lookup",
+        " UNION ALL ".join(
+            f"SELECT ack_id, raw_entity_name, plan_investment_amt FROM {cte}"
+            for cte in ("override_matches", "phrase_matched_rows", "debt_carveout_matched_rows",
+                        "brand_matched_rows", "sponsor_matched_rows")
+        ) + f" UNION ALL SELECT ack_id, raw_entity_name, plan_investment_amt"
+            f" FROM {glue_db}.{target_table} WHERE ack_id IN ({ids})",
+        _alt_vehicle_case_sql,
+    ).strip()
 
     combined_sql = f"""
         WITH override_lookup AS (
@@ -1875,53 +2108,7 @@ def _route_alternatives_chunk(glue_db: str, staging_table: str, target_table: st
         sponsor_matched_rows AS (
             SELECT * FROM sponsor_matches WHERE asset_sub_class IS NOT NULL
         ),
-        asset_type_matched_rows AS (
-            -- 5. asset_type pass: see ALT_ROUTED_ASSET_TYPES
-            SELECT
-                s.ack_id, s.raw_entity_name, s.raw_sponsor_name, s.plan_investment_amt,
-                {routed_subclass_case} AS asset_sub_class,
-                s.validation_status,
-                {vehicle_case} AS asset_type,
-                'LOW' AS classification_confidence,
-                concat('asset_type:', lower(trim(s.asset_type))) AS classification_method,
-                true AS manual_review_required,
-                current_timestamp AS routed_at,
-                'Alternatives' AS asset_class,
-                s._mgr AS matched_manager_name,
-                CASE WHEN s._mgr IS NOT NULL THEN 'HIGH' ELSE NULL END AS manager_match_confidence,
-                CASE WHEN s._mgr IS NOT NULL THEN 'brand_regex_v1' ELSE NULL END AS manager_match_method
-            FROM entity_mgr_lookup s
-            WHERE lower(trim(s.asset_type)) IN ({routed_types})
-              AND NOT regexp_like(lower(s.raw_entity_name), '{ALT_ROLLUP_POINTER_REGEX}')
-              AND NOT regexp_like(lower(s.raw_entity_name), '{ALT_ASSET_TYPE_CARRY_REGEX}')
-              AND NOT regexp_like(lower(s.raw_entity_name), '{ALT_ASSET_TYPE_NOISE_REGEX}')
-              AND NOT regexp_like(lower(s.raw_entity_name), '{ALT_ASSET_TYPE_OTHER_ROUTER_REGEX}')
-              AND NOT (regexp_like(lower(s.raw_entity_name), '{ALT_ASSET_TYPE_STOCK_REGEX}')
-                       AND NOT regexp_like(lower(s.raw_entity_name), '{ALT_ASSET_TYPE_FUND_MARKER_REGEX}'))
-              AND NOT EXISTS (
-                  SELECT 1 FROM phrase_matched_rows p
-                  WHERE p.ack_id = s.ack_id AND p.raw_entity_name = s.raw_entity_name
-              )
-              AND NOT EXISTS (
-                  SELECT 1 FROM debt_carveout_matched_rows d
-                  WHERE d.ack_id = s.ack_id AND d.raw_entity_name = s.raw_entity_name
-              )
-              AND NOT EXISTS (
-                  SELECT 1 FROM brand_matched_rows b
-                  WHERE b.ack_id = s.ack_id AND b.raw_entity_name = s.raw_entity_name
-              )
-              AND NOT EXISTS (
-                  SELECT 1 FROM sponsor_matched_rows sp
-                  WHERE sp.ack_id = s.ack_id AND sp.raw_entity_name = s.raw_entity_name
-              )
-              AND NOT EXISTS (
-                  SELECT 1 FROM override_matches o
-                  WHERE o.ack_id = s.ack_id
-                    AND o.raw_entity_name = s.raw_entity_name
-                    AND o.raw_sponsor_name IS NOT DISTINCT FROM s.raw_sponsor_name
-                    AND o.plan_investment_amt IS NOT DISTINCT FROM s.plan_investment_amt
-              )
-        )
+        {asset_type_pass}
         ,
         all_rows AS (
             SELECT {_ALT_INSERT_COLUMNS} FROM override_matches
@@ -1963,14 +2150,30 @@ def _route_alternatives_chunk(glue_db: str, staging_table: str, target_table: st
         -- Keyed on name AND sponsor: boilerplate labels ("Partnership/joint
         -- venture interests") repeat across distinct funds named only in
         -- raw_sponsor_name, so one kept row must not block its siblings.
+        -- Also keyed on sponsor AND amount: a kept jv_rules R04 row carries the
+        -- sponsor's fund name as raw_entity_name, so the label row ("Limited
+        -- Partnership" / KAYNE ANDERSON ... LP) the sponsor pass would route is
+        -- the same holding under a different name.
         WHERE NOT EXISTS (
             SELECT 1 FROM {glue_db}.{target_table} k
             WHERE k.ack_id IN ({ids}) AND k.ack_id = r.ack_id
-              AND lower(trim(k.raw_entity_name)) = lower(trim(r.raw_entity_name))
-              AND lower(trim(k.raw_sponsor_name)) IS NOT DISTINCT FROM lower(trim(r.raw_sponsor_name))
+              AND ((lower(trim(k.raw_entity_name)) = lower(trim(r.raw_entity_name))
+                    AND lower(trim(k.raw_sponsor_name)) IS NOT DISTINCT FROM lower(trim(r.raw_sponsor_name)))
+                   OR (coalesce(trim(r.raw_sponsor_name), '') <> ''
+                       AND lower(trim(k.raw_sponsor_name)) = lower(trim(r.raw_sponsor_name))
+                       AND k.plan_investment_amt = r.plan_investment_amt))
         )
     """
     insert_sql = f"INSERT INTO {glue_db}.{target_table} ({_ALT_INSERT_COLUMNS}) {combined_sql}"
+    # A fixed chunk size can't bound the lookup VALUES size: alt-heavy acks
+    # (hundreds of distinct holdings each) push 25 acks past Athena's 262144-char
+    # query limit. Halve and retry before anything runs, so no chunk half-applies.
+    if len(insert_sql) > _ALT_ROUTE_MAX_SQL_CHARS and len(ack_ids) > 1:
+        mid = len(ack_ids) // 2
+        logger.info("Alt route SQL %d chars for %d acks; splitting", len(insert_sql), len(ack_ids))
+        _route_alternatives_chunk(glue_db, staging_table, target_table, ack_ids[:mid])
+        _route_alternatives_chunk(glue_db, staging_table, target_table, ack_ids[mid:])
+        return
     stmts = [
         _alt_route_delete_sql(glue_db, staging_table, target_table, ids),
         insert_sql,
