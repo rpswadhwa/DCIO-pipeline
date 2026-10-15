@@ -86,8 +86,31 @@ A seventh layout, "flat_cost_value" (2026-10-15), is one alphabetical list of
 no category sections, closed by "Total investments - <pool> $ <cost> $
 <value>". Only the first page carries the column header, so the run is the
 header page through the page with the total; asset_type comes from each row
-name (detect_asset_type). First seen on Boeing Employee Retirement Plans
+name (_FCV_ASSET_TYPES). First seen on Boeing Employee Retirement Plans
 Master Trust (ack 20251013144009NAL0002216336001, pp.26-256).
+
+An eighth layout, "cpa_total_lines" (2026-10-15), is the auditor-typeset
+"SCHEDULE OF ASSETS (HELD AT END OF YEAR)" with "Form 5500, Schedule H, Line
+4i" in every page's title block: an all-caps category heading, then
+"<issuer/description> <par or shares> [$] <cost> [$] <current value>" rows
+(cost may print "-"), closed by "TOTAL <category> <cost> <value>". "TOTAL
+ASSETS (HELD AT END OF YEAR)" ends the held schedule; a securities-loaned
+block may follow with its own categories and "TOTAL SECURITIES LOANED ...";
+the grand total is the sum of those two lines. Right-aligned padding spaces
+are drawn over the first digit of numbers and are dropped before extraction.
+First seen on Central Pension Fund of the IUOE (ack
+20251124120035NAL0001810145001, pp.31-96), JV section $5.08B. IAM National
+Pension Fund (ack 20251104145018NAL0004803075002, pp.34-171) prints the same
+schedule without "(b)" in the column header, with "SECURITIES ON LOAN -
+<category>" sections and "TOTAL ASSETS ON HAND" / "TOTAL SECURITIES ON LOAN"
+rollups, and a held total that already includes the loaned block; rollups
+after a section's own total are skipped. National Elevator Industry Pension
+Plan (ack 20260415130031NAL0011768563001, pp.86-119) titles its pages
+"SCHEDULE H TO FORM 5500, LINE 4i - SCHEDULE OF ASSETS (HELD AT END OF
+YEAR)", ends its headings with ":", prints partnership rows with cost and
+value only, opens with a one-line "INTEREST-BEARING CASH $ <cost> $ <value>"
+section, footers pages "- <n> - (Continued...)", and closes with "TOTAL
+INVESTMENTS".
 
 Registered per plan, not per filing: PLAN_PARSERS is keyed by plan_master
 plan_id (EIN-PN), which stays fixed across years while ack_id and page
@@ -128,9 +151,27 @@ PLAN_PARSERS = {
     # GE Pension Trust: same BNY composite, report id GEAC (2026-10-15).
     "140689340-001": {"name": "GE Pension Trust", "layout": "bny_h30t",
                       "start_heading": r"^INTEREST\s+BEARING\s+CASH$"},
+    # Northrop Grumman DB Master Trust: the Alternative Investments Fund composite (2026-10-15).
+    "136692740-007": {"name": "Northrop Grumman DB Master Trust", "layout": "bny_h30t",
+                      "start_heading": r"^INTEREST\s+BEARING\s+CASH$"},
+    # FCA US Master Retirement Trust Balanced Pool: the whole composite (2026-10-15).
+    "133112458-059": {"name": "FCA US Master Retirement Trust Balanced Pool", "layout": "bny_h30t",
+                      "start_heading": r"^INTEREST\s+BEARING\s+CASH$"},
+    # American Airlines (AMR) Master Fixed Benefit Pension Trust: BNY composite 5Y2C (2026-10-15).
+    "131502798-020": {"name": "American Airlines Master Fixed Benefit Pension Trust", "layout": "bny_h30t",
+                      "start_heading": r"^INTEREST\s+BEARING\s+CASH$"},
     # Boeing: the whole Investment Control Pool list (2026-10-15).
     "910425694-062": {"name": "Boeing Employee Retirement Plans Master Trust", "layout": "flat_cost_value",
                       "start_heading": r"^INVESTMENT\s+CONTROL\s+POOL$"},
+    # IUOE Central Pension Fund: held and securities-loaned schedules (2026-10-15).
+    "366052390-001": {"name": "Central Pension Fund of the IUOE", "layout": "cpa_total_lines",
+                      "start_heading": r"^INTEREST\s+BEARING\s+CASH$"},
+    # IAM National Pension Fund: same typesetting, loaned block inside the held total (2026-10-15).
+    "516031295-002": {"name": "IAM National Pension Fund", "layout": "cpa_total_lines",
+                      "start_heading": r"^SHORT-TERM\s+INVESTMENTS$"},
+    # National Elevator Industry Pension Plan: same typesetting, colon headings (2026-10-15).
+    "232694291-001": {"name": "National Elevator Industry Pension Plan", "layout": "cpa_total_lines",
+                      "start_heading": r"^U\.S\.\s+GOVERNMENT\s+AND\s+AGENCY\s+OBLIGATIONS:$"},
     # SBC (AT&T): the whole held-at-end-of-year schedule (2026-10-14).
     "431301883-020": {"name": "SBC Master Pension Trust", "layout": "jpm_held",
                       "start_heading": r"^NONINTEREST-BEARING\s+CASH$"},
@@ -262,6 +303,32 @@ _FCV_ASSET_TYPES = [
     # Any other pooled fund left in a DB master trust's flat list is a private fund.
     (r"\bFUND\b|\bFINANCE$|STRATEGIES", "Partnership Interest"),
     (r"^[A-Z0-9 .,&/'\-]+\b(?:INC|CORP|PLC|AG|SA|NV|LTD|COMPANY)\.?$", "Common Stock"),
+]
+_CTL_HEADER_RE = re.compile(r"Form\s+5500,\s+Schedule\s+H,\s+Line\s+4i\b"
+                            r"|SCHEDULE\s+H\s+TO\s+FORM\s+5500,\s+LINE\s+4i\s+-\s+SCHEDULE\s+OF\s+ASSETS\s+\(HELD")
+# Last line of the title block; holdings start below it.
+_CTL_COLUMNS_RE = re.compile(r"^\(a\)\s+(?:\(b\)\s+)?Identity\s+of\s+issuer|^SIMILAR\s+PARTY\b.*\bVALUE$", re.I)
+# Page footer "- 89 - (Continued...)".
+_CTL_FOOTER_RE = re.compile(r"^-\s*\d+\s*-")
+# Grand-total lines: IUOE prints held and loaned separately; IAM's held line
+# already includes its loaned block ("TOTAL ASSETS ON HAND" / "TOTAL
+# SECURITIES ON LOAN" are intermediate rollups and are skipped).
+_CTL_GRAND_RE = re.compile(r"^TOTAL\s+(?:ASSETS\s+\(HELD\b|SECURITIES\s+LOANED\b|INVESTMENTS$)")
+_CTL_RATE_DATE_RE = re.compile(r"(\d{1,2}/\d{1,2}/\d{4})\s+(\d{1,3}\.\d+)%|(\d{1,3}\.\d+)%\s+(\d{1,2}/\d{1,2}/\d{4})\b")
+# Category heading -> asset_type, first match wins ("OTHER" stays blank).
+_CTL_ASSET_TYPES = [
+    (r"interest\W+bearing\s+cash|short-term|certificates\s+of\s+deposit", "Short-Term Investment Fund"),
+    (r"government|municipal|corporate\s+(?:debt|obligations)", "Bond"),
+    (r"corporate\s+stocks?\W+preferred|^preferred\s+stock", "Preferred Stock"),
+    # Listed MLP units are equities, not private partnership interests.
+    (r"\bstocks?\b|master\s+limited", "Common Stock"),
+    (r"partnership|joint\s+venture", "Partnership Interest"),
+    (r"real\s+estate", "Real Estate"),
+    (r"common\W+collective", "Common/Collective Trust Fund"),
+    (r"pooled\s+separate", "Separate Account"),
+    (r"103-12", "103-12 Investment Entity"),
+    (r"registered\s+investment", "Mutual Fund"),
+    (r"insurance", "Insurance General Account"),
 ]
 _BOILERPLATE_RE = re.compile(
     r"^(EIN\s|Schedule\s+H,|December\s+\d|Face\s+Amount|Asset\s+Interest|Identifier\s+Security)", re.I)
@@ -421,7 +488,7 @@ def _drop_overlapping_spaces(page):
 
 
 def _page_text(page, layout: str) -> str:
-    if layout == "issue_par_rate":
+    if layout in ("issue_par_rate", "cpa_total_lines"):
         page = _drop_overlapping_spaces(page)
     return page.extract_text() or ""
 
@@ -435,6 +502,8 @@ def _header_re(layout: str):
         return _JPM_HEADER_RE
     if layout == "bny_h30t":
         return _H30T_HEADER_RE
+    if layout == "cpa_total_lines":
+        return _CTL_HEADER_RE
     return _IPR_HEADER_RE if layout == "issue_par_rate" else _HEADER_RE
 
 
@@ -469,7 +538,16 @@ def _h30t_body(text: str) -> List[str]:
     return [l for l in lines[start:] if l]
 
 
+def _ctl_body(text: str) -> List[str]:
+    """cpa_total_lines lines below the column header, page number dropped."""
+    lines = [l.strip() for l in text.splitlines()]
+    start = next((i + 1 for i, l in enumerate(lines) if _CTL_COLUMNS_RE.match(l)), len(lines))
+    return [l for l in lines[start:] if l and not l.isdigit() and not _CTL_FOOTER_RE.match(l)]
+
+
 def _headings(text: str, layout: str) -> List[str]:
+    if layout == "cpa_total_lines":
+        return [l for l in _ctl_body(text) if not l.startswith("TOTAL ") and not _trailing_nums(l, 2)]
     if layout == "flat_cost_value":
         # Title-block lines above the column header (pool name among them).
         lines = [l.strip() for l in text.splitlines()]
@@ -510,9 +588,10 @@ def find_schedule_4i_pages(pdf_path: str, start_heading: str, layout: str = "def
     """Pages of the first 4i schedule copy, from start_heading's page to its end.
 
     The schedule is the first contiguous run of pages carrying the 4i column
-    header; some filers print it twice (Mayo 2025: pp.28-52 and again
-    pp.103-127), and only the first copy is taken. Returns [] if the run or
-    the heading isn't found.
+    header and start_heading; some filers print it twice (Mayo 2025: pp.28-52
+    and again pp.103-127), and only the first copy is taken. Earlier runs
+    without the heading (National Elevator's p.7 "see attached" stub) are
+    skipped. Returns [] if no such run is found.
     """
     run: List[int] = []
     start = None
@@ -533,8 +612,10 @@ def find_schedule_4i_pages(pdf_path: str, start_heading: str, layout: str = "def
         for page_num, page in enumerate(pdf.pages, start=1):
             text = _page_text(page, layout)
             if not _header_re(layout).search(text):
-                if run:
+                if start:
                     break
+                # A run without the heading is a stub ("see attached"), not the schedule.
+                run = []
                 continue
             run.append(page_num)
             if start is None and any(re.match(start_heading, h, re.I) for h in _headings(text, layout)):
@@ -570,6 +651,8 @@ def parse_schedule_4i_pages(pdf_path: str, page_nums: List[int], layout: str = "
         return _parse_bny_h30t(pdf_path, page_nums)
     if layout == "flat_cost_value":
         return _parse_flat_cost_value(pdf_path, page_nums)
+    if layout == "cpa_total_lines":
+        return _parse_cpa_total_lines(pdf_path, page_nums)
     pdf_stem = pdf_path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
     page_nums = sorted(set(page_nums))
     with pdfplumber.open(pdf_path) as pdf:
@@ -1267,6 +1350,119 @@ def _parse_flat_cost_value(pdf_path: str, page_nums: List[int]) -> Optional[Dict
         abs(section["value_diff"]) <= 1.0 and abs(section["cost_diff"]) <= 1.0)
     return {"pages": pages, "sections": [section], "unparsed": unparsed, "grand_total": grand_total,
             "grand_reconciled": section["reconciled"]}
+
+
+def _parse_cpa_total_lines(pdf_path: str, page_nums: List[int]) -> Optional[Dict]:
+    """parse_schedule_4i_pages for the cpa_total_lines layout. The pages must
+    start at the first category heading so every section opens in range."""
+    pdf_stem = pdf_path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+    page_nums = sorted(set(page_nums))
+    with pdfplumber.open(pdf_path) as pdf:
+        bodies = {}
+        for page_num in page_nums:
+            if not 1 <= page_num <= len(pdf.pages):
+                return None
+            text = _page_text(pdf.pages[page_num - 1], "cpa_total_lines")
+            if not _CTL_HEADER_RE.search(text):
+                return None
+            bodies[page_num] = _ctl_body(text)
+
+    current = None
+    sections, unparsed, pages = [], [], []
+    grand_parts = []
+
+    def new_section(heading):
+        section = {"heading": heading, "asset_type": next(
+            (label for pattern, label in _CTL_ASSET_TYPES if re.search(pattern, heading, re.I)), ""),
+            "partial": False, "rows": 0, "cost": 0.0, "value": 0.0, "subtotal": None}
+        sections.append(section)
+        return section
+
+    for page_num in page_nums:
+        mapped_rows = []
+        for line in bodies[page_num]:
+            # "$" prints as its own token on a section's first row and total.
+            clean = " ".join(tok for tok in line.split() if tok != "$")
+            row = _trailing_nums(clean, 3)
+            if clean.startswith("TOTAL ") and not row:
+                t = _trailing_nums(clean, 2)
+                if not t:
+                    unparsed.append({"page_number": page_num, "line": line})
+                elif _CTL_GRAND_RE.match(t[0]):
+                    grand_parts.append(t[1])
+                elif current is not None and current["subtotal"] is None:
+                    current["subtotal"] = t[1]
+                # Otherwise a rollup of totals already taken; the grand total checks it.
+                continue
+            if not row:
+                # Partnership rows print cost and value only.
+                row = _trailing_nums(clean, 2)
+                if row:
+                    row = (row[0], [None] + row[1])
+            if row and row[0]:
+                if current is None:
+                    # One-line section ("INTEREST-BEARING CASH $ <cost> $ <value>").
+                    current = new_section(row[0])
+                title = row[0]
+                shares, cost, value = row[1]
+                current["rows"] += 1
+                current["cost"] += cost or 0.0
+                current["value"] += value or 0.0
+                if not value:
+                    continue
+                m = _CTL_RATE_DATE_RE.search(title)
+                rate, maturity = ((m.group(2), m.group(1)) if m.group(1) else (m.group(3), m.group(4))) \
+                    if m else ("", "")
+                mapped = {
+                    "issuer_name": "",
+                    "investment_description": title,
+                    "asset_type": current["asset_type"],
+                    "asset_type_source": "heading" if current["asset_type"] else "none",
+                    "par_value": "",
+                    "cost": _fmt(cost),
+                    "current_value": _fmt(value),
+                    "units_or_shares": _fmt(shares),
+                    "asset_identifier": "",
+                    "interest_rate": rate,
+                    "maturity_date": maturity,
+                    "section_heading": current["heading"],
+                    "extraction_method": "sch4i_text",
+                    "page_number": page_num,
+                    "row_id": len(mapped_rows) + 1,
+                }
+                if not current["asset_type"]:
+                    asset_type = detect_asset_type(f"{current['heading']} {title}")
+                    mapped["asset_type"] = asset_type
+                    mapped["asset_type_source"] = "row" if asset_type else "none"
+                mapped_rows.append(mapped)
+                continue
+            if not _trailing_nums(clean, 1):
+                current = new_section(line.rstrip(":").strip())
+                continue
+            unparsed.append({"page_number": page_num, "line": line})
+        pages.append({
+            "pdf": pdf_path, "pdf_stem": pdf_stem, "page_number": page_num,
+            "mapped_rows": mapped_rows, "ocr_cells": [], "normalized_path": pdf_path,
+        })
+
+    for section in sections:
+        sub = section["subtotal"]
+        section["cost_diff"] = None if sub is None else section["cost"] - sub[0]
+        section["value_diff"] = None if sub is None else section["value"] - sub[1]
+        if sub is None:
+            section["reconciled"] = None if section["rows"] else True
+        else:
+            # Printed in whole dollars, so allow a dollar of rounding per row.
+            tol = max(1.0, section["rows"])
+            section["reconciled"] = abs(section["value_diff"]) <= tol and abs(section["cost_diff"]) <= tol
+    grand_total = [sum(p[0] or 0.0 for p in grand_parts), sum(p[1] or 0.0 for p in grand_parts)] \
+        if grand_parts else None
+    grand_reconciled = None
+    if grand_total:
+        grand_reconciled = abs(sum(s["value"] for s in sections) - grand_total[1]) <= max(
+            1.0, sum(s["rows"] for s in sections))
+    return {"pages": pages, "sections": sections, "unparsed": unparsed,
+            "grand_total": grand_total, "grand_reconciled": grand_reconciled}
 
 
 def is_trustworthy(result: Optional[Dict]) -> bool:
