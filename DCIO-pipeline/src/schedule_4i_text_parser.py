@@ -65,6 +65,21 @@ parsed only to reconcile their own subtotals. First seen on SBC Master Pension
 Trust (ack 20251008170354NAL0006170017001, pp.275-889 of 889; pp.1-274 are the
 acquired-and-disposed schedule), never extracted, JV section $6.76B.
 
+A sixth layout, "bny_h30t" (2026-10-15), is the BNY "H30T" composite report
+"SCHEDULE H, LINE 4I - SCHEDULE OF ASSETS (HELD AT END OF YEAR)" for a master
+trust split across many manager accounts. Each holding prints as its
+description line(s) -- bonds ending "<rate> <mm/dd/yyyy>" -- then a
+numbers-only "<shares/par> <cost> <current value>" line for the whole trust,
+then one "<account> [<security id>] <shares> <cost> <value>" line per manager
+account. Headings are underlined by a dash rule; each section closes with a
+column-rule line and a numbers-only total; the last page lists the category
+totals and "GRAND TOTALS". One row is emitted per holding from the whole-trust
+line; the per-account lines must add up to it. The filer's own footer (plan
+name, EIN, "Schedule H Line 4i - Assets Held") is printed on every page, often
+in the middle of the body, so any line found on at least half the pages is
+dropped. First seen on MGB ERISA Master Trust (ack
+20260702162718NAL0018068224001, pp.35-95), never extracted, JV section $9.16B.
+
 Registered per plan, not per filing: PLAN_PARSERS is keyed by plan_master
 plan_id (EIN-PN), which stays fixed across years while ack_id and page
 numbers change. run_pipeline.py resolves each PDF's ack_id to a plan_id via
@@ -75,6 +90,7 @@ existing path.
 """
 
 import re
+from collections import Counter
 from typing import Dict, List, Optional, Set
 
 import pdfplumber
@@ -97,6 +113,9 @@ PLAN_PARSERS = {
     # UPS: the whole schedule from its first section (2026-10-14).
     "352371556-001": {"name": "UPS Group Trust", "layout": "soi_revalued_cost",
                       "start_heading": r"^INTEREST-BEARING\s+CASH$"},
+    # MGB (Mass General Brigham): the whole held-at-end-of-year composite (2026-10-15).
+    "043294527-004": {"name": "MGB ERISA Master Trust", "layout": "bny_h30t",
+                      "start_heading": r"^INTEREST\s+BEARING\s+CASH$"},
     # SBC (AT&T): the whole held-at-end-of-year schedule (2026-10-14).
     "431301883-020": {"name": "SBC Master Pension Trust", "layout": "jpm_held",
                       "start_heading": r"^NONINTEREST-BEARING\s+CASH$"},
@@ -167,6 +186,30 @@ _JPM_ASSET_TYPES = [
     (r"^preferred$", "Preferred Stock"),
     (r"^common$", "Common Stock"),
     (r"partnership|joint\s+venture", "Partnership Interest"),
+    (r"^real\s+estate", "Real Estate"),
+    (r"common/collective", "Common/Collective Trust Fund"),
+    (r"pooled\s+separate", "Separate Account"),
+    (r"103-12", "103-12 Investment Entity"),
+    (r"registered\s+investment", "Mutual Fund"),
+    (r"insurance", "Insurance General Account"),
+    (r"employer\s+securities", "Employer Stock"),
+]
+_H30T_HEADER_RE = re.compile(r"^H30T\b.*?\(HELD\s+AT\s+END\s+OF\s+YEAR\)", re.S | re.M)
+# Last line of the title block on holdings pages and on the category-summary page.
+_H30T_COLUMNS_RE = re.compile(r"^FUND\s+SHARES/PAR\b")
+_H30T_SUMMARY_RE = re.compile(r"^ASSET\s+CATEGORY\s+UNITS\b")
+_H30T_RULE_RE = re.compile(r"^-{5,}$")
+_H30T_TOTAL_RULE_RE = re.compile(r"^-{5,}(\s+-{5,})+$")
+# Per-manager-account line: "H32L CAD ...", "H37M ACI0BDLV3 ...".
+_H30T_ACCOUNT_RE = re.compile(r"^[A-Z0-9]{4}\s")
+_H30T_RATE_DATE_RE = re.compile(r"^(.*?)\s+(\d{1,3}\.\d+)\s+(\d{2}/\d{2}/\d{4})$")
+# Section heading -> asset_type, first match wins.
+_H30T_ASSET_TYPES = [
+    (r"interest\s+bearing\s+cash|certificates\s+of\s+deposit", "Short-Term Investment Fund"),
+    (r"government|corp\.?\s+debt|loans\s+secured\s+by\s+mtges", "Bond"),
+    (r"corporate\s+stocks\s*-\s*preferred", "Preferred Stock"),
+    (r"corporate\s+stocks", "Common Stock"),
+    (r"partn|joint\s+venture", "Partnership Interest"),
     (r"^real\s+estate", "Real Estate"),
     (r"common/collective", "Common/Collective Trust Fund"),
     (r"pooled\s+separate", "Separate Account"),
@@ -345,6 +388,8 @@ def _header_re(layout: str):
         return _SOI_HEADER_RE
     if layout == "jpm_held":
         return _JPM_HEADER_RE
+    if layout == "bny_h30t":
+        return _H30T_HEADER_RE
     return _IPR_HEADER_RE if layout == "issue_par_rate" else _HEADER_RE
 
 
@@ -369,7 +414,20 @@ def _jpm_body(text: str) -> List[str]:
     return [l for l in lines[start:] if l and not _JPM_FOOTER_RE.match(l)]
 
 
+def _h30t_body(text: str) -> List[str]:
+    """bny_h30t lines below the column header (holdings or summary page)."""
+    lines = [l.strip() for l in text.splitlines()]
+    start = next((i + 1 for i, l in enumerate(lines)
+                  if _H30T_COLUMNS_RE.match(l) or _H30T_SUMMARY_RE.match(l)), len(lines))
+    if start < len(lines) and _H30T_RULE_RE.match(lines[start]):
+        start += 1
+    return [l for l in lines[start:] if l]
+
+
 def _headings(text: str, layout: str) -> List[str]:
+    if layout == "bny_h30t":
+        body = _h30t_body(text)
+        return [l for l, nxt in zip(body, body[1:]) if _H30T_RULE_RE.match(nxt) and not l.startswith("-")]
     if layout == "jpm_held":
         body = _jpm_body(text)
         return [l for l, nxt in zip(body, body[1:])
@@ -445,6 +503,8 @@ def parse_schedule_4i_pages(pdf_path: str, page_nums: List[int], layout: str = "
         return _parse_soi_revalued_cost(pdf_path, page_nums)
     if layout == "jpm_held":
         return _parse_jpm_held(pdf_path, page_nums)
+    if layout == "bny_h30t":
+        return _parse_bny_h30t(pdf_path, page_nums)
     pdf_stem = pdf_path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
     page_nums = sorted(set(page_nums))
     with pdfplumber.open(pdf_path) as pdf:
@@ -918,6 +978,149 @@ def _parse_jpm_held(pdf_path: str, page_nums: List[int]) -> Optional[Dict]:
     if grand_total:
         invest_rows = sum(len(p["mapped_rows"]) for p in pages)
         grand_reconciled = abs(invest_value - grand_total[-1]) <= 1.0 + 0.5 * invest_rows
+    return {"pages": pages, "sections": sections, "unparsed": unparsed,
+            "grand_total": grand_total, "grand_reconciled": grand_reconciled}
+
+
+def _parse_bny_h30t(pdf_path: str, page_nums: List[int]) -> Optional[Dict]:
+    """parse_schedule_4i_pages for the bny_h30t layout. The pages must start
+    at the first section heading so every section opens in range."""
+    pdf_stem = pdf_path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+    page_nums = sorted(set(page_nums))
+    with pdfplumber.open(pdf_path) as pdf:
+        bodies, summary_pages = {}, set()
+        for page_num in page_nums:
+            if not 1 <= page_num <= len(pdf.pages):
+                return None
+            text = pdf.pages[page_num - 1].extract_text() or ""
+            if not _H30T_HEADER_RE.search(text):
+                return None
+            bodies[page_num] = _h30t_body(text)
+            if any(_H30T_SUMMARY_RE.match(l.strip()) for l in text.splitlines()):
+                summary_pages.add(page_num)
+
+    # The filer's footer lands anywhere in the body; it is on every page, holdings aren't.
+    seen = Counter(l for body in bodies.values() for l in set(body))
+    footer = {l for l, n in seen.items()
+              if len(page_nums) >= 4 and n * 2 >= len(page_nums) and not _trailing_nums(l, 3)}
+
+    current = None
+    sections, unparsed, pages = [], [], []
+    grand_total = None
+    name_lines: List[str] = []
+    holding = None  # whole-trust row whose per-account lines are being summed
+    after_rule = False
+
+    def close_holding():
+        if holding and abs(holding["accounts"] - holding["value"]) > 0.01 * max(1, holding["n_accounts"]):
+            unparsed.append({"page_number": holding["row"]["page_number"],
+                             "line": f"per-account lines {holding['accounts']:,.2f} != "
+                                     f"{holding['value']:,.2f}: {holding['row']['investment_description']}"})
+
+    for page_num in page_nums:
+        mapped_rows = []
+        body = [l for l in bodies[page_num] if l not in footer and not l.startswith("RUN DATE:")]
+        for i, line in enumerate(body):
+            if page_num in summary_pages:
+                t = _trailing_nums(line, 3)
+                if t and t[0] == "GRAND TOTALS":
+                    grand_total = t[1][1:]
+                continue
+            if _H30T_TOTAL_RULE_RE.match(line):
+                after_rule = True
+                continue
+            if _H30T_RULE_RE.match(line):
+                continue
+            nxt = body[i + 1] if i + 1 < len(body) else ""
+            if _H30T_RULE_RE.match(nxt):
+                close_holding()
+                holding, name_lines = None, []
+                current = {"heading": line, "asset_type": next(
+                    (label for pattern, label in _H30T_ASSET_TYPES if re.search(pattern, line, re.I)), ""),
+                    "partial": False, "rows": 0, "cost": 0.0, "value": 0.0, "subtotal": None}
+                sections.append(current)
+                continue
+            t = _trailing_nums(line, 3)
+            if t and not t[0]:
+                if after_rule:
+                    after_rule = False
+                    close_holding()
+                    holding = None
+                    if current is not None:
+                        current["subtotal"] = t[1][1:]
+                    continue
+                if current is None or not name_lines:
+                    unparsed.append({"page_number": page_num, "line": line})
+                    continue
+                close_holding()
+                shares, cost, value = t[1]
+                title = " ".join(name_lines)
+                name_lines = []
+                rate = maturity = ""
+                m = _H30T_RATE_DATE_RE.match(title)
+                if m:
+                    title, rate, maturity = m.groups()
+                current["rows"] += 1
+                current["cost"] += cost or 0.0
+                current["value"] += value or 0.0
+                row = {
+                    "issuer_name": "",
+                    "investment_description": title,
+                    "asset_type": current["asset_type"],
+                    "asset_type_source": "heading" if current["asset_type"] else "none",
+                    "par_value": "",
+                    "cost": _fmt(cost),
+                    "current_value": _fmt(value),
+                    "units_or_shares": _fmt(shares),
+                    "asset_identifier": "",
+                    "interest_rate": rate,
+                    "maturity_date": maturity,
+                    "section_heading": current["heading"],
+                    "extraction_method": "sch4i_text",
+                    "page_number": page_num,
+                    "row_id": len(mapped_rows) + 1,
+                }
+                if not current["asset_type"]:
+                    asset_type = detect_asset_type(f"{current['heading']} {title}")
+                    row["asset_type"] = asset_type
+                    row["asset_type_source"] = "row" if asset_type else "none"
+                holding = {"row": row, "value": value or 0.0, "accounts": 0.0, "n_accounts": 0}
+                # Holdings sold during the year (current value 0) count but aren't loaded.
+                if value:
+                    mapped_rows.append(row)
+                continue
+            if t and holding is not None and _H30T_ACCOUNT_RE.match(line):
+                ident = t[0].split()[1] if len(t[0].split()) > 1 else ""
+                if not holding["row"]["asset_identifier"] and len(ident) >= 8 and re.search(r"\d", ident):
+                    holding["row"]["asset_identifier"] = ident
+                holding["accounts"] += t[1][2] or 0.0
+                holding["n_accounts"] += 1
+                continue
+            if current is not None and not t:
+                # Description of the next holding.
+                close_holding()
+                holding = None
+                name_lines.append(line)
+                continue
+            unparsed.append({"page_number": page_num, "line": line})
+        pages.append({
+            "pdf": pdf_path, "pdf_stem": pdf_stem, "page_number": page_num,
+            "mapped_rows": mapped_rows, "ocr_cells": [], "normalized_path": pdf_path,
+        })
+    close_holding()
+
+    for section in sections:
+        sub = section["subtotal"]
+        section["cost_diff"] = None if sub is None else section["cost"] - sub[0]
+        section["value_diff"] = None if sub is None else section["value"] - sub[1]
+        if sub is None:
+            section["reconciled"] = None if section["rows"] else True
+        else:
+            # Printed to the cent, so only float drift is tolerated.
+            section["reconciled"] = abs(section["value_diff"]) <= 1.0 and abs(section["cost_diff"]) <= 1.0
+    grand_reconciled = None
+    if grand_total:
+        grand_reconciled = abs(sum(s["value"] for s in sections) - grand_total[-1]) <= 1.0
     return {"pages": pages, "sections": sections, "unparsed": unparsed,
             "grand_total": grand_total, "grand_reconciled": grand_reconciled}
 
