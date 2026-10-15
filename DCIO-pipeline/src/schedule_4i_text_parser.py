@@ -116,6 +116,9 @@ PLAN_PARSERS = {
     # MGB (Mass General Brigham): the whole held-at-end-of-year composite (2026-10-15).
     "043294527-004": {"name": "MGB ERISA Master Trust", "layout": "bny_h30t",
                       "start_heading": r"^INTEREST\s+BEARING\s+CASH$"},
+    # GE Pension Trust: same BNY composite, report id GEAC (2026-10-15).
+    "140689340-001": {"name": "GE Pension Trust", "layout": "bny_h30t",
+                      "start_heading": r"^INTEREST\s+BEARING\s+CASH$"},
     # SBC (AT&T): the whole held-at-end-of-year schedule (2026-10-14).
     "431301883-020": {"name": "SBC Master Pension Trust", "layout": "jpm_held",
                       "start_heading": r"^NONINTEREST-BEARING\s+CASH$"},
@@ -194,7 +197,8 @@ _JPM_ASSET_TYPES = [
     (r"insurance", "Insurance General Account"),
     (r"employer\s+securities", "Employer Stock"),
 ]
-_H30T_HEADER_RE = re.compile(r"^H30T\b.*?\(HELD\s+AT\s+END\s+OF\s+YEAR\)", re.S | re.M)
+# Report id varies by client ("H30T" MGB, "GEAC" GE); the title block doesn't.
+_H30T_HEADER_RE = re.compile(r"SCHEDULE\s+H,\s+LINE\s+4I\s+-\s+SCHEDULE\s+OF\s+ASSETS\s+\(HELD\s+AT\s+END\s+OF\s+YEAR\)")
 # Last line of the title block on holdings pages and on the category-summary page.
 _H30T_COLUMNS_RE = re.compile(r"^FUND\s+SHARES/PAR\b")
 _H30T_SUMMARY_RE = re.compile(r"^ASSET\s+CATEGORY\s+UNITS\b")
