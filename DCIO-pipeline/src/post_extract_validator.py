@@ -1286,6 +1286,15 @@ ALT_NOISE_ASSET_TYPES = frozenset({
     "common stock", "employer stock", "exchange traded funds", "stocks",
 })
 
+# Keyword pass only (added 2026-10-14): a bond-typed row with no fund marker is
+# an issuer's note, not a fund unit, when only a loose keyword matched it --
+# Alexandria Real Estate Equities, South Bow/XPLR/LBJ Infrastructure, muni
+# infrastructure revenue bonds (160 rows / ~$80M live). Not in
+# ALT_NOISE_ASSET_TYPES because the debt carve-out routes bond-typed manager
+# notes on purpose, and not applied to PE/buyout/venture/hedge names: filers
+# heading-type real LPs as bonds ("JPG Peg Global Private Equity VIII").
+ALT_KEYWORD_BOND_KEEP_REGEX = r"private\s+equity|buyout|venture|hedge"
+
 # Staging asset_type values that route to alternatives on their own, with no
 # name/brand/sponsor match needed -> asset_sub_class (added 2026-10-12). Set
 # from the section heading by a parser we trust, e.g. the deterministic
@@ -1385,7 +1394,10 @@ ALT_JV_STRONG_REGEX = (
     r"\bmezzanine\b|\bsecondar|\bcrossroads\b|\bco-?invest|\bmulti-?strat|\bmacro\b|\babsolute\s+return|"
     r"\binfrastructure\b|\binfra\b|\bfund\s+[ivx]+\b|\bfund\s+\d+\b|\b[ivx]+\s+(a\s+)?l\.?p\b|\bscsp\b|"
     r"\bdirect\s+lending\b|\bcredit\s+(fund|solutions|opportunit)|\bproperty\s+fund\b|\breal\s+estate\s+fund\b|"
-    r"\bindustrial\s+(value\s+)?fund\b|\bcatastrophe\b|\blongevity\b"
+    r"\bindustrial\s+(value\s+)?fund\b|\bcatastrophe\b|\blongevity\b|"
+    # JPMorgan Strategic Property Fund, filed as "JPMCB SPF" (Shell Pension, $120M);
+    # without it the JPMCB long-only marker holds the row at R07.
+    r"\bspf\b|strategic\s+property"
 )
 # Legal-form words operating companies use too (Wave Life Sciences Ltd).
 ALT_JV_WEAK_REGEX = r"\bltd\.?\b|\blimited\b|\bllc\b|\bclass\s+[a-z0-9]+\b|\bfund\b"
@@ -1968,6 +1980,9 @@ def _route_alternatives_chunk(glue_db: str, staging_table: str, target_table: st
                       OR regexp_like(lower(s.raw_entity_name), '{ALT_BRAND_STRUCTURAL_MARKER_REGEX}')
                       OR lower(trim(s.asset_type)) IN ({trusted})
                   )
+                  AND NOT (lower(trim(s.asset_type)) = 'bond'
+                           AND NOT regexp_like(lower(s.raw_entity_name), '{ALT_BRAND_STRUCTURAL_MARKER_REGEX}')
+                           AND NOT regexp_like(lower(s.raw_entity_name), '{ALT_KEYWORD_BOND_KEEP_REGEX}'))
                   AND NOT regexp_like(lower(s.raw_entity_name), '{ALT_BRAND_NOISE_REGEX}')
                   AND NOT regexp_like(lower(s.raw_entity_name), '{ALT_ROLLUP_POINTER_REGEX}')
                   AND NOT EXISTS (
