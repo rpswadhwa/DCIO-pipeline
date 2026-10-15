@@ -53,6 +53,18 @@ line counts as a heading only if the schedule also prints "TOTAL <line>".
 First seen on UPS Group Trust (ack 20251015204755NAL0011191170001, pp.5-236),
 never extracted, whose JV section totals $10.22B.
 
+A fifth layout, "jpm_held" (2026-10-14), is the JPMorgan Investor Services
+"SCHEDULE OF ASSETS HELD FOR INVESTMENT PURPOSES AT END OF YEAR": one line per
+holding as "<security id> <description> <cost> <current value>" followed by a
+bare shares/par line, ALL-CAPS Schedule H headings underlined by a dash line,
+each leaf closed by "TOTAL <heading> <cost> <value>". There is no grand total;
+"TOTAL GENERAL INVESTMENTS" closes the investments block and is the check.
+Rows are emitted only inside GENERAL INVESTMENTS -- non-interest cash and the
+OTHER LIABILITIES block (overdrafts, futures, shorts, FX losses, payables) are
+parsed only to reconcile their own subtotals. First seen on SBC Master Pension
+Trust (ack 20251008170354NAL0006170017001, pp.275-889 of 889; pp.1-274 are the
+acquired-and-disposed schedule), never extracted, JV section $6.76B.
+
 Registered per plan, not per filing: PLAN_PARSERS is keyed by plan_master
 plan_id (EIN-PN), which stays fixed across years while ack_id and page
 numbers change. run_pipeline.py resolves each PDF's ack_id to a plan_id via
@@ -85,6 +97,9 @@ PLAN_PARSERS = {
     # UPS: the whole schedule from its first section (2026-10-14).
     "352371556-001": {"name": "UPS Group Trust", "layout": "soi_revalued_cost",
                       "start_heading": r"^INTEREST-BEARING\s+CASH$"},
+    # SBC (AT&T): the whole held-at-end-of-year schedule (2026-10-14).
+    "431301883-020": {"name": "SBC Master Pension Trust", "layout": "jpm_held",
+                      "start_heading": r"^NONINTEREST-BEARING\s+CASH$"},
 }
 
 # Every requested page must carry this column-header line, else we don't own the layout.
@@ -127,6 +142,30 @@ _SOI_ASSET_TYPES = [
     (r"government\s+securities|corporate\s+debt", "Bond"),
     (r"corporate\s+stock\s*-\s*preferred", "Preferred Stock"),
     (r"corporate\s+stock", "Common Stock"),
+    (r"partnership|joint\s+venture", "Partnership Interest"),
+    (r"^real\s+estate", "Real Estate"),
+    (r"common/collective", "Common/Collective Trust Fund"),
+    (r"pooled\s+separate", "Separate Account"),
+    (r"103-12", "103-12 Investment Entity"),
+    (r"registered\s+investment", "Mutual Fund"),
+    (r"insurance", "Insurance General Account"),
+    (r"employer\s+securities", "Employer Stock"),
+]
+_JPM_HEADER_RE = re.compile(r"SCHEDULE\s+OF\s+ASSETS\s+HELD\s+FOR\s+INVESTMENT\s+PURPOSES\s+AT\s+END\s+OF\s+YEAR")
+# Last line of each page's title block.
+_JPM_COLUMNS_RE = re.compile(r"^SHARES\s*/\s*PAR$")
+_JPM_FOOTER_RE = re.compile(r"^JPMorgan\s+Investor\s+Services$")
+_JPM_RULE_RE = re.compile(r"^[-=]{3,}[-= ]*$")
+# Shares/par line under each row: "1,000.000", ".270", "(3.000)".
+_JPM_SHARES_RE = re.compile(r"^\(?[\d,]*\.\d+\)?$")
+# The Schedule H line-item block whose rows are holdings.
+_JPM_INVESTMENTS = "GENERAL INVESTMENTS"
+# Leaf heading -> asset_type, first match wins.
+_JPM_ASSET_TYPES = [
+    (r"interest\s+bearing\s+cash|^interest-bearing\s+cash", "Short-Term Investment Fund"),
+    (r"government|corporate\s+debt|municipal", "Bond"),
+    (r"^preferred$", "Preferred Stock"),
+    (r"^common$", "Common Stock"),
     (r"partnership|joint\s+venture", "Partnership Interest"),
     (r"^real\s+estate", "Real Estate"),
     (r"common/collective", "Common/Collective Trust Fund"),
@@ -304,6 +343,8 @@ def _header_re(layout: str):
         return _DR_HEADER_RE
     if layout == "soi_revalued_cost":
         return _SOI_HEADER_RE
+    if layout == "jpm_held":
+        return _JPM_HEADER_RE
     return _IPR_HEADER_RE if layout == "issue_par_rate" else _HEADER_RE
 
 
@@ -321,7 +362,18 @@ def _soi_body(text: str) -> List[str]:
     return [l for l in lines[start:] if l and not _DR_FOOTER_RE.match(l)]
 
 
+def _jpm_body(text: str) -> List[str]:
+    """jpm_held lines below the "SHARES / PAR" title-block line, footer dropped."""
+    lines = [l.strip() for l in text.splitlines()]
+    start = next((i + 1 for i, l in enumerate(lines) if _JPM_COLUMNS_RE.match(l)), len(lines))
+    return [l for l in lines[start:] if l and not _JPM_FOOTER_RE.match(l)]
+
+
 def _headings(text: str, layout: str) -> List[str]:
+    if layout == "jpm_held":
+        body = _jpm_body(text)
+        return [l for l, nxt in zip(body, body[1:])
+                if _JPM_RULE_RE.match(nxt) and not _JPM_RULE_RE.match(l)]
     if layout == "detail_report":
         return [l for l in _dr_body(text) if _DR_LETTER_RE.match(l)]
     if layout == "soi_revalued_cost":
@@ -391,6 +443,8 @@ def parse_schedule_4i_pages(pdf_path: str, page_nums: List[int], layout: str = "
         return _parse_detail_report(pdf_path, page_nums)
     if layout == "soi_revalued_cost":
         return _parse_soi_revalued_cost(pdf_path, page_nums)
+    if layout == "jpm_held":
+        return _parse_jpm_held(pdf_path, page_nums)
     pdf_stem = pdf_path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
     page_nums = sorted(set(page_nums))
     with pdfplumber.open(pdf_path) as pdf:
@@ -750,6 +804,120 @@ def _parse_soi_revalued_cost(pdf_path: str, page_nums: List[int]) -> Optional[Di
     if grand_total:
         grand_diff = sum(s["value"] for s in sections) - grand_total[-1]
         grand_reconciled = abs(grand_diff) <= 1.0
+    return {"pages": pages, "sections": sections, "unparsed": unparsed,
+            "grand_total": grand_total, "grand_reconciled": grand_reconciled}
+
+
+def _parse_jpm_held(pdf_path: str, page_nums: List[int]) -> Optional[Dict]:
+    """parse_schedule_4i_pages for the jpm_held layout. The pages must start
+    at the first section heading so every section opens in range."""
+    pdf_stem = pdf_path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+    page_nums = sorted(set(page_nums))
+    with pdfplumber.open(pdf_path) as pdf:
+        bodies = {}
+        for page_num in page_nums:
+            if not 1 <= page_num <= len(pdf.pages):
+                return None
+            text = pdf.pages[page_num - 1].extract_text() or ""
+            if not _JPM_HEADER_RE.search(text):
+                return None
+            bodies[page_num] = _jpm_body(text)
+
+    current = None
+    in_investments = False
+    sections, unparsed, pages = [], [], []
+    grand_total = None
+    invest_value = 0.0
+
+    for page_num in page_nums:
+        mapped_rows = []
+        body = bodies[page_num]
+        for i, line in enumerate(body):
+            if _JPM_RULE_RE.match(line) or _JPM_SHARES_RE.match(line) or line.startswith("RATINGS:"):
+                continue
+            nxt = body[i + 1] if i + 1 < len(body) else ""
+            if _JPM_RULE_RE.match(nxt) and not line.startswith("TOTAL "):
+                if line == _JPM_INVESTMENTS:
+                    in_investments = True
+                current = {"heading": line, "asset_type": next(
+                    (label for pattern, label in _JPM_ASSET_TYPES if re.search(pattern, line, re.I)), ""),
+                    "partial": False, "rows": 0, "cost": 0.0, "value": 0.0, "subtotal": None,
+                    "investments": in_investments}
+                sections.append(current)
+                continue
+            if line.startswith("TOTAL "):
+                total = _trailing_nums(line, 2) or _trailing_nums(line, 1)
+                if total is None:
+                    unparsed.append({"page_number": page_num, "line": line})
+                    continue
+                name = total[0][len("TOTAL "):].strip()
+                if name == _JPM_INVESTMENTS:
+                    grand_total = total[1]
+                    in_investments = False
+                # "TOTAL FUTURES CONTRACTS BEFORE CASH FLOWS" closes "FUTURES CONTRACTS".
+                elif (current is not None and current["subtotal"] is None and len(total[1]) == 2
+                        and name.startswith(current["heading"])):
+                    current["subtotal"] = total[1]
+                # Any other TOTAL is a rollup or a row-less line item (payables, cash flows).
+                current = None
+                continue
+            t = _trailing_nums(line, 2)
+            if t and current is not None:
+                ident, _, title = t[0].partition(" ")
+                cost, value = t[1]
+                current["rows"] += 1
+                current["cost"] += cost or 0.0
+                current["value"] += value or 0.0
+                if not current["investments"]:
+                    continue
+                invest_value += value or 0.0
+                row = {
+                    "issuer_name": "",
+                    # One pooled separate account prints only its id.
+                    "investment_description": title or ident,
+                    "asset_type": current["asset_type"],
+                    "asset_type_source": "heading" if current["asset_type"] else "none",
+                    "par_value": "",
+                    "cost": _fmt(cost),
+                    "current_value": _fmt(value),
+                    "units_or_shares": "",
+                    "asset_identifier": ident,
+                    "interest_rate": "",
+                    "maturity_date": "",
+                    "section_heading": current["heading"],
+                    "extraction_method": "sch4i_text",
+                    "page_number": page_num,
+                    "row_id": len(mapped_rows) + 1,
+                }
+                if not current["asset_type"]:
+                    asset_type = detect_asset_type(f"{current['heading']} {title}")
+                    row["asset_type"] = asset_type
+                    row["asset_type_source"] = "row" if asset_type else "none"
+                # Holdings sold during the year (current value 0) count but aren't loaded.
+                if value:
+                    mapped_rows.append(row)
+                continue
+            unparsed.append({"page_number": page_num, "line": line})
+        pages.append({
+            "pdf": pdf_path, "pdf_stem": pdf_stem, "page_number": page_num,
+            "mapped_rows": mapped_rows, "ocr_cells": [], "normalized_path": pdf_path,
+        })
+
+    for section in sections:
+        section.pop("investments")
+        sub = section["subtotal"]
+        section["cost_diff"] = None if sub is None else section["cost"] - sub[0]
+        section["value_diff"] = None if sub is None else section["value"] - sub[1]
+        if sub is None:
+            section["reconciled"] = None if section["rows"] else True
+        else:
+            # Rows and totals are each rounded to whole dollars, so allow $0.50 per row.
+            tol = 1.0 + 0.5 * section["rows"]
+            section["reconciled"] = abs(section["value_diff"]) <= tol and abs(section["cost_diff"]) <= tol
+    grand_reconciled = None
+    if grand_total:
+        invest_rows = sum(len(p["mapped_rows"]) for p in pages)
+        grand_reconciled = abs(invest_value - grand_total[-1]) <= 1.0 + 0.5 * invest_rows
     return {"pages": pages, "sections": sections, "unparsed": unparsed,
             "grand_total": grand_total, "grand_reconciled": grand_reconciled}
 
