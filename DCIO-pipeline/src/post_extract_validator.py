@@ -456,6 +456,29 @@ def dedup_plan_rows(rows: List[Dict]):
     return out, len(removed_idx)
 
 
+# File-derived vehicle types that are explicitly NOT mutual funds (mirrors build_mf_rows_df's
+# _non_mf). Rows carrying one of these are real holdings even when an MF-oriented junk rule
+# fires on their name.
+_FILE_TYPED_NON_MF = frozenset({
+    "common stock", "preferred stock", "employer stock", "common/collective trust fund",
+    "commingled fund", "separately managed account", "self-directed brokerage account",
+    "guaranteed insurance contract", "guaranteed investment contract", "stable value fund",
+    "insurance general account", "group annuity contract", "partnership interest", "currency",
+    "joint venture", "real estate", "hedge fund", "bond", "derivative",
+    "103-12 investment entity", "short-term investment fund",
+})
+# junk_detect reasons that only say "wrong asset type for the MF table".
+_MF_ONLY_JUNK_REASONS = (
+    "v3 cleanup: non-MF vehicle",
+    "v3 cleanup: confirmed individual stock",
+    "v3 cleanup: bare foreign-currency",
+)
+
+
+def _is_file_typed_non_mf(row) -> bool:
+    return str(row.get("asset_type", "") or "").strip().lower() in _FILE_TYPED_NON_MF
+
+
 def _write_junk_drop_log(drop_log):
     """Write rows removed by the JUNK_FILTER stage to a CSV for audit/visibility.
     drop_log: list of (ack_id, name, value, reason). Best-effort; never fatal."""
@@ -5097,15 +5120,30 @@ def run_post_extract_validation(
             _r["fund_name"] = pick_fund_name(_r.get("issuer_name"), _r.get("investment_description"))
             _r["plan_investment_amt"] = parse_currency_value(_r.get("current_value"))
         _res = _junk_clean_plan(_prows)
-        for _r in _res["keep"]:
+        # Some junk rules only mean "not a mutual fund" (the 2026-09 v3 wrong-type denylist,
+        # individual-stock / bare-currency rules, share-class near-dup merging). A row the FILE
+        # already typed as a non-MF vehicle (bond, stock, partnership...) is a real holding:
+        # staging keeps it, and the MF-only path drops it by type anyway. Shell Pension
+        # (2026-10-14) lost 874 bonds / $620M to these rules, plus 6 distinct same-issuer bonds
+        # merged as "near-duplicates".
+        _junk, _restored = [], []
+        for _r, _reason in _res["removed_junk"]:
+            if _is_file_typed_non_mf(_r) and _reason.startswith(_MF_ONLY_JUNK_REASONS):
+                _restored.append(_r)
+            else:
+                _junk.append((_r, _reason))
+        _near = []
+        for _r in _res.get("near_dup_removed", []):
+            (_restored if _is_file_typed_non_mf(_r) else _near).append(_r)
+        for _r in _res["keep"] + _restored:
             _r.pop("fund_name", None)
             _r.pop("plan_investment_amt", None)
-        _kept.extend(_res["keep"])
-        for _r, _reason in _res["removed_junk"]:
+        _kept.extend(_res["keep"] + _restored)
+        for _r, _reason in _junk:
             _drops.append((_stem, _r.get("fund_name", ""), _r.get("plan_investment_amt"), _reason))
         for _r in _res.get("dedup_removed", []):
             _drops.append((_stem, _r.get("fund_name", ""), _r.get("plan_investment_amt"), "exact duplicate"))
-        for _r in _res.get("near_dup_removed", []):
+        for _r in _near:
             _drops.append((_stem, _r.get("fund_name", ""), _r.get("plan_investment_amt"), "near-duplicate (share-class variant, value match)"))
     rows = _kept
     if _drops:

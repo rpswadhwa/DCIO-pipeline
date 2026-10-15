@@ -262,13 +262,14 @@ def remove_total_rows(rows, verbose=True):
         if issuer_lower == "total" or any(indicator in combined for indicator in total_indicators):
             is_total = True
         # Description-only totals such as "Total mutual funds" often have blank issuer_name
-        elif not issuer and description_lower.startswith('total'):
+        # word boundary: "TOTALENERGIES CAPITAL SA" is an issuer, not a total line
+        elif not issuer and re.match(r'totals?\b', description_lower):
             # Preserve common legitimate fund names that begin with Total
             if not any(pattern in description_lower for pattern in fund_name_patterns) and not any(company in description_lower for company in fund_companies):
                 is_total = True
         
         # SECOND: Check if issuer starts with 'Total' or contains 'TOT' abbreviation
-        elif issuer_lower.startswith('total') or ' tot ' in issuer_lower:
+        elif re.match(r'totals?\b', issuer_lower) or ' tot ' in issuer_lower:
             # Could be either a fund name or a subtotal row
             is_subtotal = True
             
