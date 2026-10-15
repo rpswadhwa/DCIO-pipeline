@@ -447,7 +447,7 @@ def main():
                     pdf_path, PLAN_PARSERS[plan_id]["start_heading"], sch4i_layout)
                 print(f"    [sch4i_text_parser] plan_id {plan_id}: schedule pages {sch4i_pages}")
                 if sch4i_pages:
-                    sch4i_result = parse_schedule_4i_pages(pdf_path, sch4i_pages, sch4i_layout)
+                    sch4i_result = parse_schedule_4i_pages(pdf_path, sch4i_pages, sch4i_layout, plan_id)
                 if sch4i_result is None:
                     print("    [sch4i_text_parser] WARNING: schedule not found/recognized, falling through")
                 else:

@@ -116,6 +116,74 @@ value only, opens with a one-line "INTEREST-BEARING CASH $ <cost> $ <value>"
 section, footers pages "- <n> - (Continued...)", and closes with "TOTAL
 INVESTMENTS".
 
+A ninth layout, "gain_loss_totals" (2026-10-15), titles every page "SCHEDULE
+OF ASSETS AS OF <date> ... SCH H PART IV LINE 4(i)" and prints "<description>
+<shares> <cost> <value> <gain/loss>" rows with no category headings: a
+section is named only by its closing "TOTAL <category> <cost> <value>
+<gain>" line, and "-TOTAL ASSETS HELD AT THE END OF THE YEAR" is the grand
+total. Rows are typed from that closing name once it is reached. First seen
+on Bell Atlantic Master Trust (ack 20251003134811NAL0000840547001,
+pp.22-46), JV section $2.85B.
+
+A tenth layout, "nt_par_cost_value" (2026-10-15), is a Northern Trust flat
+list titled "Schedule H, Line 4I - Schedule Of Assets Held (Held at End of
+Year)" on every page: "[*] <description> <share/par> <cost> <value>" rows
+with no category headings or subtotals, closed by "TOTAL <par> <cost>
+<value>". Rows are typed from their names, except that a registered plan may
+give an "alt_span" (first-row and last-row patterns) for its private
+partnership/real estate run, which carries names no pattern can type ("ROHR
+ROAD", "GAINLINE GALAXY HOLDINGS LLC"); rows in it are typed "Partnership
+Interest". First seen on Honeywell International Inc. Master Retirement
+Trust (ack 20251219001905NAL0005704449001, pp.4-21): the span is $3.58B,
+certified JV $3.08B plus real estate $0.50B.
+
+An eleventh layout, "bare_subtotals" (2026-10-15), is titled "Schedule H -
+Line 4i - Schedule of Assets (Held at End of Year)" on its first page only;
+later pages carry just the auditor's footer. A Schedule H category heading,
+"<description> [units] <cost> <value>" rows (units may be blank or "n/a"),
+then a bare "<cost> <value>" subtotal; a one-holding category prints no
+subtotal. A "<fund>, LLC: ASSETS DETAILED BELOW:" block after a subtotal
+belongs to the category above it. "Grand Total <cost> <value>" ends it.
+pdfplumber's default x_tolerance runs each line's words together here, so
+this layout extracts at 1. First seen on National Electrical Benefit Fund
+(ack 20260730200559NAL0029346880001, pp.26-69): the two partnership/JV
+categories total $3,349,872,727, its certified JV to the dollar.
+
+A twelfth layout, "inline_category" (2026-10-15), is a Fidelity flat list
+titled "5500 Schedule of Investments at End of Plan Year" with the column
+header on the first page only: every row prints its own Schedule H category
+("<description> <5500 code> <shares/par> <cost> <current value>"), with no
+headings or subtotals. Cash balances near the end print the value only. A
+bare "<value>" line totals the holdings, then "Net Receivables/Payables" and
+"Net Foreign Currency Fluctuations" adjustments, then "Grand Total"; the
+holdings line is the one rows reconcile to. Sections are the categories in
+order of first appearance. First seen on John Deere Pension Trust (ack
+20260804121133NAL0001451057001, pp.1-78): 49 partnership/JV rows, $3.30B.
+
+A thirteenth layout, "nt_held_regions" (2026-10-15), is Northern Trust's
+"Schedule of Assets Held for Investment Purposes" ("Security Description /
+Asset ID Shares/Par Value Historical Cost Current Value"): a category heading
+("Partnership/Joint Venture Interests"), region-currency sub-groups ("United
+States - USD") with their own "Total ..." lines, rows "<description> <shares>
+<cost> <value>" followed by "CUSIP:"/"SEDOL:" lines, "Total <category>"
+subtotals, and an unnamed grand "Total" line. Each page repeats the open
+category heading. First seen on Dow (ack 20251008093014NAL0009466912001,
+pp.51-183, printed again from p.296): 191 partnership/JV rows, $2.94B; all 14
+categories and the grand total $10,675,199,179.42 tie to the dollar.
+
+A fourteenth layout, "titled_appendix" (2026-10-15), is one appendix of a
+per-manager 4i schedule, titled "Limited Partnerships and Other Private
+Equity" on every page, with "(a) (b) (c) (d) (e)" column letters, rows
+"<name> <Equity|Limited Partnership|Other Private Equity> <cost> <value>" and
+a closing "Total Limited Partnership and Other Private Equity" line. Every row
+is the plan's Schedule H JV line, so all are typed Partnership Interest.
+pdfplumber splits some amounts after the first digit ("1 18,018,543"); amounts
+are rejoined and must then group by thousands. Whole-dollar rows reconcile
+within $0.50 each. First seen on Western Conference of Teamsters (ack
+20260923162723NAL0013822515001, Appendix VII pp.415-416, 119 rows,
+$14,459,497,754 vs certified JV $14,448,663,252; the 2024 filing's Appendix X,
+pp.648-649, 126 rows, $14,576,499,306, also ties).
+
 Registered per plan, not per filing: PLAN_PARSERS is keyed by plan_master
 plan_id (EIN-PN), which stays fixed across years while ack_id and page
 numbers change. run_pipeline.py resolves each PDF's ack_id to a plan_id via
@@ -188,6 +256,26 @@ PLAN_PARSERS = {
     # SBC (AT&T): the whole held-at-end-of-year schedule (2026-10-14).
     "431301883-020": {"name": "SBC Master Pension Trust", "layout": "jpm_held",
                       "start_heading": r"^NONINTEREST-BEARING\s+CASH$"},
+    # Bell Atlantic Master Trust: the whole schedule, pp.22-46 (2026-10-15).
+    "251448208-020": {"name": "Bell Atlantic Master Trust", "layout": "gain_loss_totals",
+                      "start_heading": r"^SCHEDULE\s+OF\s+ASSETS\s+AS\s+OF\b"},
+    # Honeywell: the whole Northern Trust list, pp.4-21; alt_span is its private
+    # partnership/real estate run, 2024 filing (2026-10-15).
+    "366968926-001": {"name": "Honeywell International Inc. Master Retirement Trust",
+                      "layout": "nt_par_cost_value", "start_heading": r"^Schedule\s+H,\s+Line\s+4I\b",
+                      "alt_span": (r"^4702\s+PARK\s+370$", r"^JOHN\s+HANCOCK\s+GAC\s+25$")},
+    "362382580-010": {"name": "John Deere Pension Trust", "layout": "inline_category",
+                      "start_heading": r"^5500\s+Schedule\s+of\s+Investments\s+at\s+End\s+of\s+Plan\s+Year$"},
+    # NEBF (National Electrical Benefit Fund): the whole schedule, pp.26-69 (2026-10-15).
+    "530181657-001": {"name": "National Electrical Benefit Fund", "layout": "bare_subtotals",
+                      "start_heading": r"^Schedule\s+H\s*-\s*Line\s+4i\b"},
+    # Dow: the first of two printed copies, pp.51-183 of the 2024 filing (2026-10-15).
+    "381285128-001": {"name": "Dow Employees' Pension Plan", "layout": "nt_held_regions",
+                      "start_heading": r"^Schedule\s+of\s+Assets\s+Held\s+for\s+Investment\s+Purposes$"},
+    # Western Teamsters: only the LP appendix (Appendix X in the 2024 filing,
+    # VII in 2025); the rest of the 4i schedule is a per-manager rollup (2026-10-15).
+    "916145047-001": {"name": "Western Conference of Teamsters Pension Plan", "layout": "titled_appendix",
+                      "start_heading": r"^Limited\s+Partnerships?\s+and\s+Other\s+Private\s+Equity$"},
 }
 
 # Every requested page must carry this column-header line, else we don't own the layout.
@@ -345,6 +433,66 @@ _CTL_ASSET_TYPES = [
     (r"registered\s+investment", "Mutual Fund"),
     (r"insurance", "Insurance General Account"),
 ]
+_GLT_HEADER_RE = re.compile(r"SCHEDULE\s+OF\s+ASSETS\s+AS\s+OF\b.{0,40}\bSCH\s+H\s+PART\s+IV\s+LINE\s+4\(i\)")
+# Last line of the title block; holdings start below it.
+_GLT_COLUMNS_RE = re.compile(r"^GAIN/LOSS$")
+_GLT_GRAND_RE = re.compile(r"-TOTAL\s+ASSETS\s+HELD\s+AT\s+THE\s+END\s+OF\s+THE\s+YEAR$")
+# Column header, the last line of every page's title block.
+_NTP_HEADER_RE = re.compile(r"^\(a\)\s+\(c\)\s+Description\s+of\s+Investment\b.*\bShare/Par\s+Value\s+Cost\s+Value$",
+                            re.M)
+# Row name -> asset_type ahead of _FCV_ASSET_TYPES, for Northern Trust's own wording.
+_NTP_ASSET_TYPES = [
+    (r"^FUT\s", "Derivative"),
+    (r"\bCOML\s+PAPER\b|\bCP\s+\d{2}-\d{2}-\d{4}$", "Short-Term Investment Fund"),
+]
+_BS_TITLE_RE = re.compile(
+    r"Schedule\s+H\s*-\s*Line\s+4i\s*-\s*Schedule\s+of\s+Assets\s+\(Held\s+at\s+End\s+of\s+Year\)", re.I)
+# Last line of the first page's column header; holdings start below it.
+_BS_COLUMNS_RE = re.compile(r"^\(a\)\s+\(b\)\s+Identity\s+of\s+issue\b.*\bCurrent\s+Value$", re.I | re.M)
+_BS_GRAND_RE = re.compile(r"^Grand\s+Total$", re.I)
+# Every page's footer: the auditor's reference and the page number.
+_BS_FOOTER_RE = re.compile(r"^See\s+Independent\s+Auditor|^Reporting\s+and\s+Disclosure\s+Under\b|^\d+$")
+# Schedule H line 1c category headings. Any other unnumbered line opens a new
+# section only right after a subtotal; inside a section it is a wrapped name.
+_BS_CATEGORY_RE = re.compile(
+    r"^(INTEREST-BEARING\s+CASH|GOVERNMENT\s+SECURITIES|CORPORATE\s+(DEBT|STOCK)|LOANS\b|"
+    r"PARTNERSHIP/JOINT\s+VENTURE|REAL\s+ESTATE|103-12|COMMON/COLLECTIVE|POOLED\s+SEPARATE|"
+    r"REGISTERED\s+INVESTMENT|OTHER\s+INVESTMENTS|EMPLOYER|INSURANCE|MASTER\s+TRUST)", re.I)
+# Column header, first page only; holdings start below it.
+_IC_COLUMNS_RE = re.compile(r"^Identity\s+of\s+Issue,\s+Borrower\b.*\b5500\s+Code\s+Description\s+"
+                            r"Shares/Par\s+Cost\s+Current\s+Value$", re.M)
+_IC_GRAND_RE = re.compile(r"^Grand\s+Total$", re.I)
+# The 5500 code that ends every row's text, ahead of its amounts.
+_IC_CATEGORY_RE = re.compile(
+    r"^(.*?)\s*\b(INTEREST-BEARING\s+CASH|(?:U\.S\.\s+)?GOVERNMENT\s+SECURITIES|"
+    r"CORPORATE\s+DEBT\s+INSTRUMENTS(?:\s+-\s+(?:PREFERRED|ALL\s+OTHER))?|CORPORATE\s+STOCK\s+-\s+(?:PREFERRED|COMMON)|"
+    r"PARTNERSHIP/JOINT\s+VENTURE\s+INTEREST|REAL\s+ESTATE(?:\s+-\s+[A-Z ]+)?|LOANS(?:\s+-\s+[A-Z ]+)?|"
+    r"COMMON/COLLECTIVE\s+TRUSTS?|POOLED\s+SEPARATE\s+ACCOUNTS?|MASTER\s+TRUST\s+INVESTMENT\s+ACCOUNTS?|"
+    r"103-12\s+INVESTMENT\s+ENTITIES|REGISTERED\s+INVESTMENT\s+COMPANIES|(?:UN)?ALLOCATED\s+INSURANCE\s+CONTRACTS|"
+    r"EMPLOYER\s+(?:SECURITIES|REAL\s+PROPERTY)|OTHER\s+INVESTMENTS)$")
+# A footnote printed after a few rows' value.
+_IC_NOTE_RE = re.compile(r"\s+Because\s+they\s+do\s+not\s+file\s+a\s+5500$")
+# Classification footer and the "#" page marker.
+_IC_SKIP_RE = re.compile(r"^Fidelity\s+Internal\s+Information$|^#$")
+_NHR_HEADER_RE = re.compile(r"^Schedule\s+of\s+Assets\s+Held\s+for\s+Investment\s+Purposes$", re.M)
+# Column header, the last line of every page's title block.
+_NHR_COLUMNS_RE = re.compile(r"^Security\s+Description\s+/\s+Asset\s+ID\s+Shares/Par\s+Value\s+"
+                             r"Historical\s+Cost\s+Current\s+Value$", re.M)
+# The unnamed grand total; category and sub-group totals carry a name.
+_NHR_GRAND_RE = re.compile(r"^Total\s+\(?-?[\d,]+\.\d{2}\)?\s+\(?-?[\d,]+\.\d{2}\)?$", re.M)
+# Securities-lending legend and Northern Trust's page footer.
+_NHR_FOOTER_RE = re.compile(r"^\*\*\s+All\s+or\s+a\s+portion\b|^Northern\s+Trust\s+-|^Generated\s+by\s+Northern\s+Trust\b")
+# Identifier lines under a holding ("CUSIP: ...", "SWU020HB3 SEDOL: ...", a bare id).
+_NHR_ID_RE = re.compile(r"\b(?:CUSIP|SEDOL|ISIN|TICKER)\s*:\s*(\S+)|^((?=[A-Z0-9]*\d)[A-Z0-9]{9})$", re.I)
+_TA_TITLE_RE = re.compile(r"^Limited\s+Partnerships?\s+and\s+Other\s+Private\s+Equity$", re.M | re.I)
+_TA_COLUMNS_RE = re.compile(r"^\(a\)\s+\(b\)\s+\(c\)\s+\(d\)\s+\(e\)$", re.M)
+_TA_TOTAL_RE = re.compile(r"^Total\s+Limited\s+Partnerships?\s+and\s+Other\s+Private\s+Equity\b", re.M | re.I)
+# An amount whose first digit pdfplumber may split off ("1 18,018,543", "4 ,755,905").
+_TA_AMT = r"-|\(?\d\s?[\d,]*\)?"
+_TA_ROW_RE = re.compile(r"^(.+?)\s+(Equity|Limited\s+Partnership|Other\s+Private\s+Equity)\s+"
+                        rf"(?:\$\s*)?({_TA_AMT})\s+(?:\$\s*)?({_TA_AMT})$")
+_TA_TOTAL_LINE_RE = re.compile(rf"^Total\b.*?\s*(?:\$\s*)?({_TA_AMT})\s+(?:\$\s*)?({_TA_AMT})$")
+_TA_GROUPED_RE = re.compile(r"^\(?\d{1,3}(,\d{3})*\)?$|^-$")
 _BOILERPLATE_RE = re.compile(
     r"^(EIN\s|Schedule\s+H,|December\s+\d|Face\s+Amount|Asset\s+Interest|Identifier\s+Security)", re.I)
 _NUM_RE = re.compile(r"^\(?-?\$?\d[\d,]*(\.\d+)?\)?$|^[-—–]$")
@@ -503,7 +651,7 @@ def _drop_overlapping_spaces(page):
 
 
 def _page_text(page, layout: str) -> str:
-    if layout in ("issue_par_rate", "cpa_total_lines"):
+    if layout in ("issue_par_rate", "cpa_total_lines", "gain_loss_totals"):
         page = _drop_overlapping_spaces(page)
     return page.extract_text() or ""
 
@@ -519,6 +667,10 @@ def _header_re(layout: str):
         return _H30T_HEADER_RE
     if layout == "cpa_total_lines":
         return _CTL_HEADER_RE
+    if layout == "gain_loss_totals":
+        return _GLT_HEADER_RE
+    if layout == "nt_par_cost_value":
+        return _NTP_HEADER_RE
     return _IPR_HEADER_RE if layout == "issue_par_rate" else _HEADER_RE
 
 
@@ -560,13 +712,53 @@ def _ctl_body(text: str) -> List[str]:
     return [l for l in lines[start:] if l and not l.isdigit() and not _CTL_FOOTER_RE.match(l)]
 
 
+def _glt_body(text: str) -> List[str]:
+    """gain_loss_totals lines below the column header."""
+    lines = [l.strip() for l in text.splitlines()]
+    start = next((i + 1 for i, l in enumerate(lines) if _GLT_COLUMNS_RE.match(l)), len(lines))
+    return [l for l in lines[start:] if l]
+
+
+def _ntp_body(text: str) -> List[str]:
+    """nt_par_cost_value lines below the column header."""
+    lines = [l.strip() for l in text.splitlines()]
+    start = next((i + 1 for i, l in enumerate(lines) if _NTP_HEADER_RE.match(l)), len(lines))
+    return [l for l in lines[start:] if l]
+
+
+def _bs_text(page) -> str:
+    # The default tolerance runs the words of every line together.
+    return page.extract_text(x_tolerance=1) or ""
+
+
+def _bs_body(text: str) -> List[str]:
+    """bare_subtotals lines below the first page's column header, footer dropped."""
+    lines = [l.strip() for l in text.splitlines()]
+    start = next((i + 1 for i, l in enumerate(lines) if _BS_COLUMNS_RE.match(l)), 0)
+    return [l for l in lines[start:] if l and not _BS_FOOTER_RE.match(l)]
+
+
 def _headings(text: str, layout: str) -> List[str]:
+    if layout == "bare_subtotals":
+        # Title-block lines above the column header (first page only).
+        lines = [l.strip() for l in text.splitlines()]
+        end = next((i for i, l in enumerate(lines) if _BS_COLUMNS_RE.match(l)), 0)
+        return [l for l in lines[:end] if l]
+    if layout in ("gain_loss_totals", "nt_par_cost_value"):
+        # No category headings: the title block's lines, so start_heading can
+        # match the page title.
+        columns_re = _GLT_COLUMNS_RE if layout == "gain_loss_totals" else _NTP_HEADER_RE
+        lines = [l.strip() for l in text.splitlines()]
+        end = next((i for i, l in enumerate(lines) if columns_re.match(l)), len(lines))
+        return [l for l in lines[:end] if l]
     if layout == "cpa_total_lines":
         return [l for l in _ctl_body(text) if not l.startswith("TOTAL ") and not _trailing_nums(l, 2)]
-    if layout == "flat_cost_value":
+    if layout in ("flat_cost_value", "inline_category", "nt_held_regions", "titled_appendix"):
         # Title-block lines above the column header (pool name among them).
+        columns_re = {"flat_cost_value": _FCV_HEADER_RE, "inline_category": _IC_COLUMNS_RE,
+                      "nt_held_regions": _NHR_COLUMNS_RE, "titled_appendix": _TA_COLUMNS_RE}[layout]
         lines = [l.strip() for l in text.splitlines()]
-        end = next((i for i, l in enumerate(lines) if _FCV_HEADER_RE.match(l)), 0)
+        end = next((i for i, l in enumerate(lines) if columns_re.match(l)), 0)
         return [l for l in lines[:end] if l]
     if layout == "bny_h30t":
         # The report's title line ("JJ2K PAGE: 1") comes first, so start_heading
@@ -614,17 +806,36 @@ def find_schedule_4i_pages(pdf_path: str, start_heading: str, layout: str = "def
     """
     run: List[int] = []
     start = None
-    if layout == "flat_cost_value":
-        # Header on the first page only: run from it to the page with the total.
+    if layout in ("flat_cost_value", "inline_category", "nt_held_regions", "titled_appendix"):
+        # Run from the first page with the header to the page with the total
+        # (nt_held_regions repeats the header, and its schedule is printed twice).
+        header_re, total_re = {
+            "flat_cost_value": (_FCV_HEADER_RE, _FCV_TOTAL_RE),
+            "inline_category": (_IC_COLUMNS_RE, re.compile(r"^Grand\s+Total\s", re.I | re.M)),
+            "nt_held_regions": (_NHR_COLUMNS_RE, _NHR_GRAND_RE),
+            "titled_appendix": (_TA_TITLE_RE, _TA_TOTAL_RE)}[layout]
         with pdfplumber.open(pdf_path) as pdf:
             for page_num, page in enumerate(pdf.pages, start=1):
                 text = page.extract_text() or ""
-                if start is None and _FCV_HEADER_RE.search(text) and any(
+                if start is None and header_re.search(text) and any(
                         re.match(start_heading, h, re.I) for h in _headings(text, layout)):
                     start = page_num
                 if start is not None:
                     run.append(page_num)
-                    if _FCV_TOTAL_RE.search(text):
+                    if total_re.search(text):
+                        return run
+        return []
+    if layout == "bare_subtotals":
+        # Title on the first page only: run from it to the page with the grand total.
+        with pdfplumber.open(pdf_path) as pdf:
+            for page_num, page in enumerate(pdf.pages, start=1):
+                text = _bs_text(page)
+                if start is None and _BS_TITLE_RE.search(text) and _BS_COLUMNS_RE.search(text) and any(
+                        re.match(start_heading, h, re.I) for h in _headings(text, layout)):
+                    start = page_num
+                if start is not None:
+                    run.append(page_num)
+                    if any(_BS_GRAND_RE.match((_trailing_nums(l, 2) or ("",))[0]) for l in _bs_body(text)):
                         return run
         return []
     with pdfplumber.open(pdf_path) as pdf:
@@ -654,12 +865,26 @@ def _inherited_heading(pdf, first_page: int, layout: str = "default") -> str:
     return ""
 
 
-def parse_schedule_4i_pages(pdf_path: str, page_nums: List[int], layout: str = "default") -> Optional[Dict]:
+def parse_schedule_4i_pages(pdf_path: str, page_nums: List[int], layout: str = "default",
+                            plan_id: Optional[str] = None) -> Optional[Dict]:
     """Parse the requested pages. Returns None if any page lacks the 4i header.
+    plan_id picks up the registry's per-plan options (nt_par_cost_value's alt_span).
 
     Result: {"pages": [<run_pipeline page_data dicts>], "sections": [...],
              "unparsed": [...], "grand_total": [cost, value] or None}
     """
+    if layout == "gain_loss_totals":
+        return _parse_gain_loss_totals(pdf_path, page_nums)
+    if layout == "nt_par_cost_value":
+        return _parse_nt_par_cost_value(pdf_path, page_nums, PLAN_PARSERS.get(plan_id, {}).get("alt_span"))
+    if layout == "bare_subtotals":
+        return _parse_bare_subtotals(pdf_path, page_nums)
+    if layout == "inline_category":
+        return _parse_inline_category(pdf_path, page_nums)
+    if layout == "nt_held_regions":
+        return _parse_nt_held_regions(pdf_path, page_nums)
+    if layout == "titled_appendix":
+        return _parse_titled_appendix(pdf_path, page_nums)
     if layout == "detail_report":
         return _parse_detail_report(pdf_path, page_nums)
     if layout == "soi_revalued_cost":
@@ -1377,6 +1602,648 @@ def _parse_flat_cost_value(pdf_path: str, page_nums: List[int]) -> Optional[Dict
         abs(section["value_diff"]) <= 1.0 and abs(section["cost_diff"]) <= 1.0)
     return {"pages": pages, "sections": [section], "unparsed": unparsed, "grand_total": grand_total,
             "grand_reconciled": section["reconciled"]}
+
+
+def _parse_gain_loss_totals(pdf_path: str, page_nums: List[int]) -> Optional[Dict]:
+    """parse_schedule_4i_pages for the gain_loss_totals layout. The pages must
+    start at the schedule's first page so every section opens in range."""
+    pdf_stem = pdf_path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+    page_nums = sorted(set(page_nums))
+    with pdfplumber.open(pdf_path) as pdf:
+        bodies = {}
+        for page_num in page_nums:
+            if not 1 <= page_num <= len(pdf.pages):
+                return None
+            text = _page_text(pdf.pages[page_num - 1], "gain_loss_totals")
+            if not _GLT_HEADER_RE.search(text):
+                return None
+            bodies[page_num] = _glt_body(text)
+
+    sections, unparsed, pages = [], [], []
+    grand_total = None
+    # Open section; its name is only printed on its closing TOTAL line.
+    current = None
+    name_lines: List[str] = []
+
+    def open_section():
+        return {"heading": "", "asset_type": "", "partial": False, "rows": 0,
+                "cost": 0.0, "value": 0.0, "subtotal": None, "row_dicts": []}
+
+    for page_num in page_nums:
+        mapped_rows = []
+        for line in bodies[page_num]:
+            row = _trailing_nums(line, 4)
+            if not row:
+                t = _trailing_nums(line, 3)
+                if t and _GLT_GRAND_RE.search(t[0]):
+                    grand_total = t[1][:2]
+                    continue
+                if t and t[0].startswith("TOTAL "):
+                    heading = t[0][len("TOTAL "):].strip()
+                    section = current or open_section()
+                    asset_type = next((label for pattern, label in _CTL_ASSET_TYPES
+                                       if re.search(pattern, heading, re.I)), "")
+                    for mapped in section.pop("row_dicts"):
+                        mapped["section_heading"] = heading
+                        if asset_type:
+                            mapped["asset_type"], mapped["asset_type_source"] = asset_type, "heading"
+                        else:
+                            mapped["asset_type"] = detect_asset_type(
+                                f"{heading} {mapped['investment_description']}")
+                            mapped["asset_type_source"] = "row" if mapped["asset_type"] else "none"
+                    section.update({"heading": heading, "asset_type": asset_type, "subtotal": t[1][:2]})
+                    sections.append(section)
+                    current, name_lines = None, []
+                    continue
+                if not _trailing_nums(line, 1):
+                    # Wrapped description, carried onto the next row.
+                    name_lines.append(line)
+                    continue
+                unparsed.append({"page_number": page_num, "line": line})
+                continue
+            if current is None:
+                current = open_section()
+            title = " ".join(name_lines + ([row[0]] if row[0] else []))
+            name_lines = []
+            shares, cost, value, gain = row[1]
+            current["rows"] += 1
+            current["cost"] += cost or 0.0
+            current["value"] += value or 0.0
+            if abs((value or 0.0) - (cost or 0.0) - (gain or 0.0)) > 2:
+                unparsed.append({"page_number": page_num, "line": f"value - cost != gain: {line}"})
+            if not value or not title:
+                continue
+            m = _CTL_RATE_DATE_RE.search(title)
+            rate, maturity = ((m.group(2), m.group(1)) if m.group(1) else (m.group(3), m.group(4))) \
+                if m else ("", "")
+            mapped = {
+                "issuer_name": "",
+                "investment_description": title,
+                "asset_type": "",
+                "asset_type_source": "none",
+                "par_value": "",
+                "cost": _fmt(cost),
+                "current_value": _fmt(value),
+                "units_or_shares": _fmt(shares),
+                "asset_identifier": "",
+                "interest_rate": rate,
+                "maturity_date": maturity,
+                "section_heading": "",
+                "extraction_method": "sch4i_text",
+                "page_number": page_num,
+                "row_id": len(mapped_rows) + 1,
+            }
+            current["row_dicts"].append(mapped)
+            mapped_rows.append(mapped)
+        pages.append({
+            "pdf": pdf_path, "pdf_stem": pdf_stem, "page_number": page_num,
+            "mapped_rows": mapped_rows, "ocr_cells": [], "normalized_path": pdf_path,
+        })
+    if current is not None and current["rows"]:
+        # Rows after the last TOTAL line have no total to check against.
+        current.pop("row_dicts")
+        current["partial"] = True
+        sections.append(current)
+
+    for section in sections:
+        sub = section["subtotal"]
+        section["cost_diff"] = None if sub is None else section["cost"] - sub[0]
+        section["value_diff"] = None if sub is None else section["value"] - sub[1]
+        if sub is None:
+            section["reconciled"] = False if section["rows"] else True
+        else:
+            # Printed in whole dollars, so allow a dollar of rounding per row.
+            tol = max(1.0, section["rows"])
+            section["reconciled"] = abs(section["value_diff"]) <= tol and abs(section["cost_diff"]) <= tol
+    grand_reconciled = None
+    if grand_total:
+        grand_reconciled = abs(sum(s["value"] for s in sections) - grand_total[1]) <= max(
+            1.0, sum(s["rows"] for s in sections))
+    return {"pages": pages, "sections": sections, "unparsed": unparsed,
+            "grand_total": grand_total, "grand_reconciled": grand_reconciled}
+
+
+def _parse_nt_par_cost_value(pdf_path: str, page_nums: List[int],
+                             alt_span: Optional[tuple] = None) -> Optional[Dict]:
+    """parse_schedule_4i_pages for the nt_par_cost_value layout. alt_span is
+    (first-row pattern, last-row pattern) of the plan's partnership run."""
+    pdf_stem = pdf_path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+    page_nums = sorted(set(page_nums))
+    with pdfplumber.open(pdf_path) as pdf:
+        bodies = {}
+        for page_num in page_nums:
+            if not 1 <= page_num <= len(pdf.pages):
+                return None
+            text = _page_text(pdf.pages[page_num - 1], "nt_par_cost_value")
+            if not _NTP_HEADER_RE.search(text):
+                return None
+            bodies[page_num] = _ntp_body(text)
+
+    # One unheaded section; rows are typed from their names or the alt span.
+    section = {"heading": "", "asset_type": "", "partial": False, "rows": 0,
+               "cost": 0.0, "value": 0.0, "subtotal": None}
+    unparsed, pages = [], []
+    grand_total = None
+    in_span = False
+    for page_num in page_nums:
+        mapped_rows = []
+        for line in bodies[page_num]:
+            t = _trailing_nums(line, 3)
+            if not t or not t[0]:
+                unparsed.append({"page_number": page_num, "line": line})
+                continue
+            if t[0] == "TOTAL":
+                grand_total = t[1][1:]
+                continue
+            # "*" marks a party in interest; "***" / "&&&" are custodian flags.
+            title = t[0].lstrip("*& ").strip()
+            par, cost, value = t[1]
+            section["rows"] += 1
+            section["cost"] += cost or 0.0
+            section["value"] += value or 0.0
+            span_row = False
+            if alt_span and not in_span and re.match(alt_span[0], title, re.I):
+                in_span = True
+            if in_span:
+                span_row = True
+                if re.match(alt_span[1], title, re.I):
+                    in_span = False
+            if not value:
+                continue
+            if span_row:
+                asset_type, source = "Partnership Interest", "span"
+            elif line.startswith("* ") and re.search(r"\bCOM\b", title):
+                asset_type, source = "Employer Stock", "row"
+            else:
+                asset_type = next((label for pattern, label in _NTP_ASSET_TYPES + _FCV_ASSET_TYPES
+                                   if re.search(pattern, title)), "")
+                source = "row" if asset_type else "none"
+            m = _CTL_RATE_DATE_RE.search(title)
+            rate, maturity = ((m.group(2), m.group(1)) if m.group(1) else (m.group(3), m.group(4))) \
+                if m else ("", "")
+            mapped_rows.append({
+                "issuer_name": "",
+                "investment_description": title,
+                "asset_type": asset_type,
+                "asset_type_source": source,
+                "par_value": "",
+                "cost": _fmt(cost),
+                "current_value": _fmt(value),
+                "units_or_shares": _fmt(par),
+                "asset_identifier": "",
+                "interest_rate": rate,
+                "maturity_date": maturity,
+                "section_heading": "",
+                "extraction_method": "sch4i_text",
+                "page_number": page_num,
+                "row_id": len(mapped_rows) + 1,
+            })
+        pages.append({
+            "pdf": pdf_path, "pdf_stem": pdf_stem, "page_number": page_num,
+            "mapped_rows": mapped_rows, "ocr_cells": [], "normalized_path": pdf_path,
+        })
+
+    section["subtotal"] = grand_total
+    section["cost_diff"] = None if grand_total is None else section["cost"] - grand_total[0]
+    section["value_diff"] = None if grand_total is None else section["value"] - grand_total[1]
+    # Rows print whole dollars and the total prints cents: a dollar per row.
+    tol = max(1.0, section["rows"])
+    section["reconciled"] = None if grand_total is None else (
+        abs(section["value_diff"]) <= tol and abs(section["cost_diff"]) <= tol)
+    return {"pages": pages, "sections": [section], "unparsed": unparsed, "grand_total": grand_total,
+            "grand_reconciled": section["reconciled"]}
+
+
+def _parse_bare_subtotals(pdf_path: str, page_nums: List[int]) -> Optional[Dict]:
+    """parse_schedule_4i_pages for the bare_subtotals layout. The first page
+    must carry the title and the last the "Grand Total" line."""
+    pdf_stem = pdf_path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+    page_nums = sorted(set(page_nums))
+    with pdfplumber.open(pdf_path) as pdf:
+        bodies = {}
+        for page_num in page_nums:
+            if not 1 <= page_num <= len(pdf.pages):
+                return None
+            bodies[page_num] = _bs_body(_bs_text(pdf.pages[page_num - 1]))
+        if not page_nums or not _BS_TITLE_RE.search(_bs_text(pdf.pages[page_nums[0] - 1])):
+            return None
+
+    sections, unparsed, pages = [], [], []
+    grand_total = None
+    current = None
+    # Unnumbered lines waiting for a row (wrapped name) or a row-less run (heading).
+    pending: List[str] = []
+    closed = True  # no section open, or the open one just printed its subtotal
+    parent = None  # category a "... FUND, LLC: ASSETS DETAILED BELOW:" block belongs to
+
+    def new_section(heading):
+        nonlocal parent
+        if _BS_CATEGORY_RE.match(heading) or parent is None:
+            parent = heading
+            asset_type = next((label for pattern, label in _CTL_ASSET_TYPES
+                               if re.search(pattern, heading, re.I)), "")
+        else:
+            # A detailed-holdings block is part of the category above it.
+            asset_type = sections[-1]["asset_type"] if sections else ""
+            heading = f"{parent} / {heading}"
+        section = {"heading": heading, "asset_type": asset_type, "partial": False,
+                   "rows": 0, "cost": 0.0, "value": 0.0, "subtotal": None}
+        sections.append(section)
+        return section
+
+    for page_num in page_nums:
+        mapped_rows = []
+        for line in bodies[page_num]:
+            # "n/a" prints in the units column of directly held real estate.
+            clean = " ".join("-" if tok.lower() == "n/a" else tok for tok in line.split())
+            t2 = _trailing_nums(clean, 2)
+            if t2 and _BS_GRAND_RE.match(t2[0]):
+                grand_total = t2[1]
+                break
+            if t2 and not t2[0]:
+                # Bare "<cost> <value>": the open section's subtotal.
+                if current is None or current["subtotal"] is not None:
+                    unparsed.append({"page_number": page_num, "line": line})
+                else:
+                    current["subtotal"] = t2[1]
+                closed, pending = True, []
+                continue
+            if not t2:
+                if pending and (closed or _BS_CATEGORY_RE.match(pending[0])):
+                    pending.append(line)  # wrapped heading
+                elif closed or _BS_CATEGORY_RE.match(line):
+                    pending = [line]
+                    closed = True
+                else:
+                    pending.append(line)  # wrapped row name
+                continue
+            if closed:
+                if pending:
+                    current = new_section(" ".join(pending))
+                    pending = []
+                elif current is None:
+                    unparsed.append({"page_number": page_num, "line": line})
+                    continue
+                closed = False
+            t3 = _trailing_nums(clean, 3)
+            row = t3 if t3 and t3[0] else (t2[0], [None] + t2[1])
+            title = " ".join(pending + [row[0]])
+            pending = []
+            units, cost, value = row[1]
+            current["rows"] += 1
+            current["cost"] += cost or 0.0
+            current["value"] += value or 0.0
+            if not value:
+                continue
+            asset_type = current["asset_type"] or detect_asset_type(f"{current['heading']} {title}")
+            m = _CTL_RATE_DATE_RE.search(title)
+            rate, maturity = ((m.group(2), m.group(1)) if m.group(1) else (m.group(3), m.group(4))) \
+                if m else ("", "")
+            mapped_rows.append({
+                "issuer_name": "",
+                "investment_description": title,
+                "asset_type": asset_type,
+                "asset_type_source": "heading" if current["asset_type"] else ("row" if asset_type else "none"),
+                "par_value": "",
+                "cost": _fmt(cost),
+                "current_value": _fmt(value),
+                "units_or_shares": _fmt(units),
+                "asset_identifier": "",
+                "interest_rate": rate,
+                "maturity_date": maturity,
+                "section_heading": current["heading"],
+                "extraction_method": "sch4i_text",
+                "page_number": page_num,
+                "row_id": len(mapped_rows) + 1,
+            })
+        pages.append({
+            "pdf": pdf_path, "pdf_stem": pdf_stem, "page_number": page_num,
+            "mapped_rows": mapped_rows, "ocr_cells": [], "normalized_path": pdf_path,
+        })
+
+    for section in sections:
+        sub = section["subtotal"]
+        if sub is None and section["rows"] == 1:
+            # A one-holding category prints no subtotal; the row is its total.
+            sub = section["subtotal"] = [section["cost"], section["value"]]
+        section["cost_diff"] = None if sub is None else section["cost"] - (sub[0] or 0.0)
+        section["value_diff"] = None if sub is None else section["value"] - sub[1]
+        section["reconciled"] = False if sub is None else (
+            abs(section["value_diff"]) <= 1.0 and abs(section["cost_diff"]) <= 1.0)
+    grand_reconciled = None
+    if grand_total:
+        grand_reconciled = abs(sum(s["value"] for s in sections) - grand_total[1]) <= 1.0
+    return {"pages": pages, "sections": sections, "unparsed": unparsed,
+            "grand_total": grand_total, "grand_reconciled": grand_reconciled}
+
+
+def _parse_inline_category(pdf_path: str, page_nums: List[int]) -> Optional[Dict]:
+    """parse_schedule_4i_pages for the inline_category layout. The first page
+    must carry the column header and the last the "Grand Total" line."""
+    pdf_stem = pdf_path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+    page_nums = sorted(set(page_nums))
+    with pdfplumber.open(pdf_path) as pdf:
+        texts = {}
+        for page_num in page_nums:
+            if not 1 <= page_num <= len(pdf.pages):
+                return None
+            texts[page_num] = pdf.pages[page_num - 1].extract_text() or ""
+    if not page_nums or not _IC_COLUMNS_RE.search(texts[page_nums[0]]):
+        return None
+
+    sections: Dict[str, Dict] = {}  # 5500 code -> section, in order of first appearance
+    unparsed, pages = [], []
+    holdings_total = None
+    done = False
+    for page_num in page_nums:
+        lines = [l.strip() for l in texts[page_num].splitlines()]
+        if page_num == page_nums[0]:
+            lines = lines[next(i + 1 for i, l in enumerate(lines) if _IC_COLUMNS_RE.match(l)):]
+        mapped_rows = []
+        for line in lines:
+            if done or not line or _IC_SKIP_RE.match(line):
+                continue
+            clean = _IC_NOTE_RE.sub("", line)
+            if holdings_total is not None:
+                # Receivable/currency adjustments, then the grand total.
+                t = _trailing_nums(clean, 1)
+                done = bool(t and _IC_GRAND_RE.match(t[0]))
+                continue
+            t = _trailing_nums(clean, 3)
+            m = _IC_CATEGORY_RE.match(t[0]) if t else None
+            if m:
+                units, cost, value = t[1]
+            else:
+                # Cash balances print the value only; a bare value is the holdings total.
+                t = _trailing_nums(clean, 1)
+                if t and not t[0]:
+                    holdings_total = t[1][0]
+                    continue
+                m = _IC_CATEGORY_RE.match(t[0]) if t else None
+                if not m or not m.group(1):
+                    unparsed.append({"page_number": page_num, "line": line})
+                    continue
+                units, cost, value = None, None, t[1][0]
+            title, code = m.group(1).lstrip("* ").strip(), m.group(2)
+            if code not in sections:
+                sections[code] = {"heading": code, "partial": False, "rows": 0, "cost": 0.0, "value": 0.0,
+                                  "subtotal": None, "cost_diff": None, "value_diff": None, "reconciled": None,
+                                  "asset_type": next((label for pattern, label in _CTL_ASSET_TYPES
+                                                      + [(r"employer", "Employer Stock")]
+                                                      if re.search(pattern, code, re.I)), "")}
+            section = sections[code]
+            section["rows"] += 1
+            section["cost"] += cost or 0.0
+            section["value"] += value or 0.0
+            if not value:
+                continue
+            # "OTHER INVESTMENTS" types each row from its name. Private funds carry
+            # their own code here, so a name never makes one (short-sold REITs).
+            asset_type = section["asset_type"] or next(
+                (label for pattern, label in _FCV_ASSET_TYPES if re.search(pattern, title)
+                 and label not in ("Partnership Interest", "Hedge Fund")), "")
+            rd = _CTL_RATE_DATE_RE.search(title)
+            rate, maturity = ((rd.group(2), rd.group(1)) if rd.group(1) else (rd.group(3), rd.group(4))) \
+                if rd else ("", "")
+            mapped_rows.append({
+                "issuer_name": "",
+                "investment_description": title,
+                "asset_type": asset_type,
+                "asset_type_source": "heading" if section["asset_type"] else ("row" if asset_type else "none"),
+                "par_value": "",
+                "cost": _fmt(cost),
+                "current_value": _fmt(value),
+                "units_or_shares": _fmt(units),
+                "asset_identifier": "",
+                "interest_rate": rate,
+                "maturity_date": maturity,
+                "section_heading": code,
+                "extraction_method": "sch4i_text",
+                "page_number": page_num,
+                "row_id": len(mapped_rows) + 1,
+            })
+        pages.append({
+            "pdf": pdf_path, "pdf_stem": pdf_stem, "page_number": page_num,
+            "mapped_rows": mapped_rows, "ocr_cells": [], "normalized_path": pdf_path,
+        })
+
+    sections_list = list(sections.values())
+    grand_total = None if holdings_total is None else [None, holdings_total]
+    # No subtotals to check, so a missing holdings total fails the parse.
+    grand_reconciled = done and holdings_total is not None and \
+        abs(sum(s["value"] for s in sections_list) - holdings_total) <= 1.0
+    return {"pages": pages, "sections": sections_list, "unparsed": unparsed,
+            "grand_total": grand_total, "grand_reconciled": grand_reconciled}
+
+
+def _nhr_body(text: str) -> List[str]:
+    """nt_held_regions lines below the column header, footer dropped."""
+    lines = [l.strip() for l in text.splitlines()]
+    start = next((i + 1 for i, l in enumerate(lines) if _NHR_COLUMNS_RE.match(l)), len(lines))
+    return [l for l in lines[start:] if l and not _NHR_FOOTER_RE.match(l)]
+
+
+def _parse_nt_held_regions(pdf_path: str, page_nums: List[int]) -> Optional[Dict]:
+    """parse_schedule_4i_pages for the nt_held_regions layout. The last page
+    must carry the unnamed grand "Total" line."""
+    pdf_stem = pdf_path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+    page_nums = sorted(set(page_nums))
+    with pdfplumber.open(pdf_path) as pdf:
+        bodies = {}
+        for page_num in page_nums:
+            if not 1 <= page_num <= len(pdf.pages):
+                return None
+            text = pdf.pages[page_num - 1].extract_text() or ""
+            if not _NHR_HEADER_RE.search(text):
+                return None
+            bodies[page_num] = _nhr_body(text)
+
+    sections, unparsed, pages = [], [], []
+    grand_total = None
+    current = None  # open category
+    group = None  # open "<region> - <currency>" sub-group heading
+    # "category": the next unnumbered line is a category heading; "group": a
+    # sub-group heading; "row": a continuation of the last row's description.
+    expect = "category"
+    last_row = None
+    for page_num in page_nums:
+        mapped_rows = []
+        body = bodies[page_num]
+        # Every page repeats the open category (and sometimes sub-group) heading.
+        while body and current and body[0] in (current["heading"], group):
+            body = body[1:]
+        for line in body:
+            idm = _NHR_ID_RE.search(line)
+            if idm:
+                if last_row is not None and not last_row["asset_identifier"]:
+                    last_row["asset_identifier"] = idm.group(1) or idm.group(2)
+                continue
+            t2 = _trailing_nums(line, 2)
+            if t2 and (t2[0] == "Total" or t2[0].startswith("Total ")):
+                name = t2[0][len("Total"):].strip()
+                last_row = None
+                if not name:
+                    grand_total = t2[1]
+                    break
+                if current and current["heading"].startswith(name):
+                    current["subtotal"] = t2[1]
+                    current, group, expect = None, None, "category"
+                else:
+                    # A sub-group (or "- all currencies") total; the category total checks the sum.
+                    group, expect = None, "group"
+                continue
+            t3 = _trailing_nums(line, 3)
+            if not t3 or not t3[0]:
+                if t2 or t3:
+                    unparsed.append({"page_number": page_num, "line": line})
+                elif expect == "category":
+                    current = {"heading": line, "partial": False, "rows": 0, "cost": 0.0, "value": 0.0,
+                               "subtotal": None,
+                               "asset_type": next((label for pattern, label in _CTL_ASSET_TYPES
+                                                   if re.search(pattern, line, re.I)), "")}
+                    sections.append(current)
+                    expect = "group"
+                elif expect == "group":
+                    group, expect = line, "row"
+                elif last_row is not None:
+                    last_row["investment_description"] += " " + line
+                else:
+                    unparsed.append({"page_number": page_num, "line": line})
+                continue
+            if current is None:
+                unparsed.append({"page_number": page_num, "line": line})
+                continue
+            expect = "row"
+            title = t3[0].lstrip("* ").strip()
+            units, cost, value = t3[1]
+            current["rows"] += 1
+            current["cost"] += cost or 0.0
+            current["value"] += value or 0.0
+            last_row = None
+            if not value:
+                continue
+            # Private funds carry their own category here, so a name never makes one.
+            asset_type = current["asset_type"] or next(
+                (label for pattern, label in _FCV_ASSET_TYPES if re.search(pattern, title)
+                 and label not in ("Partnership Interest", "Hedge Fund")), "")
+            rd = _CTL_RATE_DATE_RE.search(title)
+            rate, maturity = ((rd.group(2), rd.group(1)) if rd.group(1) else (rd.group(3), rd.group(4))) \
+                if rd else ("", "")
+            last_row = {
+                "issuer_name": "",
+                "investment_description": title,
+                "asset_type": asset_type,
+                "asset_type_source": "heading" if current["asset_type"] else ("row" if asset_type else "none"),
+                "par_value": "",
+                "cost": _fmt(cost),
+                "current_value": _fmt(value),
+                "units_or_shares": _fmt(units),
+                "asset_identifier": "",
+                "interest_rate": rate,
+                "maturity_date": maturity,
+                "section_heading": current["heading"] + (f" / {group}" if group else ""),
+                "extraction_method": "sch4i_text",
+                "page_number": page_num,
+                "row_id": len(mapped_rows) + 1,
+            }
+            mapped_rows.append(last_row)
+        pages.append({
+            "pdf": pdf_path, "pdf_stem": pdf_stem, "page_number": page_num,
+            "mapped_rows": mapped_rows, "ocr_cells": [], "normalized_path": pdf_path,
+        })
+
+    for section in sections:
+        sub = section["subtotal"]
+        section["cost_diff"] = None if sub is None else section["cost"] - sub[0]
+        section["value_diff"] = None if sub is None else section["value"] - sub[1]
+        section["reconciled"] = False if sub is None else (
+            abs(section["value_diff"]) <= 1.0 and abs(section["cost_diff"]) <= 1.0)
+    grand_reconciled = False if grand_total is None else \
+        abs(sum(s["value"] for s in sections) - grand_total[1]) <= 1.0
+    return {"pages": pages, "sections": sections, "unparsed": unparsed,
+            "grand_total": grand_total, "grand_reconciled": grand_reconciled}
+
+
+def _ta_num(tok: str) -> Optional[float]:
+    """A titled_appendix amount, split first digit rejoined; None unless it groups by thousands."""
+    tok = tok.replace(" ", "")
+    return _num(tok) if _TA_GROUPED_RE.match(tok) else None
+
+
+def _parse_titled_appendix(pdf_path: str, page_nums: List[int]) -> Optional[Dict]:
+    """parse_schedule_4i_pages for the titled_appendix layout. The last page
+    must carry the "Total Limited Partnership(s) and Other Private Equity" line."""
+    pdf_stem = pdf_path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+    page_nums = sorted(set(page_nums))
+    with pdfplumber.open(pdf_path) as pdf:
+        texts = {}
+        for page_num in page_nums:
+            if not 1 <= page_num <= len(pdf.pages):
+                return None
+            texts[page_num] = pdf.pages[page_num - 1].extract_text() or ""
+            if not (_TA_TITLE_RE.search(texts[page_num]) and _TA_COLUMNS_RE.search(texts[page_num])):
+                return None
+
+    heading = "Limited Partnerships and Other Private Equity"
+    section = {"heading": heading, "asset_type": "Partnership Interest", "partial": False,
+               "rows": 0, "cost": 0.0, "value": 0.0, "subtotal": None}
+    unparsed, pages = [], []
+    for page_num in page_nums:
+        lines = [l.strip() for l in texts[page_num].splitlines()]
+        start = next(i + 1 for i, l in enumerate(lines) if _TA_COLUMNS_RE.match(l))
+        mapped_rows = []
+        for line in lines[start:]:
+            if not line:
+                continue
+            if _TA_TOTAL_RE.match(line):
+                m = _TA_TOTAL_LINE_RE.match(line)
+                cost, value = (_ta_num(m.group(1)), _ta_num(m.group(2))) if m else (None, None)
+                if value is None:
+                    unparsed.append({"page_number": page_num, "line": line})
+                else:
+                    section["subtotal"] = [cost, value]
+                break
+            m = _TA_ROW_RE.match(line)
+            cost, value = (_ta_num(m.group(3)), _ta_num(m.group(4))) if m else (None, None)
+            if not m or value is None or (cost is None and m.group(3) != "-"):
+                unparsed.append({"page_number": page_num, "line": line})
+                continue
+            section["rows"] += 1
+            section["cost"] += cost or 0.0
+            section["value"] += value
+            if not value:
+                continue
+            mapped_rows.append({
+                "issuer_name": "",
+                "investment_description": m.group(1),
+                "asset_type": "Partnership Interest",
+                "asset_type_source": "heading",
+                "par_value": "",
+                "cost": _fmt(cost),
+                "current_value": _fmt(value),
+                "units_or_shares": "",
+                "asset_identifier": "",
+                "interest_rate": "",
+                "maturity_date": "",
+                "section_heading": heading,
+                "extraction_method": "sch4i_text",
+                "page_number": page_num,
+                "row_id": len(mapped_rows) + 1,
+            })
+        pages.append({
+            "pdf": pdf_path, "pdf_stem": pdf_stem, "page_number": page_num,
+            "mapped_rows": mapped_rows, "ocr_cells": [], "normalized_path": pdf_path,
+        })
+
+    sub = section["subtotal"]
+    # Whole-dollar rows: each may round by up to $0.50.
+    tol = max(1.0, 0.5 * section["rows"])
+    section["cost_diff"] = None if sub is None or sub[0] is None else section["cost"] - sub[0]
+    section["value_diff"] = None if sub is None else section["value"] - sub[1]
+    section["reconciled"] = sub is not None and abs(section["value_diff"]) <= tol and (
+        section["cost_diff"] is None or abs(section["cost_diff"]) <= tol)
+    return {"pages": pages, "sections": [section], "unparsed": unparsed,
+            "grand_total": sub, "grand_reconciled": section["reconciled"]}
 
 
 def _parse_cpa_total_lines(pdf_path: str, page_nums: List[int]) -> Optional[Dict]:
