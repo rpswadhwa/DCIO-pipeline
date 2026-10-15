@@ -472,6 +472,9 @@ _MF_ONLY_JUNK_REASONS = (
     "v3 cleanup: non-MF vehicle",
     "v3 cleanup: confirmed individual stock",
     "v3 cleanup: bare foreign-currency",
+    # A coupon%+maturity name is a real bond, junk only for the MF table. RTX (2026-10-14)
+    # lost 2,727 file-typed bonds / $13.1B from staging to this rule.
+    "individual bond (coupon% + maturity date",
 )
 
 
