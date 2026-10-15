@@ -442,10 +442,12 @@ def main():
                     parse_schedule_4i_pages, print_parse_report,
                 )
                 plan_id = sch4i_ack_ids[pdf_stem]
-                sch4i_pages = find_schedule_4i_pages(pdf_path, PLAN_PARSERS[plan_id]["start_heading"])
+                sch4i_layout = PLAN_PARSERS[plan_id].get("layout", "default")
+                sch4i_pages = find_schedule_4i_pages(
+                    pdf_path, PLAN_PARSERS[plan_id]["start_heading"], sch4i_layout)
                 print(f"    [sch4i_text_parser] plan_id {plan_id}: schedule pages {sch4i_pages}")
                 if sch4i_pages:
-                    sch4i_result = parse_schedule_4i_pages(pdf_path, sch4i_pages)
+                    sch4i_result = parse_schedule_4i_pages(pdf_path, sch4i_pages, sch4i_layout)
                 if sch4i_result is None:
                     print("    [sch4i_text_parser] WARNING: schedule not found/recognized, falling through")
                 else:

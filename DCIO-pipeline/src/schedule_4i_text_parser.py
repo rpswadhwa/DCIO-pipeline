@@ -15,6 +15,19 @@ under, every section that both starts and ends inside the parsed pages is
 reconciled against its printed subtotal, and the row total is checked
 against the schedule's printed grand total.
 
+A second layout, "issue_par_rate" (2026-10-14), covers filers that print
+
+    Identity of Issue | Par Value | Rate (%) | Maturity Date | Cost | Current Value
+
+with ALL-CAPS section headings ("SHORT-TERM INVESTMENTS", "PARTNERSHIPS")
+closed by "TOTAL <HEADING> <cost> <value>" lines and no asset identifier
+column. First seen on Shell Pension Plan (ack 20251009145059NAL0006755009001,
+pp.90-128), where the generic extractor dropped ~$3.0B of $9.49B in whole
+blocks (all commingled funds, 30 partnerships, entire bond pages). Those
+pages pad right-aligned numbers with space glyphs that overlap the first
+digit, so pdfplumber reads "739,223" as "7 39,223"; _drop_overlapping_spaces
+removes them before text extraction.
+
 Registered per plan, not per filing: PLAN_PARSERS is keyed by plan_master
 plan_id (EIN-PN), which stays fixed across years while ack_id and page
 numbers change. run_pipeline.py resolves each PDF's ack_id to a plan_id via
@@ -38,10 +51,15 @@ from .asset_type_patterns import detect_asset_type
 # wanted, not the cash/government/bond/equity pages before it.
 PLAN_PARSERS = {
     "416011702-001": {"name": "Mayo Pension Plan", "start_heading": r"^mutual\s+funds?$"},
+    # Shell: the whole schedule, every section (2026-10-14).
+    "131299890-001": {"name": "Shell Pension Plan", "layout": "issue_par_rate",
+                      "start_heading": r"^SHORT-TERM\s+INVESTMENTS$"},
 }
 
 # Every requested page must carry this column-header line, else we don't own the layout.
 _HEADER_RE = re.compile(r"Identifier\s+Security\s+Title\b.*\bValue\b", re.I)
+_IPR_HEADER_RE = re.compile(r"Identity\s+of\s+Issue\b.*\bPar\s+Value\b.*\bCurrent\s+Value\b", re.I)
+_IPR_HEADING_RE = re.compile(r"^[A-Z][A-Z ,&/()'\-]*[A-Z)]$")
 _BOILERPLATE_RE = re.compile(
     r"^(EIN\s|Schedule\s+H,|December\s+\d|Face\s+Amount|Asset\s+Interest|Identifier\s+Security)", re.I)
 _NUM_RE = re.compile(r"^\(?-?\$?\d[\d,]*(\.\d+)?\)?$|^[-—–]$")
@@ -56,7 +74,9 @@ _HEADING_ASSET_TYPES = [
     (r"mutual\s+fund|registered\s+investment", "Mutual Fund"),
     (r"collective\s+trust|common/collective", "Common/Collective Trust Fund"),
     (r"absolute\s+return|hedge\s+fund", "Hedge Fund"),
+    (r"commingled", "Commingled Fund"),
     (r"private\s+invest|private\s+equity|partnership", "Partnership Interest"),
+    (r"insurance\s+contract", "Insurance General Account"),
     (r"real\s+estate", "Real Estate"),
     (r"preferred\s+stock", "Preferred Stock"),
     (r"common\s+stock|corporate\s+stock|equit", "Common Stock"),
@@ -147,6 +167,74 @@ def _classify_line(line: str) -> tuple:
     }
 
 
+def _ipr_classify_line(line: str, heading: str) -> tuple:
+    """_classify_line for the issue_par_rate layout (title, par, rate, maturity, cost, value)."""
+    line = line.strip()
+    if not line:
+        return "skip", None
+    tokens = line.split()
+    if heading and line.upper().startswith(f"TOTAL {heading.upper()} "):
+        rest = line[len(heading) + 7:].split()
+        if rest and all(_NUM_RE.match(t) for t in rest):
+            return "subtotal", [_num(t) for t in rest]
+    if _IPR_HEADING_RE.match(line):
+        return "heading", line
+    if _is_page_footer(tokens):
+        return "skip", None
+
+    trailing = []
+    while tokens and _NUM_RE.match(tokens[-1]) and len(trailing) < 2:
+        trailing.insert(0, tokens.pop())
+    maturity = tokens.pop() if len(trailing) == 2 and tokens and _DATE_RE.match(tokens[-1]) else ""
+    rate = tokens.pop() if maturity and tokens and _RATE_RE.match(tokens[-1]) else ""
+    # Par value (bonds) or shares/units (no maturity) sits left of cost.
+    shares = _num(tokens.pop()) if len(trailing) == 2 and tokens and _NUM_RE.match(tokens[-1]) else None
+    title = " ".join(tokens)
+    if not trailing or not re.search(r"[A-Za-z]", title):
+        return "unparsed", line
+
+    cost, value = ([None] * (2 - len(trailing)) + [_num(t) for t in trailing])
+    return "row", {
+        "identifier": "", "title": title, "rate": rate, "maturity": maturity,
+        "shares": shares, "cost": cost, "value": value,
+    }
+
+
+def _drop_overlapping_spaces(page):
+    """Remove space glyphs drawn on top of a real character (right-aligned
+    padding), which otherwise split one number into two tokens."""
+    rows: Dict[int, list] = {}
+    for c in page.chars:
+        if c["text"] != " ":
+            rows.setdefault(round(c["top"]), []).append(c)
+
+    def overlaps(sp) -> bool:
+        top = round(sp["top"])
+        return any(min(sp["x1"], c["x1"]) - max(sp["x0"], c["x0"]) > 0.5
+                   for k in (top - 1, top, top + 1) for c in rows.get(k, ()))
+
+    bad = {id(c) for c in page.chars if c["text"] == " " and overlaps(c)}
+    return page.filter(lambda obj: id(obj) not in bad) if bad else page
+
+
+def _page_text(page, layout: str) -> str:
+    if layout == "issue_par_rate":
+        page = _drop_overlapping_spaces(page)
+    return page.extract_text() or ""
+
+
+def _header_re(layout: str):
+    return _IPR_HEADER_RE if layout == "issue_par_rate" else _HEADER_RE
+
+
+def _headings(text: str, layout: str) -> List[str]:
+    if layout == "issue_par_rate":
+        lines = text.splitlines()
+        header_idx = next((i for i, l in enumerate(lines) if _IPR_HEADER_RE.search(l)), len(lines))
+        return [l.strip() for l in lines[header_idx + 1:] if _IPR_HEADING_RE.match(l.strip())]
+    return [h for h in (_heading_of(l.strip()) for l in text.splitlines()) if h]
+
+
 def registered_ack_ids(workgroup: str, s3_output: str) -> Dict[str, str]:
     """ack_id -> plan_id for every plan_master filing of a registered plan."""
     import awswrangler as wr
@@ -159,7 +247,7 @@ def registered_ack_ids(workgroup: str, s3_output: str) -> Dict[str, str]:
     return dict(zip(df["ack_id"], df["plan_id"]))
 
 
-def find_schedule_4i_pages(pdf_path: str, start_heading: str) -> List[int]:
+def find_schedule_4i_pages(pdf_path: str, start_heading: str, layout: str = "default") -> List[int]:
     """Pages of the first 4i schedule copy, from start_heading's page to its end.
 
     The schedule is the first contiguous run of pages carrying the 4i column
@@ -171,30 +259,30 @@ def find_schedule_4i_pages(pdf_path: str, start_heading: str) -> List[int]:
     start = None
     with pdfplumber.open(pdf_path) as pdf:
         for page_num, page in enumerate(pdf.pages, start=1):
-            text = page.extract_text() or ""
-            if not _HEADER_RE.search(text):
+            text = _page_text(page, layout)
+            if not _header_re(layout).search(text):
                 if run:
                     break
                 continue
             run.append(page_num)
-            if start is None and any(
-                    re.match(start_heading, h, re.I)
-                    for h in (_heading_of(l.strip()) for l in text.splitlines()) if h):
+            if start is None and any(re.match(start_heading, h, re.I) for h in _headings(text, layout)):
                 start = page_num
     return [p for p in run if p >= start] if start else []
 
 
-def _inherited_heading(pdf, first_page: int) -> str:
+def _inherited_heading(pdf, first_page: int, layout: str = "default") -> str:
     """Last section heading printed before first_page, scanning backwards."""
     for page_num in range(first_page - 1, max(0, first_page - 1 - _LOOKBACK_PAGES), -1):
-        text = pdf.pages[page_num - 1].extract_text() or ""
-        headings = [h for h in (_heading_of(l.strip()) for l in text.splitlines()) if h]
+        text = _page_text(pdf.pages[page_num - 1], layout)
+        if layout == "issue_par_rate" and not _IPR_HEADER_RE.search(text):
+            continue
+        headings = _headings(text, layout)
         if headings:
             return headings[-1]
     return ""
 
 
-def parse_schedule_4i_pages(pdf_path: str, page_nums: List[int]) -> Optional[Dict]:
+def parse_schedule_4i_pages(pdf_path: str, page_nums: List[int], layout: str = "default") -> Optional[Dict]:
     """Parse the requested pages. Returns None if any page lacks the 4i header.
 
     Result: {"pages": [<run_pipeline page_data dicts>], "sections": [...],
@@ -207,10 +295,10 @@ def parse_schedule_4i_pages(pdf_path: str, page_nums: List[int]) -> Optional[Dic
         for page_num in page_nums:
             if not 1 <= page_num <= len(pdf.pages):
                 return None
-            texts[page_num] = pdf.pages[page_num - 1].extract_text() or ""
-            if not _HEADER_RE.search(texts[page_num]):
+            texts[page_num] = _page_text(pdf.pages[page_num - 1], layout)
+            if not _header_re(layout).search(texts[page_num]):
                 return None
-        inherited = _inherited_heading(pdf, page_nums[0])
+        inherited = _inherited_heading(pdf, page_nums[0], layout)
 
     sections = []
     current = {"heading": inherited, "asset_type": heading_asset_type(inherited),
@@ -225,9 +313,12 @@ def parse_schedule_4i_pages(pdf_path: str, page_nums: List[int]) -> Optional[Dic
         mapped_rows = []
         lines = texts[page_num].splitlines()
         # Everything above the column header is the page's title block (plan name, EIN, ...).
-        header_idx = next(i for i, l in enumerate(lines) if _HEADER_RE.search(l))
+        header_idx = next(i for i, l in enumerate(lines) if _header_re(layout).search(l))
         for line in lines[header_idx + 1:]:
-            kind, payload = _classify_line(line)
+            if layout == "issue_par_rate":
+                kind, payload = _ipr_classify_line(line, current["heading"])
+            else:
+                kind, payload = _classify_line(line)
             if kind == "skip":
                 continue
             if kind == "heading":
@@ -290,10 +381,13 @@ def parse_schedule_4i_pages(pdf_path: str, page_nums: List[int]) -> Optional[Dic
             # Filers print whole dollars but total the unrounded figures, so allow
             # up to $1 of rounding drift per row before calling it a mismatch.
             tol = max(1.0, float(section["rows"]))
-            section["reconciled"] = (
-                abs(section["value_diff"]) <= tol
-                and (section["cost_diff"] is None or abs(section["cost_diff"]) <= tol)
-            )
+            # issue_par_rate: cost is advisory. Shell's own printed cost subtotals
+            # don't foot (stocks +$831, insurance +$5,343, partnerships +$21,864
+            # over the printed rows, checked by hand) while every value subtotal
+            # does to the dollar, and value is the only figure loaded.
+            cost_ok = (layout == "issue_par_rate" or section["cost_diff"] is None
+                       or abs(section["cost_diff"]) <= tol)
+            section["reconciled"] = abs(section["value_diff"]) <= tol and cost_ok
 
     # When the printed grand total is in range and no section was cut off at
     # the start, every row of the schedule was parsed: the rows must sum to it.
