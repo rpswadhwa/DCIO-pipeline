@@ -79,6 +79,10 @@ name, EIN, "Schedule H Line 4i - Assets Held") is printed on every page, often
 in the middle of the body, so any line found on at least half the pages is
 dropped. First seen on MGB ERISA Master Trust (ack
 20260702162718NAL0018068224001, pp.35-95), never extracted, JV section $9.16B.
+Some holdings print with no description at all, just the whole-trust line
+right after the previous holding's account lines; these are kept as
+"UNDESCRIBED HOLDING <security id>" so the section still ties out (J&J,
+2026-10-15: 13 JV holdings, $247M).
 The same report with id "GEAC" is GE Pension Trust (pp.53-482, JV $8.51B).
 
 A seventh layout, "flat_cost_value" (2026-10-15), is one alphabetical list of
@@ -145,6 +149,15 @@ PLAN_PARSERS = {
     # UPS: the whole schedule from its first section (2026-10-14).
     "352371556-001": {"name": "UPS Group Trust", "layout": "soi_revalued_cost",
                       "start_heading": r"^INTEREST-BEARING\s+CASH$"},
+    # Disney: the whole held-at-end-of-year composite, pp.11-517 (2026-10-15).
+    "954545390-007": {"name": "Disney Master Pension Trust", "layout": "bny_h30t",
+                      "start_heading": r"^INTEREST\s+BEARING\s+CASH$"},
+    # J&J: report JJ2K, pp.3-226; pp.1-2 are a separate cash-only report (2026-10-15).
+    "221024240-015": {"name": "Johnson & Johnson Pension Master Trust", "layout": "bny_h30t",
+                      "start_heading": r"^JJ2K\s+PAGE:\s+1$"},
+    # Cox: NA101E balance sheet from "A.NON-INTEREST BEARING CASH" (2026-10-15).
+    "586043548-001": {"name": "Cox Enterprises Master Trust", "layout": "detail_report",
+                      "start_heading": r"^A\.\s*NON-INTEREST\s+BEARING\s+CASH$"},
     # MGB (Mass General Brigham): the whole held-at-end-of-year composite (2026-10-15).
     "043294527-004": {"name": "MGB ERISA Master Trust", "layout": "bny_h30t",
                       "start_heading": r"^INTEREST\s+BEARING\s+CASH$"},
@@ -186,9 +199,11 @@ _DR_HEADER_RE = re.compile(r"Assets\s+and\s+Liabilities\s+Detail\s+Report", re.I
 _DR_DATES_RE = re.compile(r"^\d{1,2}/\d{1,2}/\d{4}\s+\d{1,2}/\d{1,2}/\d{4}$")
 # Footer: "4/29/2025 7:43:38 PM EDT Page 1 of 203" (pdfplumber garbles some to "o2f03").
 _DR_FOOTER_RE = re.compile(r"^\d{1,2}/\d{1,2}/\d{4}\s+\d{1,2}:\d{2}:\d{2}\s+[AP]M\b")
-_DR_LETTER_RE = re.compile(r"^([A-Z])\.\s+(.+)$")
-_DR_ITEM_RE = re.compile(r"^\((\d{1,2})\)\s+(.+)$")
-_DR_SUBITEM_RE = re.compile(r"^\(([A-Z])\)\s+(.+)$")
+# Some filers' text drops the space after the letter ("A.NON-INTEREST BEARING
+# CASH", Cox); then the heading must be all capitals, unlike "T.ROWE ... 1,000".
+_DR_LETTER_RE = re.compile(r"^([A-Z])\.(?:\s+|(?=[A-Z]{2}[A-Z\- ]*$))(.+)$")
+_DR_ITEM_RE = re.compile(r"^\((\d{1,2})\)\s*(.+)$")
+_DR_SUBITEM_RE = re.compile(r"^\(([A-Z])\)\s*(.+)$")
 # Schedule H line-item path ("<item> / <sub-item>") -> asset_type, first match wins.
 _DR_ASSET_TYPES = [
     (r"(?<!non-)interest\s+bearing\s+cash", "Short-Term Investment Fund"),
@@ -554,8 +569,12 @@ def _headings(text: str, layout: str) -> List[str]:
         end = next((i for i, l in enumerate(lines) if _FCV_HEADER_RE.match(l)), 0)
         return [l for l in lines[:end] if l]
     if layout == "bny_h30t":
+        # The report's title line ("JJ2K PAGE: 1") comes first, so start_heading
+        # can pick one report when a PDF carries several.
+        title = next((l.strip() for l in text.splitlines() if l.strip()), "")
         body = _h30t_body(text)
-        return [l for l, nxt in zip(body, body[1:]) if _H30T_RULE_RE.match(nxt) and not l.startswith("-")]
+        return [title] + [l for l, nxt in zip(body, body[1:])
+                          if _H30T_RULE_RE.match(nxt) and not l.startswith("-")]
     if layout == "jpm_held":
         body = _jpm_body(text)
         return [l for l, nxt in zip(body, body[1:])
@@ -1197,7 +1216,10 @@ def _parse_bny_h30t(pdf_path: str, page_nums: List[int]) -> Optional[Dict]:
                     if current is not None:
                         current["subtotal"] = t[1][1:]
                     continue
-                if current is None or not name_lines:
+                # A holding printed with no description follows straight on from
+                # the previous holding's account lines; it is named after its
+                # security id below.
+                if current is None or not (name_lines or holding):
                     unparsed.append({"page_number": page_num, "line": line})
                     continue
                 close_holding()
@@ -1241,8 +1263,13 @@ def _parse_bny_h30t(pdf_path: str, page_nums: List[int]) -> Optional[Dict]:
                 ident = t[0].split()[1] if len(t[0].split()) > 1 else ""
                 if not holding["row"]["asset_identifier"] and len(ident) >= 8 and re.search(r"\d", ident):
                     holding["row"]["asset_identifier"] = ident
+                if not holding["row"]["investment_description"] and ident:
+                    holding["row"]["investment_description"] = f"UNDESCRIBED HOLDING {ident}"
                 holding["accounts"] += t[1][2] or 0.0
                 holding["n_accounts"] += 1
+                continue
+            if current is None and not t and _H30T_ACCOUNT_RE.match(line):
+                # Roster of manager accounts on the report's first page.
                 continue
             if current is not None and not t:
                 # Description of the next holding.
