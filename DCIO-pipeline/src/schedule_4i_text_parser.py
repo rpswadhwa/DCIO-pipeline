@@ -28,6 +28,20 @@ pages pad right-aligned numbers with space glyphs that overlap the first
 digit, so pdfplumber reads "739,223" as "7 39,223"; _drop_overlapping_spaces
 removes them before text extraction.
 
+A third layout, "detail_report" (2026-10-14), is the custodian "5500 Assets
+and Liabilities Detail Report" (BNY, report ID NA101E): the whole Schedule H
+balance sheet, one line per holding as "<title> <beginning of year> <end of
+year>", nested under the Schedule H line items themselves -- "C. GENERAL
+INVESTMENTS" > "(4) CORPORATE STOCKS" > "(B) COMMON" -- with each leaf closed by
+"TOTAL <leaf heading> <boy> <eoy>" and "F. TOTAL ASSETS" as the grand total.
+First seen on RTX Master Retirement Trust (ack 20251014172506NAL0006971138001,
+203 pp.), whose $11.9B "(5) PARTNERSHIP/JOINT VENTURE INTERESTS" section had
+never been extracted. asset_type comes from the line-item path, so "(A)
+PREFERRED" is a Bond under corporate debt but Preferred Stock under corporate
+stocks. Cash and receivables (A., B.) are parsed only to reconcile against
+TOTAL ASSETS; no rows are emitted for them, nor for holdings sold during the
+year (end-of-year value 0).
+
 Registered per plan, not per filing: PLAN_PARSERS is keyed by plan_master
 plan_id (EIN-PN), which stays fixed across years while ack_id and page
 numbers change. run_pipeline.py resolves each PDF's ack_id to a plan_id via
@@ -54,12 +68,40 @@ PLAN_PARSERS = {
     # Shell: the whole schedule, every section (2026-10-14).
     "131299890-001": {"name": "Shell Pension Plan", "layout": "issue_par_rate",
                       "start_heading": r"^SHORT-TERM\s+INVESTMENTS$"},
+    # RTX: the whole balance sheet from "A. NON-INTEREST BEARING CASH" (2026-10-14).
+    "133064404-001": {"name": "RTX Master Retirement Trust", "layout": "detail_report",
+                      "start_heading": r"^A\.\s+NON-INTEREST\s+BEARING\s+CASH$"},
 }
 
 # Every requested page must carry this column-header line, else we don't own the layout.
 _HEADER_RE = re.compile(r"Identifier\s+Security\s+Title\b.*\bValue\b", re.I)
 _IPR_HEADER_RE = re.compile(r"Identity\s+of\s+Issue\b.*\bPar\s+Value\b.*\bCurrent\s+Value\b", re.I)
 _IPR_HEADING_RE = re.compile(r"^[A-Z][A-Z ,&/()'\-]*[A-Z)]$")
+_DR_HEADER_RE = re.compile(r"Assets\s+and\s+Liabilities\s+Detail\s+Report", re.I)
+# Column-date line ("1/1/2024 12/31/2024") that ends each page's title block.
+_DR_DATES_RE = re.compile(r"^\d{1,2}/\d{1,2}/\d{4}\s+\d{1,2}/\d{1,2}/\d{4}$")
+# Footer: "4/29/2025 7:43:38 PM EDT Page 1 of 203" (pdfplumber garbles some to "o2f03").
+_DR_FOOTER_RE = re.compile(r"^\d{1,2}/\d{1,2}/\d{4}\s+\d{1,2}:\d{2}:\d{2}\s+[AP]M\b")
+_DR_LETTER_RE = re.compile(r"^([A-Z])\.\s+(.+)$")
+_DR_ITEM_RE = re.compile(r"^\((\d{1,2})\)\s+(.+)$")
+_DR_SUBITEM_RE = re.compile(r"^\(([A-Z])\)\s+(.+)$")
+# Schedule H line-item path ("<item> / <sub-item>") -> asset_type, first match wins.
+_DR_ASSET_TYPES = [
+    (r"(?<!non-)interest\s+bearing\s+cash", "Short-Term Investment Fund"),
+    (r"government\s+securities|corporate\s+debt", "Bond"),
+    (r"corporate\s+stocks\s*/\s*preferred", "Preferred Stock"),
+    (r"corporate\s+stocks", "Common Stock"),
+    (r"partnership|joint\s+venture", "Partnership Interest"),
+    (r"^real\s+estate", "Real Estate"),
+    (r"common/collective", "Common/Collective Trust Fund"),
+    (r"pooled\s+separate", "Separate Account"),
+    (r"103-12", "103-12 Investment Entity"),
+    (r"registered\s+investment", "Mutual Fund"),
+    (r"insurance", "Insurance General Account"),
+    (r"employer\s+securities", "Employer Stock"),
+]
+# Letter sections parsed only to reconcile against TOTAL ASSETS.
+_DR_NON_INVESTMENT_LETTERS = {"A", "B"}
 _BOILERPLATE_RE = re.compile(
     r"^(EIN\s|Schedule\s+H,|December\s+\d|Face\s+Amount|Asset\s+Interest|Identifier\s+Security)", re.I)
 _NUM_RE = re.compile(r"^\(?-?\$?\d[\d,]*(\.\d+)?\)?$|^[-—–]$")
@@ -224,10 +266,21 @@ def _page_text(page, layout: str) -> str:
 
 
 def _header_re(layout: str):
+    if layout == "detail_report":
+        return _DR_HEADER_RE
     return _IPR_HEADER_RE if layout == "issue_par_rate" else _HEADER_RE
 
 
+def _dr_body(text: str) -> List[str]:
+    """detail_report lines below the page's title block, footer dropped."""
+    lines = [l.strip() for l in text.splitlines()]
+    start = next((i + 1 for i, l in enumerate(lines) if _DR_DATES_RE.match(l)), len(lines))
+    return [l for l in lines[start:] if l and not _DR_FOOTER_RE.match(l)]
+
+
 def _headings(text: str, layout: str) -> List[str]:
+    if layout == "detail_report":
+        return [l for l in _dr_body(text) if _DR_LETTER_RE.match(l)]
     if layout == "issue_par_rate":
         lines = text.splitlines()
         header_idx = next((i for i, l in enumerate(lines) if _IPR_HEADER_RE.search(l)), len(lines))
@@ -288,6 +341,8 @@ def parse_schedule_4i_pages(pdf_path: str, page_nums: List[int], layout: str = "
     Result: {"pages": [<run_pipeline page_data dicts>], "sections": [...],
              "unparsed": [...], "grand_total": [cost, value] or None}
     """
+    if layout == "detail_report":
+        return _parse_detail_report(pdf_path, page_nums)
     pdf_stem = pdf_path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
     page_nums = sorted(set(page_nums))
     with pdfplumber.open(pdf_path) as pdf:
@@ -396,6 +451,136 @@ def parse_schedule_4i_pages(pdf_path: str, page_nums: List[int], layout: str = "
         total_rows = sum(s["rows"] for s in sections)
         grand_diff = sum(s["value"] for s in sections) - grand_total[-1]
         grand_reconciled = abs(grand_diff) <= max(1.0, float(total_rows))
+    return {"pages": pages, "sections": sections, "unparsed": unparsed,
+            "grand_total": grand_total, "grand_reconciled": grand_reconciled}
+
+
+def _dr_trailing_pair(line: str) -> Optional[tuple]:
+    """(text, boy, eoy) when the line ends in two amounts, else None."""
+    tokens = line.split()
+    if len(tokens) < 2 or not (_NUM_RE.match(tokens[-1]) and _NUM_RE.match(tokens[-2])):
+        return None
+    return " ".join(tokens[:-2]), _num(tokens[-2]), _num(tokens[-1])
+
+
+def _dr_asset_type(path: str) -> str:
+    return next((label for pattern, label in _DR_ASSET_TYPES if re.search(pattern, path, re.I)), "")
+
+
+def _parse_detail_report(pdf_path: str, page_nums: List[int]) -> Optional[Dict]:
+    """parse_schedule_4i_pages for the detail_report layout. The pages must
+    start at "A." so every section opens in range; the end-of-year column is
+    the value, and the report carries no cost."""
+    pdf_stem = pdf_path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+    page_nums = sorted(set(page_nums))
+    with pdfplumber.open(pdf_path) as pdf:
+        bodies = {}
+        for page_num in page_nums:
+            if not 1 <= page_num <= len(pdf.pages):
+                return None
+            text = pdf.pages[page_num - 1].extract_text() or ""
+            if not _DR_HEADER_RE.search(text):
+                return None
+            bodies[page_num] = _dr_body(text)
+
+    letter, item, sub = "", "", ""
+    current = None
+    sections, unparsed, pages = [], [], []
+    grand_total = None
+    done = False
+
+    def open_section(heading: str, path: str) -> Dict:
+        section = {"heading": heading, "asset_type": _dr_asset_type(path), "letter": letter,
+                   "partial": False, "rows": 0, "cost": 0.0, "value": 0.0, "subtotal": None}
+        sections.append(section)
+        return section
+
+    for page_num in page_nums:
+        mapped_rows = []
+        for line in bodies[page_num]:
+            if done:
+                break
+            m = _DR_LETTER_RE.match(line)
+            if m:
+                letter, item, sub = m.group(1), "", ""
+                pair = _dr_trailing_pair(m.group(2))
+                if pair and re.match(r"total\s+assets$", pair[0], re.I):
+                    grand_total = [pair[2]]
+                    done = True
+                    break
+                # Letter sections holding rows directly ("A. NON-INTEREST BEARING CASH").
+                current = open_section(pair[0] if pair else m.group(2), m.group(2))
+                if pair:
+                    current["subtotal"] = [pair[2]]
+                continue
+            m = _DR_ITEM_RE.match(line) or _DR_SUBITEM_RE.match(line)
+            if m:
+                pair = _dr_trailing_pair(m.group(2))
+                heading = pair[0] if pair else m.group(2)
+                if _DR_ITEM_RE.match(line):
+                    item, sub = heading, ""
+                else:
+                    sub = heading
+                current = open_section(heading, f"{item} / {sub}" if sub else item)
+                if pair:  # "(7) LOANS OTHER THAN PARTICIPANT 0.00 0.00": empty line item
+                    current["subtotal"] = [pair[2]]
+                continue
+            pair = _dr_trailing_pair(line)
+            if pair is None:
+                unparsed.append({"page_number": page_num, "line": line})
+                continue
+            title, boy, eoy = pair
+            if current and re.fullmatch(rf"TOTAL\s+{re.escape(current['heading'])}", title, re.I):
+                current["subtotal"] = [eoy]
+                continue
+            if current is None or not re.search(r"[A-Za-z]", title):
+                unparsed.append({"page_number": page_num, "line": line})
+                continue
+            current["rows"] += 1
+            current["value"] += eoy or 0.0
+            if not eoy or current["letter"] in _DR_NON_INVESTMENT_LETTERS:
+                continue
+            asset_type = current["asset_type"]
+            source = "heading" if asset_type else "none"
+            if not asset_type:
+                asset_type = detect_asset_type(f"{current['heading']} {title}")
+                source = "row" if asset_type else "none"
+            mapped_rows.append({
+                "issuer_name": "",
+                "investment_description": title,
+                "asset_type": asset_type,
+                "asset_type_source": source,
+                "par_value": "",
+                "cost": "",
+                "current_value": _fmt(eoy),
+                "units_or_shares": "",
+                "asset_identifier": "",
+                "interest_rate": "",
+                "maturity_date": "",
+                "section_heading": current["heading"],
+                "extraction_method": "sch4i_text",
+                "page_number": page_num,
+                "row_id": len(mapped_rows) + 1,
+            })
+        pages.append({
+            "pdf": pdf_path, "pdf_stem": pdf_stem, "page_number": page_num,
+            "mapped_rows": mapped_rows, "ocr_cells": [], "normalized_path": pdf_path,
+        })
+
+    for section in sections:
+        section["cost_diff"] = None
+        sub_value = section["subtotal"][-1] if section["subtotal"] else None
+        section["value_diff"] = None if sub_value is None else section["value"] - sub_value
+        if sub_value is None:
+            # A heading with rows but no TOTAL line can't be checked; one with
+            # neither ("E. BUILDINGS/OTHER PROPERTY USED BY PLAN") is empty.
+            section["reconciled"] = None if section["rows"] else True
+        else:
+            section["reconciled"] = abs(section["value_diff"]) <= 1.0
+    grand_reconciled = None
+    if grand_total:
+        grand_diff = sum(s["value"] for s in sections) - grand_total[-1]
+        grand_reconciled = abs(grand_diff) <= 1.0
     return {"pages": pages, "sections": sections, "unparsed": unparsed,
             "grand_total": grand_total, "grand_reconciled": grand_reconciled}
 
