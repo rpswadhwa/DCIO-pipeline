@@ -145,9 +145,12 @@ then a bare "<cost> <value>" subtotal; a one-holding category prints no
 subtotal. A "<fund>, LLC: ASSETS DETAILED BELOW:" block after a subtotal
 belongs to the category above it. "Grand Total <cost> <value>" ends it.
 pdfplumber's default x_tolerance runs each line's words together here, so
-this layout extracts at 1. First seen on National Electrical Benefit Fund
+this layout extracts at 0.5. First seen on National Electrical Benefit Fund
 (ack 20260730200559NAL0029346880001, pp.26-69): the two partnership/JV
-categories total $3,349,872,727, its certified JV to the dollar.
+categories total $3,349,872,727, its certified JV to the dollar. National
+Electrical Annuity Plan (ack 20260730210143NAL0029408688001, pp.20-61) prints
+"$ 279" for "$279" and a few other category names; its real estate and
+non-real estate JV categories total $256,540,267, its certified JV (2026-10-16).
 
 A twelfth layout, "inline_category" (2026-10-15), is a Fidelity flat list
 titled "5500 Schedule of Investments at End of Plan Year" with the column
@@ -224,6 +227,10 @@ often print no opening heading and are named only by their closing "Total
 wrapped identity lines, and "Total investments" ending the schedule. First
 seen on Laborers Pension Trust Fund for Northern California (ack
 20260316154545NAL0003370770001, pp.22-42), limited partnerships $2.49B.
+Its sister Laborers Annuity Plan for Northern California (ack
+20260316160114NAL0001199491001, pp.18-30) splits the column header
+differently and prints "Total corporate obligations"; limited partnerships
+$312,809,825, its certified JV (2026-10-16).
 
 An eighteenth layout, "investments_held_summary" (2026-10-16), is a
 "Schedule H, Line 4i ... Investments Held Summary" that rolls an attached
@@ -234,6 +241,16 @@ closing each category, and a bare grand total. Padding spaces split digits
 ("1 2,169") and are dropped first. First seen on Chicago & Vicinity
 Laborers' District Council Pension Plan (ack 20260311155722NAL0005772992003,
 pp.30-31), partnership/joint venture interests $1.25B.
+
+A nineteenth layout, "nt_asset_detail" (2026-10-16), is Northern Trust's
+"Asset Detail - Base Currency" statement filed as the schedule: holdings
+"<description> CUSIP : <id>" over a line of amounts ending "<market value>
+<cost> <gain market> <gain translation> <gain total>", so value and cost are
+read from the right. Sub-categories close with "Total <sub-category>";
+category and region totals are rollups and are skipped, and an unnamed
+"Total" ends the statement. First seen on Motion Picture Industry Individual
+Account Plan (ack 20260916145503NAL0004105473001, pp.19-300): 1,899 rows,
+$6.76B, all 51 sub-categories tie; partnership interest $443.1M.
 
 Registered per plan, not per filing: PLAN_PARSERS is keyed by plan_master
 plan_id (EIN-PN), which stays fixed across years while ack_id and page
@@ -278,6 +295,10 @@ PLAN_PARSERS = {
                       "start_heading": r"^JJ2K\s+PAGE:\s+1$"},
     # Cox: NA101E balance sheet from "A.NON-INTEREST BEARING CASH" (2026-10-15).
     "586043548-001": {"name": "Cox Enterprises Master Trust", "layout": "detail_report",
+                      "start_heading": r"^A\.\s*NON-INTEREST\s+BEARING\s+CASH$"},
+    # Hearst: NA101E detail from p.3; p.2 is the NA100E summary, whose
+    # "A. NON-INTEREST BEARING CASH" line carries amounts (2026-10-16).
+    "133691321-001": {"name": "Hearst Corporation Master Trust", "layout": "detail_report",
                       "start_heading": r"^A\.\s*NON-INTEREST\s+BEARING\s+CASH$"},
     # MGB (Mass General Brigham): the whole held-at-end-of-year composite (2026-10-15).
     "043294527-004": {"name": "MGB ERISA Master Trust", "layout": "bny_h30t",
@@ -356,12 +377,30 @@ PLAN_PARSERS = {
     "946534591-001": {"name": "Carpenters Annuity Trust Fund for Northern California",
                       "layout": "typed_maturity_rate",
                       "start_heading": r"^Carpenters\s+Annuity\s+Trust\s+Fund\s+for\s+Northern\s+California$"},
+    # Directors Guild of America - Producer Pension Plan: pp.19-65, an asset-type
+    # column after each name; some names wrap, some print clipped to a word
+    # ("PARTNERSHIP"). Partnership/joint venture = cert JV (2026-10-16).
+    "956027308-002": {"name": "Directors Guild of America - Producer Pension Plan",
+                      "layout": "typed_maturity_rate",
+                      "start_heading": r"^DIRECTORS\s+GUILD\s+OF\s+AMERICA\s+-\s+PRODUCER\s+PENSION\s+PLAN\b",
+                      "headings": r"^(?:Interest-Bearing\s+Cash|U\.S\.\s+Government\s+Securities|Corporate\s+Debt\s+-\s+"
+                                  r"(?:Preferred|All\s+Other)|Common\s+Stock|Partnership/Joint\s+Venture\s+Interests"
+                                  r"|Common/Collective\s+Trusts|103-12\s+Investment\s+Entities"
+                                  r"|Registered\s+Investment\s+Companies|Other\s+Investments)$",
+                      "bare_heading_total": True,
+                      # Other Investments: typed by the asset-type column.
+                      "row_asset_types": [(r"\sSWAP\s|\sFUT-|\sOP-", "Derivative"),
+                                          (r"\s(?:GOVERNMENT\s+ISSUES|MUNICIPALS)\s", "Bond")]},
     # Laborers Pension Trust Fund for Northern California: pp.22-42, every total
     # ties; limited partnerships = cert JV (2026-10-16).
     "946277608-001": {"name": "Laborers Pension Trust Fund for Northern California", "layout": "closing_totals",
                       "start_heading": r"^Laborers\s+Pension\s+Trust\s+Fund\s+for\s+Northern\s+California$",
                       "notes": ["2026-10-16: the $6.8M of Laborers Funds Admin notes receivable print under "
                                 "Pooled separate accounts and are typed Separate Account."]},
+    # Laborers Annuity Plan for Northern California: the sister plan's schedule,
+    # pp.18-30; limited partnerships = cert JV (2026-10-16).
+    "946277608-002": {"name": "Laborers Annuity Plan for Northern California", "layout": "closing_totals",
+                      "start_heading": r"^Laborers\s+Annuity\s+Plan\s+for\s+Northern\s+California$"},
     # Chicago & Vicinity Laborers' District Council Pension Plan: the pp.30-31 summary;
     # every subtotal and the grand total tie, partnership = cert JV (2026-10-16).
     "362514514-002": {"name": "Chicago & Vicinity Laborers' District Council Pension Plan",
@@ -394,6 +433,9 @@ PLAN_PARSERS = {
     # NEBF (National Electrical Benefit Fund): the whole schedule, pp.26-69 (2026-10-15).
     "530181657-001": {"name": "National Electrical Benefit Fund", "layout": "bare_subtotals",
                       "start_heading": r"^Schedule\s+H\s*-\s*Line\s+4i\b"},
+    # NECA (National Electrical Annuity Plan): NEBF's layout, pp.20-67 (2026-10-16).
+    "526132372-001": {"name": "National Electrical Annuity Plan", "layout": "bare_subtotals",
+                      "start_heading": r"^Schedule\s*H\s*-\s*Line\s*4i\b"},
     # Dow: the first of two printed copies, pp.51-183 of the 2024 filing (2026-10-15).
     "381285128-001": {"name": "Dow Employees' Pension Plan", "layout": "nt_held_regions",
                       "start_heading": r"^Schedule\s+of\s+Assets\s+Held\s+for\s+Investment\s+Purposes$"},
@@ -467,6 +509,10 @@ PLAN_PARSERS = {
                           "Capula, Viking, TPG Axon, GMO Multi-Strategy) are typed Hedge Fund; WGI and RWC "
                           "emerging markets funds stay untyped (long-only).",
                       ]},
+    # Motion Picture Industry Individual Account Plan: Northern Trust's Asset
+    # Detail statement, pp.19-300 (2026-10-16).
+    "950030749-002": {"name": "Motion Picture Industry Individual Account Plan", "layout": "nt_asset_detail",
+                      "start_heading": r"^MOTION\s+PICS\s+-\s+IAP$"},
 }
 
 # Every requested page must carry this column-header line, else we don't own the layout.
@@ -653,9 +699,11 @@ _BS_FOOTER_RE = re.compile(r"^See\s+Independent\s+Auditor|^Reporting\s+and\s+Dis
 # Schedule H line 1c category headings. Any other unnumbered line opens a new
 # section only right after a subtotal; inside a section it is a wrapped name.
 _BS_CATEGORY_RE = re.compile(
-    r"^(INTEREST-BEARING\s+CASH|GOVERNMENT\s+SECURITIES|CORPORATE\s+(DEBT|STOCK)|LOANS\b|"
-    r"PARTNERSHIP/JOINT\s+VENTURE|REAL\s+ESTATE|103-12|COMMON/COLLECTIVE|POOLED\s+SEPARATE|"
-    r"REGISTERED\s+INVESTMENT|OTHER\s+INVESTMENTS|EMPLOYER|INSURANCE|MASTER\s+TRUST)", re.I)
+    r"^(INTEREST-BEARING\s+CASH|(U\.S\.\s+)?GOVERNMENT\s+SECURITIES|CORPORATE\s+(DEBT|STOCK|BONDS)|LOANS\b|"
+    r"PARTNERSHIP/JOINT\s+VENTURE|(NON-)?REAL\s+ESTATE|103-12|COMMON/COLLECTIVE|POOLED\s+SEPARATE|"
+    r"REGISTERED\s+INVESTMENT|OTHER\s+INVESTMENTS|EMPLOYER|INSURANCE|MASTER\s+TRUST|"
+    # NECA's (2026-10-16).
+    r"VALUE\s+OF\s+FUNDS\s+HELD\s+IN\s+INSURANCE)", re.I)
 # Column header, first page only; holdings start below it.
 _IC_COLUMNS_RE = re.compile(r"^Identity\s+of\s+Issue,\s+Borrower\b.*\b5500\s+Code\s+Description\s+"
                             r"Shares/Par\s+Cost\s+Current\s+Value$", re.M)
@@ -682,6 +730,37 @@ _NHR_GRAND_RE = re.compile(r"^Total\s+\(?-?[\d,]+\.\d{2}\)?\s+\(?-?[\d,]+\.\d{2}
 _NHR_FOOTER_RE = re.compile(r"^\*\*\s+All\s+or\s+a\s+portion\b|^Northern\s+Trust\s+-|^Generated\s+by\s+Northern\s+Trust\b")
 # Identifier lines under a holding ("CUSIP: ...", "SWU020HB3 SEDOL: ...", a bare id).
 _NHR_ID_RE = re.compile(r"\b(?:CUSIP|SEDOL|ISIN|TICKER)\s*:\s*(\S+)|^((?=[A-Z0-9]*\d)[A-Z0-9]{9})$", re.I)
+_NAD_HEADER_RE = re.compile(r"^Asset\s+Detail\s+-\s+Base\s+Currency$", re.M)
+# Last line of the column header; holdings start below it.
+_NAD_COLUMNS_RE = re.compile(r"^Shares/PAR\s+value\s+local\s+market\s+price\s+income/expense\s+Market\s+Value\s+"
+                             r"Cost\s+Market\s+Translation\s+Total$", re.M)
+# The unnamed grand "Total", its amounts on the next line.
+_NAD_GRAND_RE = re.compile(r"^Total\n-?[\d,]+\.\d+(?:\s+-?[\d,]+\.\d+){6}$", re.M)
+# A holding's first line: "<description> CUSIP : <id>".
+_NAD_ID_RE = re.compile(r"\s+(?:CUSIP|SEDOL|ISIN)\s*:\s*(\S+)$")
+_NAD_NUM_RE = re.compile(r"^-?\d[\d,]*(?:\.\d+)?$")
+# A sub-group heading "<region> - <currency>".
+_NAD_REGION_RE = re.compile(r"\s-\s[A-Z]{3}$")
+# Footnote marks, valuation notes, bond terms and the page footer.
+_NAD_SKIP_RE = re.compile(r"^\*|^(?:Issue\s+Date|Rate|Yield\s+to\s+Maturity|Maturity\s+Date|Call\s+Date)\s*:|"
+                          r"^Page\s+\d+\s+of\s+\d+$")
+# Category (and sub-category) heading -> asset_type, first match wins; the
+# private-fund categories come before the row's fund-vehicle prefix.
+_NAD_ALT_TYPES = [
+    (r"\bhedge\b", "Hedge Fund"),
+    (r"partnership|venture\s+capital|private\s+equity", "Partnership Interest"),
+    (r"real\s+estate", "Real Estate"),
+]
+# Northern Trust's fund-vehicle prefixes: "MFO" mutual fund, "CF" commingled fund.
+_NAD_ROW_TYPES = [(r"^MFO\s", "Mutual Fund"), (r"^CF\s", "Common/Collective Trust Fund")]
+_NAD_ASSET_TYPES = [
+    (r"^cash\s+and\s+cash\s+equivalents\b.*(?:short\s+term|bills)", "Short-Term Investment Fund"),
+    (r"futures|options|swap|derivative", "Derivative"),
+    (r"\betf\b", "ETF"),
+    (r"^funds\s+-", ""),
+    (r"^equities\b", "Common Stock"),
+    (r"^fixed\s+income\b", "Bond"),
+]
 _TA_TITLE_RE = re.compile(r"^Limited\s+Partnerships?\s+and\s+Other\s+Private\s+Equity$", re.M | re.I)
 _TA_COLUMNS_RE = re.compile(r"^\(a\)\s+\(b\)\s+\(c\)\s+\(d\)\s+\(e\)$", re.M)
 _TA_TOTAL_RE = re.compile(r"^Total\s+Limited\s+Partnerships?\s+and\s+Other\s+Private\s+Equity\b", re.M | re.I)
@@ -730,7 +809,10 @@ _TMR_COLUMNS_RE = re.compile(r"^\(a\)\s+Identity\s+of\s+issuer,\s+borrower,\s+le
                              # Les Schwab's (2026-10-16).
                              r"|^Party\s+of\s+Interest,\s+Collateral,\s+Par\s+or\s+Maturity\s+Value$"
                              # Carpenters Annuity Trust Fund for Northern California's (2026-10-16).
-                             r"|^Lessor,\s+or\s+Similar\s+Party\s+par\s+or\s+maturity\s+value\s+Cost\s+Value$", re.M)
+                             r"|^Lessor,\s+or\s+Similar\s+Party\s+par\s+or\s+maturity\s+value\s+Cost\s+Value$"
+                             # Directors Guild of America - Producer Pension Plan's (2026-10-16).
+                             r"|^\(a\)\s+\(b\)\s+Identity\s+of\s+issuer,\s+borrower,\s+or\s+similar\s+party\s+"
+                             r"Description\s+Maturity\s+Date\s+\(d\)\s+Cost\s+\(\$\)$", re.M)
 _TMR_SUBTOTAL_RE = re.compile(r"^(?:Sub)?total\s+(?:-\s+)?(.+)$", re.I)
 _TMR_GRAND_RE = re.compile(r"^Total\s+assets\s+\(held\s+at\s+end\s+of\s+year\)"
                            r"|^Total\s+Investments,\s+at\s+Fair\s+Value\b|^Grand\s+Total\b"
@@ -740,9 +822,10 @@ _TMR_GRAND_RE = re.compile(r"^Total\s+assets\s+\(held\s+at\s+end\s+of\s+year\)"
                            # Carpenters NorCal: an unlabeled "$ <cost> $ <value>" (2026-10-16).
                            r"|^\$\s*\d[\d ,]*\s+\$\s*\d[\d ,]*$", re.I | re.M)
 # Citigroup's umbrella heading over every section, and its "(Continued)" page
-# footers; 3M's "Schedule 1" and FirstEnergy's "Page 17" page footers.
-_TMR_SKIP_RE = re.compile(r"^Investments,\s+at\s+fair\s+value:$|^\d+\s+\(Continued\)$|^Schedule\s+\d+$|^Page\s+\d+$",
-                          re.I)
+# footers; 3M's "Schedule 1" and FirstEnergy's "Page 17" page footers; the
+# last line of Directors Guild's header, below its column header.
+_TMR_SKIP_RE = re.compile(r"^Investments,\s+at\s+fair\s+value:$|^\d+\s+\(Continued\)$|^Schedule\s+\d+$|^Page\s+\d+$"
+                          r"|^Rate\s+\(%\)\s+Value\s+\(\$\)$", re.I)
 # Calibri glyph ids of printable ASCII. FirstEnergy embeds Calibri subsets with
 # no ToUnicode map, so pdfplumber reads "0" as "(cid:1004)" (2026-10-16).
 _CALIBRI_GLYPHS = dict(zip(
@@ -756,7 +839,9 @@ _CID_RE = re.compile(r"^\(cid:(\d+)\)$")
 
 # closing_totals (Laborers Pension Trust Fund for Northern California, 2026-10-16).
 _CT_COLUMNS_RE = re.compile(r"^\(a\)\s+Lessor,\s+or\s+Similar\s+Party\s+Rate\s+of\s+Interest,.*"
-                            r"\(d\)\s*Cost\s+\(e\)\s*Current\s+Value$", re.M)
+                            r"\(d\)\s*Cost\s+\(e\)\s*Current\s+Value$"
+                            # Laborers Annuity Plan for Northern California's (2026-10-16).
+                            r"|^\(a\)\s+or\s+Similar\s+Party\s+Interest,\s+Collateral,.*\(d\)\s*Cost\s+Value$", re.M)
 _CT_TOTAL_RE = re.compile(r"^Total\s+(.+)$", re.I)
 _CT_GRAND_RE = re.compile(r"^Total\s+investments\s+\$?\s*[\d,]+", re.I | re.M)
 _CT_FOOTER_RE = re.compile(r"^See\s+Independent\s+Auditor's\s+Report|^\d+$")
@@ -765,7 +850,7 @@ _CT_FOOTER_RE = re.compile(r"^See\s+Independent\s+Auditor's\s+Report|^\d+$")
 _CT_ROW_X = 80.0
 _CT_ASSET_TYPES = [
     (r"money\s+market", "Short-Term Investment Fund"),
-    (r"government|bonds?\b", "Bond"),
+    (r"government|bonds?\b|corporate\s+obligations", "Bond"),
     (r"real\s+estate", "Real Estate"),
     (r"mutual\s+funds?", "Mutual Fund"),
     (r"limited\s+partnerships?", "Partnership Interest"),
@@ -1068,15 +1153,17 @@ def _ntp_body(text: str) -> List[str]:
 
 
 def _bs_text(page) -> str:
-    # The default tolerance runs the words of every line together.
-    return page.extract_text(x_tolerance=1) or ""
+    # The default tolerance runs the words of every line together; NECA's
+    # tighter word gaps still run together at 1 (2026-10-16).
+    return page.extract_text(x_tolerance=0.5) or ""
 
 
 def _bs_body(text: str) -> List[str]:
     """bare_subtotals lines below the first page's column header, footer dropped."""
     lines = [l.strip() for l in text.splitlines()]
     start = next((i + 1 for i, l in enumerate(lines) if _BS_COLUMNS_RE.match(l)), 0)
-    return [l for l in lines[start:] if l and not _BS_FOOTER_RE.match(l)]
+    # NECA prints "$ 279" where NEBF prints "$279" (2026-10-16).
+    return [re.sub(r"\$\s+(?=[\d(])", "$", l) for l in lines[start:] if l and not _BS_FOOTER_RE.match(l)]
 
 
 def _headings(text: str, layout: str) -> List[str]:
@@ -1095,12 +1182,13 @@ def _headings(text: str, layout: str) -> List[str]:
     if layout == "cpa_total_lines":
         return [l for l in _ctl_body(text) if not l.startswith("TOTAL ") and not _trailing_nums(l, 2)]
     if layout in ("flat_cost_value", "inline_category", "nt_held_regions", "titled_appendix", "typed_description",
-                  "typed_maturity_rate", "closing_totals", "investments_held_summary"):
+                  "typed_maturity_rate", "closing_totals", "investments_held_summary", "nt_asset_detail"):
         # Title-block lines above the column header (pool name among them).
         columns_re = {"flat_cost_value": _FCV_HEADER_RE, "inline_category": _IC_COLUMNS_RE,
                       "nt_held_regions": _NHR_COLUMNS_RE, "titled_appendix": _TA_COLUMNS_RE,
                       "typed_description": _TD_COLUMNS_RE, "typed_maturity_rate": _TMR_COLUMNS_RE,
-                      "closing_totals": _CT_COLUMNS_RE, "investments_held_summary": _IHS_COLUMNS_RE}[layout]
+                      "closing_totals": _CT_COLUMNS_RE, "investments_held_summary": _IHS_COLUMNS_RE,
+                      "nt_asset_detail": _NAD_COLUMNS_RE}[layout]
         lines = [l.strip() for l in text.splitlines()]
         end = next((i for i, l in enumerate(lines) if columns_re.match(l)), 0)
         return [l for l in lines[:end] if l]
@@ -1151,7 +1239,7 @@ def find_schedule_4i_pages(pdf_path: str, start_heading: str, layout: str = "def
     run: List[int] = []
     start = None
     if layout in ("flat_cost_value", "inline_category", "nt_held_regions", "titled_appendix", "typed_description",
-                  "typed_maturity_rate", "closing_totals"):
+                  "typed_maturity_rate", "closing_totals", "nt_asset_detail"):
         # Run from the first page with the header to the page with the total
         # (nt_held_regions repeats the header, and its schedule is printed twice).
         header_re, total_re = {
@@ -1161,7 +1249,8 @@ def find_schedule_4i_pages(pdf_path: str, start_heading: str, layout: str = "def
             "titled_appendix": (_TA_TITLE_RE, _TA_TOTAL_RE),
             "typed_description": (_TD_COLUMNS_RE, _TD_END_RE),
             "typed_maturity_rate": (_TMR_COLUMNS_RE, _TMR_GRAND_RE),
-            "closing_totals": (_CT_COLUMNS_RE, _CT_GRAND_RE)}[layout]
+            "closing_totals": (_CT_COLUMNS_RE, _CT_GRAND_RE),
+            "nt_asset_detail": (_NAD_COLUMNS_RE, _NAD_GRAND_RE)}[layout]
         with pdfplumber.open(pdf_path) as pdf:
             for page_num, page in enumerate(pdf.pages, start=1):
                 if layout == "typed_maturity_rate":
@@ -1247,6 +1336,8 @@ def parse_schedule_4i_pages(pdf_path: str, page_nums: List[int], layout: str = "
         return _parse_bare_subtotals(pdf_path, page_nums)
     if layout == "inline_category":
         return _parse_inline_category(pdf_path, page_nums)
+    if layout == "nt_asset_detail":
+        return _parse_nt_asset_detail(pdf_path, page_nums)
     if layout == "nt_held_regions":
         return _parse_nt_held_regions(pdf_path, page_nums, PLAN_PARSERS.get(plan_id, {}).get("hedge_fund_rows"))
     if layout == "titled_appendix":
@@ -2552,6 +2643,181 @@ def _parse_nt_held_regions(pdf_path: str, page_nums: List[int],
             "grand_total": grand_total, "grand_reconciled": grand_reconciled}
 
 
+def _nad_body(text: str) -> List[str]:
+    """nt_asset_detail lines below the column header, notes and footer dropped."""
+    lines = [l.strip() for l in text.splitlines()]
+    start = next((i + 1 for i, l in enumerate(lines) if _NAD_COLUMNS_RE.match(l)), len(lines))
+    return [l for l in lines[start:] if l and not _NAD_SKIP_RE.match(l)]
+
+
+def _nad_nums(line: str) -> Optional[List[float]]:
+    """A line of amounts only (at least six), else None."""
+    toks = line.split()
+    if len(toks) < 6 or not all(_NAD_NUM_RE.match(t) for t in toks):
+        return None
+    return [_num(t) for t in toks]
+
+
+def _parse_nt_asset_detail(pdf_path: str, page_nums: List[int]) -> Optional[Dict]:
+    """parse_schedule_4i_pages for the nt_asset_detail layout. Every amount
+    line ends "<market value> <cost> <gain market> <gain translation> <gain
+    total>", so value and cost are read from the right. Sections are
+    sub-categories, checked against their "Total <sub-category>" line; the
+    category and region totals are rollups and are skipped."""
+    pdf_stem = pdf_path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+    page_nums = sorted(set(page_nums))
+    with pdfplumber.open(pdf_path) as pdf:
+        bodies = {}
+        for page_num in page_nums:
+            if not 1 <= page_num <= len(pdf.pages):
+                return None
+            text = pdf.pages[page_num - 1].extract_text() or ""
+            if not _NAD_HEADER_RE.search(text):
+                return None
+            bodies[page_num] = _nad_body(text)
+
+    sections, unparsed, pages = [], [], []
+    grand_total = None
+    category = None  # open category heading
+    current = None  # open sub-category section
+    region = None
+    headings: List[str] = []  # unnumbered heading lines not yet assigned
+    pending_total = None  # "Total <name>" waiting for its amounts line
+    row_name = None  # description waiting for its amounts line
+    row_id = ""
+    same = lambda a, b: a is not None and b is not None and a.lower() == b.lower()
+
+    def flush(page_num):
+        # One heading opens a sub-category under the open category, two open
+        # both; a repeat of the open ones (every page's top) changes nothing.
+        nonlocal category, current, headings
+        hs = [h for h in headings if not (same(h, category) or (current and same(h, current["sub"])))]
+        if len(headings) >= 2 and not same(headings[-2], category):
+            category = headings[-2]
+        if hs:
+            sub = hs[-1]
+            key = f"{category} / {sub}" if category else sub
+            current = {"heading": key, "sub": sub, "partial": False, "rows": 0, "cost": 0.0, "value": 0.0,
+                       "subtotal": None, "asset_type": next(
+                           (label for pattern, label in _NAD_ALT_TYPES if re.search(pattern, key, re.I)), None)}
+            if current["asset_type"] is None:
+                current["fallback"] = next(
+                    (label for pattern, label in _NAD_ASSET_TYPES if re.search(pattern, sub if label == "" else key,
+                                                                               re.I)), "")
+            sections.append(current)
+        headings = []
+
+    for page_num in page_nums:
+        mapped_rows = []
+        body = bodies[page_num]
+        for i, line in enumerate(body):
+            nums = _nad_nums(line)
+            if pending_total is not None:
+                name, pending_total = pending_total, None
+                if nums is None:
+                    unparsed.append({"page_number": page_num, "line": f"Total {name}"})
+                elif not name:
+                    grand_total = [nums[-4], nums[-5]]
+                    break
+                elif current and same(name, current["sub"]):
+                    current["subtotal"] = [nums[-4], nums[-5]]
+                    current, region = None, None
+                    continue
+                elif same(name, category):
+                    category, region = None, None
+                    continue
+                else:
+                    unparsed.append({"page_number": page_num, "line": f"Total {name}"})
+                    continue
+            if line == "Total" or (line.startswith("Total ") and not re.search(r"\d", line)):
+                flush(page_num)
+                pending_total = line[len("Total"):].strip()
+                continue
+            if line.startswith("Total ") and _trailing_nums(line, 6):
+                continue  # region / currency rollup
+            if row_name is not None and nums is None:
+                if " " not in line:
+                    continue  # ticker or manager id under the description
+                unparsed.append({"page_number": page_num, "line": row_name})
+                row_name = None
+            if nums is not None:
+                if row_name is None:
+                    unparsed.append({"page_number": page_num, "line": line})
+                    continue
+                if headings:
+                    flush(page_num)
+                if current is None:
+                    unparsed.append({"page_number": page_num, "line": row_name})
+                    row_name = None
+                    continue
+                value, cost = nums[-5], nums[-4]
+                current["rows"] += 1
+                current["value"] += value
+                current["cost"] += cost
+                name, row_name = row_name, None
+                if not value:
+                    continue
+                row_type = "" if current["asset_type"] else next(
+                    (label for pattern, label in _NAD_ROW_TYPES if re.search(pattern, name)), "")
+                asset_type = current["asset_type"] or row_type or current["fallback"]
+                mapped_rows.append({
+                    "issuer_name": "",
+                    "investment_description": name,
+                    "asset_type": asset_type,
+                    "asset_type_source": "row" if row_type else ("heading" if asset_type else "none"),
+                    "par_value": "",
+                    "cost": _fmt(cost),
+                    "current_value": _fmt(value),
+                    "units_or_shares": _fmt(nums[0]) if len(nums) >= 8 else "",
+                    "asset_identifier": row_id,
+                    "interest_rate": "",
+                    "maturity_date": "",
+                    "section_heading": current["heading"] + (f" / {region}" if region else ""),
+                    "extraction_method": "sch4i_text",
+                    "page_number": page_num,
+                    "row_id": len(mapped_rows) + 1,
+                })
+                continue
+            idm = _NAD_ID_RE.search(line)
+            if idm:
+                if headings:
+                    flush(page_num)
+                row_name, row_id = line[:idm.start()].strip(), idm.group(1)
+                continue
+            nxt = body[i + 1] if i + 1 < len(body) else ""
+            if _nad_nums(nxt) is not None and not _NAD_REGION_RE.search(line):
+                # A holding without an id ("USD - United States dollar" cash).
+                if headings:
+                    flush(page_num)
+                row_name, row_id = line, ""
+                continue
+            if _NAD_REGION_RE.search(line):
+                if headings:
+                    flush(page_num)
+                region = line
+                continue
+            headings.append(line)
+        pages.append({
+            "pdf": pdf_path, "pdf_stem": pdf_stem, "page_number": page_num,
+            "mapped_rows": mapped_rows, "ocr_cells": [], "normalized_path": pdf_path,
+        })
+        if grand_total is not None:
+            break
+
+    for section in sections:
+        fallback = section.pop("fallback", "")
+        section["asset_type"] = section["asset_type"] or fallback
+        sub = section["subtotal"]
+        section["cost_diff"] = None if sub is None else section["cost"] - sub[0]
+        section["value_diff"] = None if sub is None else section["value"] - sub[1]
+        section["reconciled"] = False if sub is None else (
+            abs(section["value_diff"]) <= 1.0 and abs(section["cost_diff"]) <= 1.0)
+    grand_reconciled = False if grand_total is None else \
+        abs(sum(s["value"] for s in sections) - grand_total[1]) <= 1.0
+    return {"pages": pages, "sections": sections, "unparsed": unparsed,
+            "grand_total": grand_total, "grand_reconciled": grand_reconciled}
+
+
 def _ta_num(tok: str) -> Optional[float]:
     """A titled_appendix amount, split first digit rejoined; None unless it groups by thousands."""
     tok = tok.replace(" ", "")
@@ -2732,8 +2998,15 @@ def _parse_typed_maturity_rate(pdf_path: str, page_nums: List[int],
       wrapped_row: pattern ending a row's first line when its name wraps and
         the amounts print on the next line (H-E-B); the match is dropped.
       grand_cost_check: False when the printed grand total's cost disagrees
-        with the filer's own section totals (Les Schwab, $15)."""
+        with the filer's own section totals (Les Schwab, $15).
+      headings: pattern every section heading matches; any other line without
+        amounts is the first line of a wrapped name, and a "Total ..." line is
+        a subtotal only when it totals a heading (Directors Guild, whose rows
+        include "TOTAL FINA ELF CAP").
+      bare_heading_total: a section may close with "<heading> <cost> <value>",
+        no "Total" (Directors Guild's Interest-Bearing Cash)."""
     options = options or {}
+    headings_re = re.compile(options["headings"], re.I) if options.get("headings") else None
     row_rounding = options.get("row_rounding", False)
     value_only = options.get("value_only", False)
     n_amounts = 1 if value_only else 2
@@ -2787,6 +3060,10 @@ def _parse_typed_maturity_rate(pdf_path: str, page_nums: List[int],
                 grand_total = amounts(_trailing_nums(clean, n_amounts))
                 continue
             m = _TMR_SUBTOTAL_RE.match(clean)
+            if m and headings_re:
+                t = _trailing_nums(m.group(1), n_amounts)
+                if not t or not headings_re.match(t[0]):
+                    m = None
             if m:
                 t = amounts(_trailing_nums(m.group(1), n_amounts))
                 if current is None or not t:
@@ -2802,6 +3079,16 @@ def _parse_typed_maturity_rate(pdf_path: str, page_nums: List[int],
             if wrapped_re and wrapped_re.search(clean) and not _trailing_nums(clean, 1):
                 pending = wrapped_re.sub("", clean).strip()
                 continue
+            if headings_re and not _trailing_nums(clean, 1):
+                base = re.sub(r"\s*\(continued\)$", "", line, flags=re.I).rstrip(":")
+                if not headings_re.match(base):
+                    pending = f"{pending} {clean}".strip() if pending else clean
+                    continue
+            if options.get("bare_heading_total") and current is not None and current["subtotal"] is None:
+                t = _trailing_nums(clean, 2)
+                if t and heading_key(t[0]) == heading_key(current["heading"]):
+                    close(current, t[1])
+                    continue
             t = _trailing_nums(clean, 1 if value_only else 3)
             if value_only:
                 if t:
@@ -2867,7 +3154,7 @@ def _parse_typed_maturity_rate(pdf_path: str, page_nums: List[int],
             # UFCW repeats its section heading as column (c); the name is what precedes it.
             type_re = r"[\s\-]+".join(map(re.escape, re.split(r"[\s\-]+", current["heading"])))
             tm = re.search(r"\s" + type_re + r"(?=\s|$)", title, re.I)
-            if pending is not None:
+            if pending is not None and not headings_re:
                 name, rest, pending = f"{pending} {title}".strip(), ["", ""], None
             elif not title:
                 name, rest = current["heading"], ["", ""]
@@ -2887,6 +3174,9 @@ def _parse_typed_maturity_rate(pdf_path: str, page_nums: List[int],
                 fields = title.split()
                 rest = [next((f for f in fields if re.fullmatch(r"\d{1,2}/\d{1,2}/\d{4}", f)), ""),
                         next((f for f in fields if re.fullmatch(r"\d+(?:\.\d+)?%", f)), "")]
+            if pending is not None:
+                # Directors Guild: the wrapped name's first line, then this line's name column.
+                name, pending = f"{pending} {name}".strip(), None
             current["rows"] += 1
             current["cost"] += cost or 0.0
             current["value"] += value or 0.0
