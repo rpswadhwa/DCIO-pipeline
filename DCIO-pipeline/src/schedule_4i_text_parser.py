@@ -184,6 +184,19 @@ within $0.50 each. First seen on Western Conference of Teamsters (ack
 $14,459,497,754 vs certified JV $14,448,663,252; the 2024 filing's Appendix X,
 pp.648-649, 126 rows, $14,576,499,306, also ties).
 
+A fifteenth layout, "typed_description" (2026-10-15), is a tax-software
+"Federal Statements" list, "(a) Identity Description Current Cost Current
+Value" atop every page: one alphabetical run of "<name> <type> <cost>
+<value>" rows, where <type> is the filer's own column ("Limited Partnership",
+"Commingled Investment", "Money Market Mutual Funds", ...), ended by "(a) -
+There are no parties in interest". No subtotal or total is printed, so a
+line that isn't a typed row fails the parse. Commingled rows are index CITs
+by name, otherwise offshore hedge funds. First seen on McKinsey Retirement
+Trust (ack 20251010153934NAL0004381603001, pp.6-10, 377 rows, $18.76B against
+$12.23B total assets: SSALT Fund Ltd, $6.67B, is MIO Partners' pool whose
+holdings are also listed). A registry "exclude_rows" pattern drops such
+rows; McKinsey's drops SSALT, leaving 274 rows, $12.05B.
+
 Registered per plan, not per filing: PLAN_PARSERS is keyed by plan_master
 plan_id (EIN-PN), which stays fixed across years while ack_id and page
 numbers change. run_pipeline.py resolves each PDF's ack_id to a plan_id via
@@ -206,6 +219,8 @@ from .asset_type_patterns import detect_asset_type
 # of the schedule. Mayo: only the Mutual funds / Collective trust / Absolute
 # return / Private Investments / Other block (pp.45-52 in the 2025 filing) is
 # wanted, not the cash/government/bond/equity pages before it.
+# notes: dated, plain-language caveats about the plan's data, kept here until
+# plan 360 has a place to show them (2026-10-15).
 PLAN_PARSERS = {
     "416011702-001": {"name": "Mayo Pension Plan", "start_heading": r"^mutual\s+funds?$"},
     # Shell: the whole schedule, every section (2026-10-14).
@@ -275,7 +290,29 @@ PLAN_PARSERS = {
     # Western Teamsters: only the LP appendix (Appendix X in the 2024 filing,
     # VII in 2025); the rest of the 4i schedule is a per-manager rollup (2026-10-15).
     "916145047-001": {"name": "Western Conference of Teamsters Pension Plan", "layout": "titled_appendix",
-                      "start_heading": r"^Limited\s+Partnerships?\s+and\s+Other\s+Private\s+Equity$"},
+                      "start_heading": r"^Limited\s+Partnerships?\s+and\s+Other\s+Private\s+Equity$",
+                      "notes": [
+                          "2026-10-15: Only the Limited Partnerships and Other Private Equity appendix is "
+                          "parsed; the rest of the 4i schedule is a per-manager rollup without holdings.",
+                      ]},
+    # McKinsey Retirement Trust: the held schedule, Statement #1, pp.6-10 (2026-10-15).
+    # exclude_rows: SSALT Fund Ltd/SPV LP ($6.69B) is MIO Partners' pool whose
+    # hedge fund and LP holdings are also listed line by line; with SSALT the
+    # list is $18.73B against $12.20B of Sch H investments, without it $12.05B.
+    # Keep the underlying funds, drop the wrapper (2026-10-15).
+    "131826332-017": {"name": "McKinsey Retirement Trust", "layout": "typed_description",
+                      "start_heading": r"^Statement\s+#\s*\d+\s+\W\s+Schedule\s+H,\s+Line\s+4i\b",
+                      "exclude_rows": r"^SSALT\s+Fund\b",
+                      "notes": [
+                          "2026-10-15: SSALT Fund Ltd + SSALT Fund SPV LP ($6.69B, FY2024) excluded. SSALT is "
+                          "an MIO Partners (McKinsey investment office) pool; the 4i schedule also lists its "
+                          "hedge fund and LP holdings line by line. With SSALT the schedule totals $18.73B vs "
+                          "$12.20B Sch H investments; without it $12.05B. Look-through is inferred from totals, "
+                          "not from a published SSALT holdings list.",
+                          "2026-10-15: Certified joint-venture amount is $0 because the filer reports all "
+                          "alternatives under Sch H 1c(15) other investments ($11.93B); alternatives vs "
+                          "certified JV will show a large positive gap by design.",
+                      ]},
 }
 
 # Every requested page must carry this column-header line, else we don't own the layout.
@@ -493,6 +530,24 @@ _TA_ROW_RE = re.compile(r"^(.+?)\s+(Equity|Limited\s+Partnership|Other\s+Private
                         rf"(?:\$\s*)?({_TA_AMT})\s+(?:\$\s*)?({_TA_AMT})$")
 _TA_TOTAL_LINE_RE = re.compile(rf"^Total\b.*?\s*(?:\$\s*)?({_TA_AMT})\s+(?:\$\s*)?({_TA_AMT})$")
 _TA_GROUPED_RE = re.compile(r"^\(?\d{1,3}(,\d{3})*\)?$|^-$")
+# Column header, the first line of every page's body.
+_TD_COLUMNS_RE = re.compile(r"^\(a\)\s+Identity\s+Description\s+Current\s+Cost\s+Current\s+Value$", re.M)
+# The parties-in-interest note that follows the last row.
+_TD_END_RE = re.compile(r"^\(a\)\s+\W\s+There\s+are\s+no\s+parties\s+in\s+interest\b", re.M)
+# The filer's own type column -> asset_type; "Commingled Investment" is typed by name.
+_TD_TYPES = {
+    "Limited Partnership": "Partnership Interest",
+    "Private Equity": "Partnership Interest",
+    "Commingled Investment": None,
+    "Money Market Mutual Funds": "Short-Term Investment Fund",
+    "Treasury Bills": "Bond",
+    "Currency Forward": "Derivative",
+    "Equity": "Common Stock",
+}
+_TD_ROW_RE = re.compile(r"^(.+?)\s+(" + "|".join(sorted(map(re.escape, _TD_TYPES), key=len, reverse=True))
+                        + r")\s+(-|\(?\d[\d,]*\)?)\s+(-|\(?\d[\d,]*\)?)$")
+# Commingled index funds; every other commingled vehicle in this list is an offshore hedge fund.
+_TD_INDEX_CIT_RE = re.compile(r"\bSSGA\b|\bState\s+Street\b|\bBlackRock\b.*\bIndex\b|\bNL\s+SF\b", re.I)
 _BOILERPLATE_RE = re.compile(
     r"^(EIN\s|Schedule\s+H,|December\s+\d|Face\s+Amount|Asset\s+Interest|Identifier\s+Security)", re.I)
 _NUM_RE = re.compile(r"^\(?-?\$?\d[\d,]*(\.\d+)?\)?$|^[-—–]$")
@@ -753,10 +808,11 @@ def _headings(text: str, layout: str) -> List[str]:
         return [l for l in lines[:end] if l]
     if layout == "cpa_total_lines":
         return [l for l in _ctl_body(text) if not l.startswith("TOTAL ") and not _trailing_nums(l, 2)]
-    if layout in ("flat_cost_value", "inline_category", "nt_held_regions", "titled_appendix"):
+    if layout in ("flat_cost_value", "inline_category", "nt_held_regions", "titled_appendix", "typed_description"):
         # Title-block lines above the column header (pool name among them).
         columns_re = {"flat_cost_value": _FCV_HEADER_RE, "inline_category": _IC_COLUMNS_RE,
-                      "nt_held_regions": _NHR_COLUMNS_RE, "titled_appendix": _TA_COLUMNS_RE}[layout]
+                      "nt_held_regions": _NHR_COLUMNS_RE, "titled_appendix": _TA_COLUMNS_RE,
+                      "typed_description": _TD_COLUMNS_RE}[layout]
         lines = [l.strip() for l in text.splitlines()]
         end = next((i for i, l in enumerate(lines) if columns_re.match(l)), 0)
         return [l for l in lines[:end] if l]
@@ -806,14 +862,15 @@ def find_schedule_4i_pages(pdf_path: str, start_heading: str, layout: str = "def
     """
     run: List[int] = []
     start = None
-    if layout in ("flat_cost_value", "inline_category", "nt_held_regions", "titled_appendix"):
+    if layout in ("flat_cost_value", "inline_category", "nt_held_regions", "titled_appendix", "typed_description"):
         # Run from the first page with the header to the page with the total
         # (nt_held_regions repeats the header, and its schedule is printed twice).
         header_re, total_re = {
             "flat_cost_value": (_FCV_HEADER_RE, _FCV_TOTAL_RE),
             "inline_category": (_IC_COLUMNS_RE, re.compile(r"^Grand\s+Total\s", re.I | re.M)),
             "nt_held_regions": (_NHR_COLUMNS_RE, _NHR_GRAND_RE),
-            "titled_appendix": (_TA_TITLE_RE, _TA_TOTAL_RE)}[layout]
+            "titled_appendix": (_TA_TITLE_RE, _TA_TOTAL_RE),
+            "typed_description": (_TD_COLUMNS_RE, _TD_END_RE)}[layout]
         with pdfplumber.open(pdf_path) as pdf:
             for page_num, page in enumerate(pdf.pages, start=1):
                 text = page.extract_text() or ""
@@ -885,6 +942,8 @@ def parse_schedule_4i_pages(pdf_path: str, page_nums: List[int], layout: str = "
         return _parse_nt_held_regions(pdf_path, page_nums)
     if layout == "titled_appendix":
         return _parse_titled_appendix(pdf_path, page_nums)
+    if layout == "typed_description":
+        return _parse_typed_description(pdf_path, page_nums, PLAN_PARSERS.get(plan_id, {}).get("exclude_rows"))
     if layout == "detail_report":
         return _parse_detail_report(pdf_path, page_nums)
     if layout == "soi_revalued_cost":
@@ -2244,6 +2303,87 @@ def _parse_titled_appendix(pdf_path: str, page_nums: List[int]) -> Optional[Dict
         section["cost_diff"] is None or abs(section["cost_diff"]) <= tol)
     return {"pages": pages, "sections": [section], "unparsed": unparsed,
             "grand_total": sub, "grand_reconciled": section["reconciled"]}
+
+
+def _parse_typed_description(pdf_path: str, page_nums: List[int],
+                             exclude_rows: Optional[str] = None) -> Optional[Dict]:
+    """parse_schedule_4i_pages for the typed_description layout. The last page
+    must carry the parties-in-interest note. Nothing is printed to reconcile
+    to, so any line that isn't a typed row fails the parse instead.
+    exclude_rows: rows whose name matches are parsed but not emitted (a pool
+    whose holdings are listed too); they are returned under "excluded"."""
+    exclude_re = re.compile(exclude_rows, re.I) if exclude_rows else None
+    pdf_stem = pdf_path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+    page_nums = sorted(set(page_nums))
+    with pdfplumber.open(pdf_path) as pdf:
+        texts = {}
+        for page_num in page_nums:
+            if not 1 <= page_num <= len(pdf.pages):
+                return None
+            texts[page_num] = pdf.pages[page_num - 1].extract_text() or ""
+            if not _TD_COLUMNS_RE.search(texts[page_num]):
+                return None
+
+    sections: Dict[str, Dict] = {}
+    unparsed, pages, excluded = [], [], []
+    ended = False
+    for page_num in page_nums:
+        lines = [l.strip() for l in texts[page_num].splitlines()]
+        start = next(i + 1 for i, l in enumerate(lines) if _TD_COLUMNS_RE.match(l))
+        mapped_rows = []
+        for line in lines[start:]:
+            if not line:
+                continue
+            if _TD_END_RE.match(line):
+                ended = True
+                break
+            m = _TD_ROW_RE.match(line)
+            if not m:
+                unparsed.append({"page_number": page_num, "line": line})
+                continue
+            title, kind = m.group(1), m.group(2)
+            cost, value = (None if g == "-" else _num(g) for g in (m.group(3), m.group(4)))
+            if exclude_re and exclude_re.search(title):
+                excluded.append({"page_number": page_num, "line": line, "value": value})
+                continue
+            section = sections.setdefault(kind, {"heading": kind, "asset_type": _TD_TYPES[kind] or "",
+                                                 "partial": False, "rows": 0, "cost": 0.0, "value": 0.0,
+                                                 "subtotal": None, "cost_diff": None, "value_diff": None,
+                                                 "reconciled": None})
+            section["rows"] += 1
+            section["cost"] += cost or 0.0
+            section["value"] += value or 0.0
+            if not value:
+                continue
+            asset_type = _TD_TYPES[kind] or (
+                "Common/Collective Trust Fund" if _TD_INDEX_CIT_RE.search(title) else "Hedge Fund")
+            mapped_rows.append({
+                "issuer_name": "",
+                "investment_description": title,
+                "asset_type": asset_type,
+                "asset_type_source": "heading" if _TD_TYPES[kind] else "row",
+                "par_value": "",
+                "cost": _fmt(cost),
+                "current_value": _fmt(value),
+                "units_or_shares": "",
+                "asset_identifier": "",
+                "interest_rate": "",
+                "maturity_date": "",
+                "section_heading": kind,
+                "extraction_method": "sch4i_text",
+                "page_number": page_num,
+                "row_id": len(mapped_rows) + 1,
+            })
+        pages.append({
+            "pdf": pdf_path, "pdf_stem": pdf_stem, "page_number": page_num,
+            "mapped_rows": mapped_rows, "ocr_cells": [], "normalized_path": pdf_path,
+        })
+        if ended:
+            break
+
+    return {"pages": pages, "sections": list(sections.values()), "unparsed": unparsed,
+            "excluded": excluded,
+            "grand_total": None, "grand_reconciled": False if unparsed or not ended else None}
 
 
 def _parse_cpa_total_lines(pdf_path: str, page_nums: List[int]) -> Optional[Dict]:
