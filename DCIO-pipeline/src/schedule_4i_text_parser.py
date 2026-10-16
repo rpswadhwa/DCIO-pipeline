@@ -322,6 +322,40 @@ PLAN_PARSERS = {
     # (2026-10-16).
     "341843785-001": {"name": "FirstEnergy Corp. Master Pension Plan", "layout": "typed_maturity_rate",
                       "start_heading": r"^FirstEnergy\s+Corp\.\s+Master\s+Pension\s+Plan$", "row_rounding": True},
+    # Elliott's two plans: one page each, cash plus shares of Elliott International
+    # Limited, the offshore feeder into Elliott's hedge fund = cert JV (2026-10-16).
+    "853352943-001": {"name": "Elliott Money Purchase Pension Plan", "layout": "typed_maturity_rate",
+                      "start_heading": r"^Elliott\s+Money\s+Purchase\s+Pension\s+Plan$",
+                      "row_asset_types": [(r"\bElliott\s+International\s+Limited\b", "Hedge Fund")]},
+    "853352943-002": {"name": "Elliott Section 401(k) Plan", "layout": "typed_maturity_rate",
+                      "start_heading": r"^Elliott\s+Section\s+401\(k\)\s+Plan$",
+                      "row_asset_types": [(r"\bElliott\s+International\s+Limited\b", "Hedge Fund")]},
+    # Lone Pine Capital 401(k): p.19, values only; limited partnerships = cert JV.
+    # A typed copy follows on p.20 (2026-10-16).
+    "311679699-001": {"name": "Lone Pine Capital LLC 401(k) Profit Sharing Plan", "layout": "typed_maturity_rate",
+                      "start_heading": r"^Lone\s+Pine\s+Capital\s+LLC\s+401\(k\)\s+Profit\s+Sharing\s+Plan$",
+                      "value_only": True},
+    # H-E-B Savings & Retirement Plan: pp.25-28, values only, long collective trust
+    # names wrap with the amount on the next line; limited partnerships = cert JV,
+    # and the filer types its other alternative funds HEDGE FUNDS (2026-10-16).
+    "740537175-001": {"name": "H-E-B Savings & Retirement Plan", "layout": "typed_maturity_rate",
+                      "start_heading": r"^H-E-B\s+Savings\s+&\s+Retirement\s+Plan$", "value_only": True,
+                      "wrapped_row": r"\s*COMMON/COLLECTIVE\s+TRUST\s+FUND$",
+                      "row_asset_types": [(r"\bHEDGE\s+FUNDS\b", "Hedge Fund")]},
+    # Les Schwab Profit Sharing Retirement Plan: pp.17-18 (a copy follows); limited
+    # partnerships plus "Privately Managed Investment Funds", which are hedge funds
+    # (Elliott, King Street, Silver Point), = cert JV. Every section ties; the
+    # printed grand total's cost is $15 below the section costs' sum (2026-10-16).
+    "930470437-333": {"name": "Les Schwab Profit Sharing Retirement Plan", "layout": "typed_maturity_rate",
+                      "start_heading": r"^Les\s+Schwab\s+Profit\s+Sharing\s+Retirement\s+Plan\b", "blank_cost": True,
+                      "grand_cost_check": False,
+                      "heading_asset_types": [(r"privately\s+managed", "Hedge Fund")]},
+    # Carpenters Annuity Trust Fund for Northern California: pp.21-22, bare section
+    # totals and an unlabeled grand total; partnership/joint ventures = cert JV
+    # (2026-10-16).
+    "946534591-001": {"name": "Carpenters Annuity Trust Fund for Northern California",
+                      "layout": "typed_maturity_rate",
+                      "start_heading": r"^Carpenters\s+Annuity\s+Trust\s+Fund\s+for\s+Northern\s+California$"},
     # Laborers Pension Trust Fund for Northern California: pp.22-42, every total
     # ties; limited partnerships = cert JV (2026-10-16).
     "946277608-001": {"name": "Laborers Pension Trust Fund for Northern California", "layout": "closing_totals",
@@ -687,10 +721,24 @@ _TMR_COLUMNS_RE = re.compile(r"^\(a\)\s+Identity\s+of\s+issuer,\s+borrower,\s+le
                              r"|^Description\s+of\s+Investment$"
                              # FirstEnergy's (2026-10-16).
                              r"|^Interest\s+Identity\s+of\s+issue,\s+borrower,\s+lessor\s+or\s+similar\s+party\s+"
-                             r"par\s+or\s+maturity\s+value\s+Cost\s+Value$", re.M)
+                             r"par\s+or\s+maturity\s+value\s+Cost\s+Value$"
+                             # Elliott's two plans (2026-10-16).
+                             r"|^Lessor\s+or\s+Similar\s+Party\s+Collateral,\s+Par\s+or\s+Maturity\s+Value\s+Cost\s+Value$"
+                             # Lone Pine's and H-E-B's value-only schedules (2026-10-16).
+                             r"|^Identity\s+of\s+Issuer,\s+Borrower,\s+Lessor\s+or\s+Similar\s+Party\s+Fair\s+Value$"
+                             r"|^Lessor,\s+or\s+Similar\s+Party\s+Investment/Number\s+of\s+Shares\s+Value$"
+                             # Les Schwab's (2026-10-16).
+                             r"|^Party\s+of\s+Interest,\s+Collateral,\s+Par\s+or\s+Maturity\s+Value$"
+                             # Carpenters Annuity Trust Fund for Northern California's (2026-10-16).
+                             r"|^Lessor,\s+or\s+Similar\s+Party\s+par\s+or\s+maturity\s+value\s+Cost\s+Value$", re.M)
 _TMR_SUBTOTAL_RE = re.compile(r"^(?:Sub)?total\s+(?:-\s+)?(.+)$", re.I)
 _TMR_GRAND_RE = re.compile(r"^Total\s+assets\s+\(held\s+at\s+end\s+of\s+year\)"
-                           r"|^Total\s+Investments,\s+at\s+Fair\s+Value\b|^Grand\s+Total\b", re.I | re.M)
+                           r"|^Total\s+Investments,\s+at\s+Fair\s+Value\b|^Grand\s+Total\b"
+                           # Elliott; Les Schwab; H-E-B (2026-10-16).
+                           r"|^Total\s+assets\s+held\s+at\s+end\s+of\s+year\b|^Total\s+Investments\s+\$"
+                           r"|^Total\s+\$\s*[\d,]+$"
+                           # Carpenters NorCal: an unlabeled "$ <cost> $ <value>" (2026-10-16).
+                           r"|^\$\s*\d[\d ,]*\s+\$\s*\d[\d ,]*$", re.I | re.M)
 # Citigroup's umbrella heading over every section, and its "(Continued)" page
 # footers; 3M's "Schedule 1" and FirstEnergy's "Page 17" page footers.
 _TMR_SKIP_RE = re.compile(r"^Investments,\s+at\s+fair\s+value:$|^\d+\s+\(Continued\)$|^Schedule\s+\d+$|^Page\s+\d+$",
@@ -1206,8 +1254,7 @@ def parse_schedule_4i_pages(pdf_path: str, page_nums: List[int], layout: str = "
     if layout == "typed_description":
         return _parse_typed_description(pdf_path, page_nums, PLAN_PARSERS.get(plan_id, {}).get("exclude_rows"))
     if layout == "typed_maturity_rate":
-        return _parse_typed_maturity_rate(pdf_path, page_nums,
-                                          PLAN_PARSERS.get(plan_id, {}).get("row_rounding", False))
+        return _parse_typed_maturity_rate(pdf_path, page_nums, PLAN_PARSERS.get(plan_id, {}))
     if layout == "closing_totals":
         return _parse_closing_totals(pdf_path, page_nums)
     if layout == "investments_held_summary":
@@ -2669,11 +2716,30 @@ def _parse_typed_description(pdf_path: str, page_nums: List[int],
 
 
 def _parse_typed_maturity_rate(pdf_path: str, page_nums: List[int],
-                               row_rounding: bool = False) -> Optional[Dict]:
+                               options: Optional[Dict] = None) -> Optional[Dict]:
     """parse_schedule_4i_pages for the typed_maturity_rate layout. The pages
     must start at the first section heading and end at the grand total.
-    row_rounding allows half a dollar per row when a filer rounds each row
-    but totals the unrounded amounts (3M)."""
+    options is the plan's registry entry:
+      row_rounding: half a dollar per row when a filer rounds each row but
+        totals the unrounded amounts (3M).
+      value_only: rows and totals carry a current value only, any share count
+        printed just before it (Lone Pine, H-E-B).
+      blank_cost: a row may print a value with no cost (Les Schwab).
+      heading_asset_types: [(pattern, asset_type)] tried on a heading before
+        _TMR_ASSET_TYPES (Les Schwab's privately managed funds).
+      row_asset_types: [(pattern, asset_type)] tried on a row's line when its
+        section has no type (Elliott's one fund, H-E-B's "HEDGE FUNDS" column).
+      wrapped_row: pattern ending a row's first line when its name wraps and
+        the amounts print on the next line (H-E-B); the match is dropped.
+      grand_cost_check: False when the printed grand total's cost disagrees
+        with the filer's own section totals (Les Schwab, $15)."""
+    options = options or {}
+    row_rounding = options.get("row_rounding", False)
+    value_only = options.get("value_only", False)
+    n_amounts = 1 if value_only else 2
+    heading_types = list(options.get("heading_asset_types", [])) + _TMR_ASSET_TYPES
+    row_types = options.get("row_asset_types", [])
+    wrapped_re = re.compile(options["wrapped_row"]) if options.get("wrapped_row") else None
     pdf_stem = pdf_path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
     page_nums = sorted(set(page_nums))
     with pdfplumber.open(pdf_path) as pdf:
@@ -2689,9 +2755,25 @@ def _parse_typed_maturity_rate(pdf_path: str, page_nums: List[int],
         if not any(_TMR_COLUMNS_RE.match(tl["text"].strip()) for tl in text_lines[page_nums[0]]):
             return None
 
+    def close(section: Dict, subtotal: List[float]) -> None:
+        section["subtotal"] = subtotal
+        section["cost_diff"] = section["cost"] - subtotal[0]
+        section["value_diff"] = section["value"] - subtotal[1]
+        tol = 1.0 + (0.5 * section["rows"] if row_rounding else 0.0)
+        section["reconciled"] = abs(section["value_diff"]) <= tol and abs(section["cost_diff"]) <= tol
+
+    def amounts(t: Optional[tuple]) -> Optional[List[float]]:
+        # [cost, value]; value-only schedules print no cost.
+        return None if not t else [0.0] + t[1] if value_only else t[1]
+
+    def heading_key(heading: str) -> str:
+        # H-E-B continues "Limited Partnerships" as "Limited Partnership (continued)".
+        return re.sub(r"s\b", "", heading.lower())
+
     sections, unparsed, pages = [], [], []
     current = parent = None
     grand_total = None
+    pending = None   # first line of a wrapped row
     for page_num in page_nums:
         lines = [tl["text"].strip() for tl in text_lines[page_num]]
         start = next((i + 1 for i, l in enumerate(lines) if _TMR_COLUMNS_RE.match(l)), 0)
@@ -2699,14 +2781,14 @@ def _parse_typed_maturity_rate(pdf_path: str, page_nums: List[int],
         for line, tl in zip(lines[start:], text_lines[page_num][start:]):
             if not line or re.fullmatch(r"\d+", line) or grand_total is not None or _TMR_SKIP_RE.match(line):
                 continue
-            clean = " ".join(tok for tok in line.split() if tok != "$")
+            # Les Schwab prints a negative cost as "( 2,365,804)".
+            clean = re.sub(r"\(\s+(?=\d)", "(", " ".join(tok for tok in line.split() if tok != "$"))
             if _TMR_GRAND_RE.match(line):
-                t = _trailing_nums(clean, 2)
-                grand_total = t[1] if t else None
+                grand_total = amounts(_trailing_nums(clean, n_amounts))
                 continue
             m = _TMR_SUBTOTAL_RE.match(clean)
             if m:
-                t = _trailing_nums(m.group(1), 2)
+                t = amounts(_trailing_nums(m.group(1), n_amounts))
                 if current is None or not t:
                     unparsed.append({"page_number": page_num, "line": line})
                     continue
@@ -2715,14 +2797,20 @@ def _parse_typed_maturity_rate(pdf_path: str, page_nums: List[int],
                     # stock" after "Total corporate stock - preferred"); the grand
                     # total still checks every row.
                     continue
-                current["subtotal"] = t[1]
-                current["cost_diff"] = current["cost"] - t[1][0]
-                current["value_diff"] = current["value"] - t[1][1]
-                tol = 1.0 + (0.5 * current["rows"] if row_rounding else 0.0)
-                current["reconciled"] = abs(current["value_diff"]) <= tol and abs(current["cost_diff"]) <= tol
+                close(current, t)
                 continue
-            t = _trailing_nums(clean, 3)
-            if t:
+            if wrapped_re and wrapped_re.search(clean) and not _trailing_nums(clean, 1):
+                pending = wrapped_re.sub("", clean).strip()
+                continue
+            t = _trailing_nums(clean, 1 if value_only else 3)
+            if value_only:
+                if t:
+                    title, (value,), cost, par = t[0], t[1], None, None
+                    # H-E-B's share count sits just before the value.
+                    shares = title.rsplit(None, 1)
+                    if len(shares) == 2 and re.fullmatch(r"\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+\.\d+", shares[1]):
+                        title, par = shares[0], _num(shares[1])
+            elif t:
                 title, (par, cost, value) = t
             else:
                 # Western States prints "N/A" for a partnership's par.
@@ -2745,18 +2833,23 @@ def _parse_typed_maturity_rate(pdf_path: str, page_nums: List[int],
                         # 3M prints one unlabeled value under "Interest bearing cash";
                         # its section total includes it.
                         title, (value,), cost, par = "", t[1], None, None
-                    elif t and t[0].endswith("**"):
+                    elif t and (t[0].endswith("**") or options.get("blank_cost")):
                         # FirstEnergy's written-down Russia fund: a value and no cost.
                         title, (value,), cost, par = t[0], t[1], None, None
                     else:
                         t = None
+            if (t and not title and not value_only and cost is not None and par is None
+                    and current is not None and current["rows"] and current["subtotal"] is None):
+                # Carpenters NorCal closes each section with a bare "<cost> <value>".
+                close(current, [cost, value])
+                continue
             if not t:
                 # A heading line opens the next section; "(continued)" reopens one.
                 base = re.sub(r"\s*\(continued\)$", "", line, flags=re.I).rstrip(":")
-                current = next((s for s in sections if s["heading"].lower() == base.lower()), None)
+                current = next((s for s in sections if heading_key(s["heading"]) == heading_key(base)), None)
                 if current is None:
                     current = {"heading": base,
-                               "asset_type": next((label for p, label in _TMR_ASSET_TYPES
+                               "asset_type": next((label for p, label in heading_types
                                                    if re.search(p, base, re.I)), ""),
                                "partial": False, "rows": 0, "cost": 0.0, "value": 0.0, "subtotal": None,
                                "cost_diff": None, "value_diff": None, "reconciled": None}
@@ -2774,16 +2867,21 @@ def _parse_typed_maturity_rate(pdf_path: str, page_nums: List[int],
             # UFCW repeats its section heading as column (c); the name is what precedes it.
             type_re = r"[\s\-]+".join(map(re.escape, re.split(r"[\s\-]+", current["heading"])))
             tm = re.search(r"\s" + type_re + r"(?=\s|$)", title, re.I)
-            if not title:
+            if pending is not None:
+                name, rest, pending = f"{pending} {title}".strip(), ["", ""], None
+            elif not title:
                 name, rest = current["heading"], ["", ""]
             elif tm:
                 name = title[:tm.start()].strip()
                 # "<maturity> <rate>", where the rate may be "VARIABLE RATE".
-                rest = (title[tm.end():].split(None, 1) + [""])[:2]
+                rest = (title[tm.end():].split(None, 1) + ["", ""])[:2]
             else:
                 # Western States: "<name> <type> <collateral> <maturity> <rate>", the
                 # type a separate column; the name ends at the first column gap.
                 chars = [c for c in tl["chars"] if c["text"].strip()]
+                if chars and chars[0]["text"] == "*":
+                    # Elliott's and H-E-B's party-in-interest mark sits in its own column.
+                    chars = chars[1:]
                 cut = next((i for i in range(1, len(chars)) if chars[i]["x0"] - chars[i - 1]["x1"] > 6), len(chars))
                 name = " ".join(pdfplumber.utils.extract_text(chars[:cut], x_tolerance=1).split()) if chars else title
                 fields = title.split()
@@ -2794,11 +2892,13 @@ def _parse_typed_maturity_rate(pdf_path: str, page_nums: List[int],
             current["value"] += value or 0.0
             if not value:
                 continue
+            row_type = "" if current["asset_type"] else next(
+                (label for p, label in row_types if re.search(p, line, re.I)), "")
             mapped_rows.append({
                 "issuer_name": "",
                 "investment_description": name.lstrip("* ").strip(),
-                "asset_type": current["asset_type"],
-                "asset_type_source": "heading" if current["asset_type"] else "none",
+                "asset_type": current["asset_type"] or row_type,
+                "asset_type_source": "heading" if current["asset_type"] else "row" if row_type else "none",
                 "par_value": _fmt(par),
                 "cost": _fmt(cost),
                 "current_value": _fmt(value),
@@ -2820,7 +2920,8 @@ def _parse_typed_maturity_rate(pdf_path: str, page_nums: List[int],
     if grand_total is not None:
         tol = 1.0 + (0.5 * sum(s["rows"] for s in sections) if row_rounding else 0.0)
         grand_reconciled = (abs(sum(s["value"] for s in sections) - grand_total[1]) <= tol
-                            and abs(sum(s["cost"] for s in sections) - grand_total[0]) <= tol)
+                            and (abs(sum(s["cost"] for s in sections) - grand_total[0]) <= tol
+                                 or not options.get("grand_cost_check", True)))
     return {"pages": pages, "sections": sections, "unparsed": unparsed, "grand_total": grand_total,
             "grand_reconciled": False if unparsed else grand_reconciled}
 
