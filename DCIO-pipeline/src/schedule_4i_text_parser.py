@@ -419,8 +419,20 @@ PLAN_PARSERS = {
                       "start_heading": r"^Account\s+Name\s+PFIZER-WYETH\s+DB\s+PLANS$"},
     # Abbott Laboratories Annuity Retirement Trust: the Northern Trust held schedule,
     # pp.57-140 (2026-10-16).
+    # hedge_fund_rows: the untyped "Other" category holds the hedge funds ($851M)
+    # next to long-only funds (WGI and RWC emerging markets), so managers are
+    # named rather than matched on "LTD"/"OFFSHORE" (2026-10-16).
     "360698440-337": {"name": "Abbott Laboratories Annuity Retirement Trust", "layout": "nt_held_regions",
-                      "start_heading": r"^Account\s+Name\s+ABBOTT\s+CONSOLIDATION$"},
+                      "start_heading": r"^Account\s+Name\s+ABBOTT\s+CONSOLIDATION$",
+                      "hedge_fund_rows": r"^(?!.*CASH\s+HELD).*\b(?:BAXTER\s+STREET|BRIDGEWATER|GLENVIEW|"
+                                         r"SILVER\s+POINT|KING\s+STREET|ALEUTIAN|ELLIOTT|CAPULA|VIKING\s+GLOBAL|"
+                                         r"TPG\s+AXON|GMO\s+MULTI\s+STRATEGY)\b",
+                      "notes": [
+                          "2026-10-16: Rows in the untyped Other category from named hedge fund managers "
+                          "(Baxter Street, Bridgewater, Glenview, Silver Point, King Street, Aleutian, Elliott, "
+                          "Capula, Viking, TPG Axon, GMO Multi-Strategy) are typed Hedge Fund; WGI and RWC "
+                          "emerging markets funds stay untyped (long-only).",
+                      ]},
 }
 
 # Every requested page must carry this column-header line, else we don't own the layout.
@@ -1188,7 +1200,7 @@ def parse_schedule_4i_pages(pdf_path: str, page_nums: List[int], layout: str = "
     if layout == "inline_category":
         return _parse_inline_category(pdf_path, page_nums)
     if layout == "nt_held_regions":
-        return _parse_nt_held_regions(pdf_path, page_nums)
+        return _parse_nt_held_regions(pdf_path, page_nums, PLAN_PARSERS.get(plan_id, {}).get("hedge_fund_rows"))
     if layout == "titled_appendix":
         return _parse_titled_appendix(pdf_path, page_nums)
     if layout == "typed_description":
@@ -2362,9 +2374,13 @@ def _nhr_body(text: str) -> List[str]:
     return [l for l in lines[start:] if l and not _NHR_FOOTER_RE.match(l)]
 
 
-def _parse_nt_held_regions(pdf_path: str, page_nums: List[int]) -> Optional[Dict]:
+def _parse_nt_held_regions(pdf_path: str, page_nums: List[int],
+                           hedge_fund_rows: Optional[str] = None) -> Optional[Dict]:
     """parse_schedule_4i_pages for the nt_held_regions layout. The last page
-    must carry the unnamed grand "Total" line."""
+    must carry the unnamed grand "Total" line.
+    hedge_fund_rows: rows in an untyped category whose name matches are typed
+    Hedge Fund (Abbott's "Other")."""
+    hedge_re = re.compile(hedge_fund_rows, re.I) if hedge_fund_rows else None
     pdf_stem = pdf_path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
     page_nums = sorted(set(page_nums))
     with pdfplumber.open(pdf_path) as pdf:
@@ -2445,10 +2461,12 @@ def _parse_nt_held_regions(pdf_path: str, page_nums: List[int]) -> Optional[Dict
             last_row = None
             if not value:
                 continue
-            # Private funds carry their own category here, so a name never makes one.
-            asset_type = current["asset_type"] or next(
-                (label for pattern, label in _FCV_ASSET_TYPES if re.search(pattern, title)
-                 and label not in ("Partnership Interest", "Hedge Fund")), "")
+            # Private funds carry their own category here, so a name never makes one
+            # unless the registry names the plan's hedge fund managers.
+            asset_type = current["asset_type"] or (
+                "Hedge Fund" if hedge_re and hedge_re.search(title) else next(
+                    (label for pattern, label in _FCV_ASSET_TYPES if re.search(pattern, title)
+                     and label not in ("Partnership Interest", "Hedge Fund")), ""))
             rd = _CTL_RATE_DATE_RE.search(title)
             rate, maturity = ((rd.group(2), rd.group(1)) if rd.group(1) else (rd.group(3), rd.group(4))) \
                 if rd else ("", "")
