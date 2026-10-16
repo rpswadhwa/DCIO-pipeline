@@ -313,6 +313,30 @@ PLAN_PARSERS = {
                           "alternatives under Sch H 1c(15) other investments ($11.93B); alternatives vs "
                           "certified JV will show a large positive gap by design.",
                       ]},
+    # Ford Motor Company Trust Fund hedge fund and real estate sub-trusts: Northern
+    # Trust held schedules, pp.5-23 and the whole run respectively (2026-10-16).
+    "367324188-110": {"name": "Ford Motor Company Trust Fund Hedge Funds", "layout": "nt_held_regions",
+                      "start_heading": r"^Schedule\s+H,\s+line\s+4i\s+-\s+Schedule\s+of\s+Assets\s+\(Held\s+At\s+End\s+of\s+Year\)$"},
+    "367324188-109": {"name": "Ford Motor Company Trust Fund Real Estate", "layout": "nt_held_regions",
+                      "start_heading": r"^Schedule\s+H,\s+line\s+4i\s+-\s+Schedule\s+of\s+Assets\s+\(Held\s+At\s+End\s+of\s+Year\)$"},
+    "367324188-108": {"name": "Ford Motor Company Trust Fund Private Equity", "layout": "nt_held_regions",
+                      "start_heading": r"^Schedule\s+H,\s+line\s+4i\s+-\s+Schedule\s+of\s+Assets\s+\(Held\s+At\s+End\s+of\s+Year\)$"},
+    # NFL Player Retirement Plan: the whole schedule from its first section, pp.26-63;
+    # plan year ends 3/31 (2026-10-16).
+    "136043636-001": {"name": "Bert Bell/Pete Rozelle NFL Player Retirement Plan", "layout": "soi_revalued_cost",
+                      "start_heading": r"^INTEREST-BEARING\s+CASH$"},
+    # Dominion Energy DB Master Trust: the whole schedule, pp.21-110 (2026-10-16).
+    "256263994-047": {"name": "Dominion Energy, Inc. Defined Benefit Master Trust", "layout": "soi_revalued_cost",
+                      "start_heading": r"^INTEREST-BEARING\s+CASH$"},
+    # International Paper pension account: the whole composite, pp.26-244 (2026-10-16).
+    "130872805-213": {"name": "International Paper Co Retirement Plan Pension Account", "layout": "bny_h30t",
+                      "start_heading": r"^International\s+Paper\s+Co\s+Retirement\s+Plan\s+Pension\s+Account\b"},
+    # NRECA Retirement Security Plan: the whole composite, pp.27-342 (2026-10-16).
+    "530116145-333": {"name": "NRECA Retirement Security Plan", "layout": "bny_h30t",
+                      "start_heading": r"^INTEREST\s+BEARING\s+CASH$"},
+    # Pfizer/Northern Trust master trust: the held schedule, pp.763-1213 of 1,213 (2026-10-16).
+    "363146075-001": {"name": "Master Trust between Pfizer Inc and The Northern Trust Company", "layout": "nt_held_regions",
+                      "start_heading": r"^Account\s+Name\s+PFIZER-WYETH\s+DB\s+PLANS$"},
 }
 
 # Every requested page must carry this column-header line, else we don't own the layout.
@@ -323,7 +347,9 @@ _DR_HEADER_RE = re.compile(r"Assets\s+and\s+Liabilities\s+Detail\s+Report", re.I
 # Column-date line ("1/1/2024 12/31/2024") that ends each page's title block.
 _DR_DATES_RE = re.compile(r"^\d{1,2}/\d{1,2}/\d{4}\s+\d{1,2}/\d{1,2}/\d{4}$")
 # Footer: "4/29/2025 7:43:38 PM EDT Page 1 of 203" (pdfplumber garbles some to "o2f03").
-_DR_FOOTER_RE = re.compile(r"^\d{1,2}/\d{1,2}/\d{4}\s+\d{1,2}:\d{2}:\d{2}\s+[AP]M\b")
+# Also the 24-hour "07/29/2025 10:28:19 EDT (GMT -4) Page 7 of38" footer (NFL) and
+# the two-digit-year "07/30/25 4:40:00 PM EDT" one (Dominion, 2026-10-16).
+_DR_FOOTER_RE = re.compile(r"^\d{1,2}/\d{1,2}/(?:\d{2}|\d{4})\s+\d{1,2}:\d{2}:\d{2}\s+(?:[AP]M\b|[A-Z]{2,4}\s+\(GMT\b)")
 # Some filers' text drops the space after the letter ("A.NON-INTEREST BEARING
 # CASH", Cox); then the heading must be all capitals, unlike "T.ROWE ... 1,000".
 _DR_LETTER_RE = re.compile(r"^([A-Z])\.(?:\s+|(?=[A-Z]{2}[A-Z\- ]*$))(.+)$")
