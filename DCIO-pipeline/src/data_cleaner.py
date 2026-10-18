@@ -569,6 +569,9 @@ def remove_outlier_value_rows(rows, verbose=True):
     """
     Remove rows whose value is > 9x the sum of all other rows for the same PDF.
     These are subtotal rows that slipped through keyword-based detection.
+    Rows from the Sch 4i text parser are exempt: that parse is only kept when
+    its totals reconcile, so a dominant row there is a real holding (Elliott
+    plans: one $440M fund + a few $ of cash; 2026-10-18).
     """
     from collections import defaultdict
 
@@ -585,6 +588,8 @@ def remove_outlier_value_rows(rows, verbose=True):
 
     pdf_val_map = defaultdict(list)
     for i, row in enumerate(rows):
+        if row.get('extraction_method') == 'sch4i_text':
+            continue
         pdf_key = row.get('pdf_stem', '') or row.get('pdf_name', '')
         val = parse_val(row.get('current_value'))
         if val and val > 0:

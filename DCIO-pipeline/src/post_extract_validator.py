@@ -1345,6 +1345,10 @@ ALT_ASSET_TYPE_OTHER_ROUTER_REGEX = (
 ALT_ASSET_TYPE_STOCK_REGEX = (
     r"(\bcorp[a-z]{0,8}(\s+\w{1,4})?|\binc\.?|\bplc|\bincorporated)\s*$"
 )
+ALT_PRIVATE_STAKE_REGEX = r"\bcommon\b|\bpreferred\b"
+ALT_PRIVATE_STAKE_EXCLUDE_REGEX = (
+    r"\d+\.\d+\s*%|\bdd\s+\d|\badrs?\b|\bbonds?\b|\bnotes?\b|\bdebentures?\b|\bwarrants?\b|\brights?\b"
+)
 ALT_ASSET_TYPE_FUND_MARKER_REGEX = (
     r"\b(l\.?p\.?|llc|funds?|fd|partners?|partnership|trust|ltd|joint\s+venture|"
     r"jv|capital|feeder|offshore|reif|spc|scsp|limited\s+partnership)\b"
@@ -1365,6 +1369,10 @@ ALT_ASSET_TYPE_FUND_MARKER_REGEX = (
 #   R07 long-only strategy (index, bond, equity fund, CIT...), even LP-wrapped -> hold
 #   R08 strong alt marker              -> route
 #   R09 weak marker (Ltd/LLC/Fund/class) or no evidence -> route
+#   R10 partnership-interest-typed stock name (direct private / co-invest stake:
+#       "Illumio Inc. Common Stock USD", "A2 BIOTHERAPEUTICS,INC") that isn't a
+#       bond / ADR / warrant / cash line -> route like R09, but only under P3
+#       (added 2026-10-18; Hartford, Co-Op)
 # Plan level, against Sch H line 1c(5) plan_asset_allocation.amt_joint_venture
 # ("cert"), where alt = JV-typed rows other passes already hold:
 #   P0 >= half the plan's candidates (min 4) are R06 -> R09 held (schedule typed JV
@@ -1373,6 +1381,8 @@ ALT_ASSET_TYPE_FUND_MARKER_REGEX = (
 #      other investments + real estate (filers book LP interests on either line:
 #      McKinsey $11.9B other / $0 JV, Boeing, GE; added 2026-10-18)
 #   P2 else, under 90% cert and alt + routed + held <= 110% cert -> R07 + P0 holds route
+#   P3 R10 held when the ack has no plan_asset_allocation row, or P0 / P1 holds
+#      (R10 counts as weak in P1), so a mistyped public-stock section can't route
 # P1/P2 are skipped when the ack has no plan_asset_allocation row.
 ALT_JV_TOTAL_REGEX = (
     r"\b(sub)?total\b|brought\s+forward|carried\s+forward|balance\s+forward|"
@@ -1423,7 +1433,7 @@ ALT_JV_VINTAGE_REGEX = (
 )
 ALT_JV_VINTAGE_DROP_REGEX = r"\b(class|series|tier|share|shares)\s+[a-z0-9]+\b"
 ALT_JV_HARD_LONG_ONLY_REGEX = (
-    r"\bindex\b|\bcit\b|collective|\bmutual\b|\bmoney\s+market|\bcore\s+(fixed|bond|plus)|"
+    r"\bindex\b(?!\s+(vent|origin))|\bcit\b|collective|\bmutual\b|\bmoney\s+market|\bcore\s+(fixed|bond|plus)|"
     r"\bfixed\s+income\b|\bbond\s+fund\b"
 )
 # Legal-form words operating companies use too (Wave Life Sciences Ltd).
@@ -1432,7 +1442,7 @@ ALT_JV_WEAK_REGEX = r"\bltd\.?\b|\blimited\b|\bllc\b|\bclass\s+[a-z0-9]+\b|\bfun
 # with a long-only term present, a strong marker must survive their removal.
 ALT_JV_LP_WRAPPER_REGEX = r"\bl\.?\s?p\.?\b|\blimited\s+partnership|\bpartners\b|\bclass\b"
 ALT_JV_LONG_ONLY_REGEX = (
-    r"\bindex\b|\bstock\s+index\b|\bcore\s+(fixed|bond|plus)|\bfixed\s+income\b|\bbond\s+fund\b|"
+    r"\bindex\b(?!\s+(vent|origin))|\bstock\s+index\b|\bcore\s+(fixed|bond|plus)|\bfixed\s+income\b|\bbond\s+fund\b|"
     r"\b(n\.?a\.?)\s*$|\bcit\b|collective|\bjpmcb\b|-i\s*$|\binstl?\b|\bmutual\b|\bmoney\s+market|"
     r"\bintermediate\s+duration\b|\bgold\s+fund\b|\bequity\s+(fund|fnd|long\s+only|ext)|\beq\s+fnd\b|"
     r"\bhigh\s+(yield|income)\b|\bemerging\s+markets?\s+(equity|bond|eq)\b|\bstock\s*-?\s*i?\b\s*$|"
@@ -1794,6 +1804,14 @@ def _alt_asset_type_pass_sql(glue_db: str, source: str, routed_sql: str, vehicle
                                AND regexp_like(trim({sp}), '^\\S+(\\s+\\S+)?$')
                                AND NOT regexp_like({sp}, '{ALT_JV_STRONG_REGEX}')) THEN 'R04'
                     WHEN {label(n)} THEN 'R05'
+                    WHEN c.atype = 'partnership interest'
+                      AND (regexp_like({n}, '{ALT_ASSET_TYPE_STOCK_REGEX}')
+                           OR regexp_like({n}, '{ALT_PRIVATE_STAKE_REGEX}'))
+                      AND NOT regexp_like({n}, '{ALT_JV_CASH_REGEX}')
+                      AND NOT regexp_like({n}, '{ALT_ASSET_TYPE_NOISE_REGEX}')
+                      AND NOT regexp_like({n}, '{ALT_ASSET_TYPE_OTHER_ROUTER_REGEX}')
+                      AND NOT regexp_like({n}, '{ALT_PRIVATE_STAKE_EXCLUDE_REGEX}')
+                      AND NOT {_alt_jv_strong_sql(n)} THEN 'R10'
                     WHEN regexp_like({n}, '{ALT_JV_CASH_REGEX}')
                       OR regexp_like({n}, '{ALT_ASSET_TYPE_NOISE_REGEX}')
                       OR (regexp_like({n}, '{ALT_ASSET_TYPE_STOCK_REGEX}')
@@ -1816,7 +1834,7 @@ def _alt_asset_type_pass_sql(glue_db: str, source: str, routed_sql: str, vehicle
                    sum(CASE WHEN c.rule <> 'HELD' THEN 1 ELSE 0 END) {w} AS n_all,
                    sum(CASE WHEN c.rule = 'R06' THEN 1 ELSE 0 END) {w} AS n_sec,
                    sum(CASE WHEN c.rule IN ('R04', 'R08') THEN c.amt_d ELSE 0e0 END) {w} AS strong,
-                   sum(CASE WHEN c.rule = 'R09' THEN c.amt_d ELSE 0e0 END) {w} AS weak,
+                   sum(CASE WHEN c.rule IN ('R09', 'R10') THEN c.amt_d ELSE 0e0 END) {w} AS weak,
                    sum(CASE WHEN c.rule = 'R07' THEN c.amt_d ELSE 0e0 END) {w} AS held,
                    -- JV money already in the target: held by name, or a duplicate
                    -- (R02/R03) of a routed row -- e.g. an R04 row routed under its
@@ -1837,6 +1855,7 @@ def _alt_asset_type_pass_sql(glue_db: str, source: str, routed_sql: str, vehicle
                 CASE
                     WHEN p.rule = 'R09' AND p.p0 THEN 'P0'
                     WHEN p.rule = 'R09' AND p.p1 THEN 'P1'
+                    WHEN p.rule = 'R10' AND (p.cert_x IS NULL OR p.p0 OR p.p1) THEN 'P3'
                     WHEN p.rule = 'R07' AND p.cert IS NOT NULL AND NOT p.p1
                      AND p.alt + p.strong + CASE WHEN p.p0 THEN 0 ELSE p.weak END < 0.9 * p.cert
                      AND p.alt + p.strong + p.weak + p.held <= 1.1 * p.cert THEN 'P2'
@@ -1863,7 +1882,7 @@ def _alt_asset_type_pass_sql(glue_db: str, source: str, routed_sql: str, vehicle
                 CASE WHEN f._mgr IS NOT NULL THEN 'HIGH' ELSE NULL END AS manager_match_confidence,
                 CASE WHEN f._mgr IS NOT NULL THEN 'brand_regex_v1' ELSE NULL END AS manager_match_method
             FROM atr_final f
-            WHERE f.final_rule IN ('R04', 'R08', 'R09', 'P2')
+            WHERE f.final_rule IN ('R04', 'R08', 'R09', 'R10', 'P2')
         )"""
 
 
