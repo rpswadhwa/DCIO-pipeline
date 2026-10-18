@@ -37,7 +37,7 @@ def name_tokens(value):
 
 @lru_cache(maxsize=200000)
 def stable_name_signal(value):
-    return bool(re.search(r'\bstable\b|\bstabl\w*|\bstbl\w*|\bst\s+val\b|\bmanaged\s+inc|\bmip\b|\bcapital\s+preserv|\binterest\s+income|\bsagic\b|\bgic\b|\bguaranteed\s+(?:interest|income|investment)|\bfixed\s+account', normalize_name(value)))
+    return bool(re.search(r'\bstable\b|\bstabl\w*|\bstbl\w*|\bst\s+val\b|\bmanaged\s+inc|\bmip\b|\bcapital\s+preserv|\binterest\s+income|\bsagic\b|\bgic\b|\bguaranteed\s+(?:interest|income|investment)|\bfixed\s+account|\bretirement\s+savings\s+trust|\bmanaged\s+income\s+portfolio|\bpreservation|\bfixed\s?interest', normalize_name(value)))
 
 
 def similar_name(left, right):

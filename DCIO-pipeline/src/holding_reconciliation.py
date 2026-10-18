@@ -19,6 +19,16 @@ FIELDS = ('ack_id', 'raw_entity_name', 'raw_sponsor_name', 'plan_investment_amt'
 ABBREVIATIONS = {'stab': 'stable', 'stabl': 'stable', 'stbl': 'stable',
                  'val': 'value', 'cl': 'class', 'acct': 'account'}
 STABLE = re.compile(r'\bstable\s+value\b')
+# (2026-10-17) Stable value products whose names never say "stable value". Each alias is a
+# product family seen in staging (Vanguard RST, Fidelity MIP, insurer guaranteed/fixed-interest
+# general-account funds, preservation funds). Bare "fixed interest", "guaranteed interest",
+# synthetic GIC/wrap components and TIAA Traditional stay out: they need review, not an alias.
+SV_PRODUCT = re.compile(
+    r'\b(retirement savings trust|managed income portfolio|(?:fid(?:elity)? )?mip(?: ii| iv)? class|fidelity mip|'
+    r'guaranteed (?:income|interest|investment|long term) fund|guaranteed interest (?:account|option)|'
+    r'fixed income guaranteed option|principal guaranteed option|guaranteed portfolio fund|select guaranteed fund|'
+    r'fixed ?interest (?:option|fund|account)|capital preservation (?:fund|account|income fund)|'
+    r'principal preservation|interest income fund|stable (?:asset|return) fund)\b')
 MANAGED = re.compile(r'\bseparately?\s+managed\s+account\b')
 SECURITY = re.compile(r'\b(common stock|preferred stock|convertible|cusip|ticker|shares of|collateral|continued)\b')
 CONFLICT = re.compile(r'\b(small cap|large cap|mid cap|equity|growth|target date|target retirement|yourpath|lifepath|freedom)\b')
@@ -46,7 +56,8 @@ def classify(row, alternative_patterns=()):
     name = product_name(row.get('raw_entity_name'))
     typ = normalize_name(row.get('asset_type'))
     cls = normalize_name(row.get('asset_class'))
-    explicit_sv = bool(STABLE.search(name))
+    alias_sv = not STABLE.search(name) and bool(SV_PRODUCT.search(name))
+    explicit_sv = bool(STABLE.search(name)) or alias_sv
     typed_sv = 'stable value' in typ or cls == 'stable value'
     contract = bool(CONTRACT.search(name))
     contract_mandate = contract and bool(re.search(
@@ -71,7 +82,7 @@ def classify(row, alternative_patterns=()):
         if not (explicit_sv or contract_mandate or (product and typed_sv)):
             return 'UNRESOLVED', '', 'stable_value_product_evidence_required', 'type_or_product_only'
         destination, _, _, _, rule = choose_vehicle(row)
-        return 'INSERT', destination, rule, 'confirmed_stable_value'
+        return 'INSERT', destination, rule + (':sv_product_alias' if alias_sv else ''), 'confirmed_stable_value'
     if separate:
         if managed and name not in {'separately managed account', 'separate managed account'}:
             if re.search(r'\breserve trust\b|\bcollective\b|\bpooled\b', name):

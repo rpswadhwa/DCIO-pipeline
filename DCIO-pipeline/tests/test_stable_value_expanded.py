@@ -83,3 +83,31 @@ class ExpandedRouterTests(unittest.TestCase):
 
     def test_non_stable_value_sma_not_promoted_by_this_router(self):
         self.assertEqual(self.decisions([row(raw_entity_name='Brand Separately Managed Account')]), [])
+
+
+class ProductAliasTests(unittest.TestCase):
+    # (2026-10-17) Stable value products named without the phrase "stable value".
+    def status(self, name, **kw):
+        return build_decisions([row(raw_entity_name=name, **kw)], [], NoManager())
+
+    def test_named_products_are_ready(self):
+        for name in ['Vanguard Retirement Savings Trust III', 'Fidelity Managed Income Portfolio II Class 4',
+                     'MIP CL 2', 'FID MIP II, CL', 'Empower Guaranteed Income Fund', 'Key Guaranteed Portfolio Fund',
+                     'Principal Fixed Income Guaranteed Option', 'Guaranteed Interest Account 680',
+                     'VALIC FixedInterest Option', 'Federated Hermes Capital Preservation Fund R6P',
+                     'Aramark Interest Income Fund', 'Invesco Stable Asset Fund', 'Galliard Stable Return Fund C']:
+            ds = self.status(name)
+            self.assertEqual(ds[0]['routing_status'], 'READY', name)
+            self.assertIn('sv_product_alias', ds[0]['routing_reason'], name)
+
+    def test_lookalikes_are_not_promoted(self):
+        for name in ['PIMCO Stable Income Fund', 'Galliard Short Core Fund F', 'MM FIXED INTEREST',
+                     'Synthetic GIC', 'Voya wrap contract', 'Traditional Non Benefit Responsive',
+                     'Capital Preservation Equity Fund']:
+            ds = self.status(name)
+            self.assertTrue(not ds or ds[0]['routing_status'] != 'READY', name)
+
+    def test_alias_still_guarded_by_existing_history(self):
+        h = row(raw_entity_name='Vanguard Retirement Savings Trust III', source_table='plan_cit_history')
+        ds = build_decisions([row(raw_entity_name='Vanguard Retirement Savings Trust III')], [h], NoManager())
+        self.assertEqual(ds[0]['routing_status'], 'ALREADY_EXISTS')

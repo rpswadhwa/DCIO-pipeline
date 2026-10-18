@@ -136,7 +136,7 @@ def staging_query(db, ack_ids):
       FROM {db}.plan_holdings_staging
       WHERE ack_id IN (SELECT DISTINCT ack_id FROM {db}.plan_holdings_staging
         WHERE (regexp_like(lower(coalesce(raw_entity_name,'')),
-          'stable|stbl|stabl|stab |fixed account|guaranteed|group annuity|insurance|benefit.?responsive')
+          'stable|stbl|stabl|stab |fixed account|guaranteed|group annuity|insurance|benefit.?responsive|retirement savings trust|managed income|\\bmip\\b|preserv|interest income|fixed ?interest')
           OR regexp_like(lower(coalesce(asset_type,'')), 'stable value')
           OR lower(trim(coalesce(asset_class,'')))='stable value'){scope})
       GROUP BY 1,2,3,4,5,6,7,8"""
