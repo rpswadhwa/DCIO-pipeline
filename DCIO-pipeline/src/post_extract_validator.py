@@ -1402,6 +1402,13 @@ ALT_JV_SECURITY_REGEX = (
     r"\bholdings?\s+(inc|ltd|plc)\b|\bsciences?\s+(inc|ltd)\b|\btreas\b|government\s+(and\s+)?agency|"
     r"\bforeign\s+stock\b|\bshs\b|\bgrp\s+ltd\b|"
     r"\bcorporate\s+(stock|bonds?)\b|\bpreferred\b|\bcommon\b|"
+    # Bank time deposits ("MIZUHO BANK LTD NEW YORK BRANCH"), short-Treasury
+    # repo legs ("912803FY4 BASEC RE"), agency / 144A paper and junk lines that
+    # an alt-table sample turned up (330 rows deleted 2026-10-18). Bank-loan
+    # funds and LPs ("First Eagle Bank Loan Select Fund") still pass.
+    r"\b(bank|banque|landesbank|handelsbanken|swedbank)\b(?!.*\b(loans?|funds?|l\.?\s?p\.?|partners)\b)|"
+    r"\btime\s+deposits?\b|\btriparty\b|\b144a\b|\bbasec\b|\bpvtpl\b|\bfnr\b|\bdtd\b|"
+    r"\bnotes?\s+receivable\b|interest\s+and\s+dividends|^\s*none\s*$|"
     r"^\s*\d{1,3}(,\d{3})+(\.\d+)?\s+[a-z]|^\s*\d*\.\d+\s+[a-z]"
 )
 # A maturity date marks a security only when the name isn't a fund vintage
