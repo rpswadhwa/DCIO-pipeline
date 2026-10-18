@@ -1361,7 +1361,7 @@ ALT_ASSET_TYPE_FUND_MARKER_REGEX = (
 #   R03 same normalized name routed    -> skip
 #   R04 entity is a category label, sponsor is a real fund name -> route as sponsor
 #   R05 label with no usable sponsor   -> skip (needs re-extraction)
-#   R06 cash / individual security with no strong alt marker, or block-list -> skip
+#   R06 cash / individual security / block-list term, with no strong alt marker -> skip
 #   R07 long-only strategy (index, bond, equity fund, CIT...), even LP-wrapped -> hold
 #   R08 strong alt marker              -> route
 #   R09 weak marker (Ltd/LLC/Fund/class) or no evidence -> route
@@ -1369,7 +1369,9 @@ ALT_ASSET_TYPE_FUND_MARKER_REGEX = (
 # ("cert"), where alt = JV-typed rows other passes already hold:
 #   P0 >= half the plan's candidates (min 4) are R06 -> R09 held (schedule typed JV
 #      by heading inheritance, so the typing is worthless)
-#   P1 alt + R04/R08 + R09 > 110% cert -> R09 held
+#   P1 alt + R04/R08 + R09 > 110% cert_x -> R09 held, where cert_x = cert + Sch H
+#      other investments + real estate (filers book LP interests on either line:
+#      McKinsey $11.9B other / $0 JV, Boeing, GE; added 2026-10-18)
 #   P2 else, under 90% cert and alt + routed + held <= 110% cert -> R07 + P0 holds route
 # P1/P2 are skipped when the ack has no plan_asset_allocation row.
 ALT_JV_TOTAL_REGEX = (
@@ -1385,12 +1387,21 @@ ALT_JV_LABEL_REGEX = (
 )
 ALT_JV_CASH_REGEX = r"^\s*cash\b|\bcash\s+held\b|\bcash\s+equivalents?\b"
 ALT_JV_SECURITY_REGEX = (
-    r"\btreasury\b|\bt-?bills?\b|\bstrips?\b|\bnotes?\s+\d|\d+\.\d+\s*%|\d{2}/\d{2}/\d{2,4}|\bdd\s+\d|"
-    r"\bcorp(oration)?\s*(com|the)?\s*$|\binc\.?\s*(com)?\s*$|\bcom\s*$|\bco\s*(/the)?\s*$|\badr\b|\bplc\s*$|"
+    r"\btreasury\b|\bt-?bills?\b|\bstrips?\b|\bnotes?\s+\d|\d+\.\d+\s*%|\bdd\s+\d|"
+    r"\bcorp(oration)?\s*(com|the)?\s*$|\binc\.?\s*(com)?\s*$|\bcom\s*$|[a-z0-9&.]\s+co\s*(/the)?\s*$|\badr\b|\bplc\s*$|"
     r"\bholdings?\s+(inc|ltd|plc)\b|\bsciences?\s+(inc|ltd)\b|\btreas\b|government\s+(and\s+)?agency|"
     r"\bforeign\s+stock\b|\bshs\b|\bgrp\s+ltd\b|"
-    r"\bcorporate\s+(stock|bonds?)\b|\bpreferred\b|\bcommon\b|^\s*[\d.,]+\s+[a-z]"
+    r"\bcorporate\s+(stock|bonds?)\b|\bpreferred\b|\bcommon\b|"
+    r"^\s*\d{1,3}(,\d{3})+(\.\d+)?\s+[a-z]|^\s*\d*\.\d+\s+[a-z]"
 )
+# A maturity date marks a security only when the name isn't a fund vintage
+# ("Coliseum Capital 12/31/20 Fund Ltd", "Hudson Bay Fund Class 01/01/24").
+ALT_JV_DATE_REGEX = r"\d{2}/\d{2}/\d{2,4}"
+ALT_JV_DATE_FUND_REGEX = r"\b(funds?|class|series|ltd)\b"
+# Custodian suffix on LP interests ("SUN CAPITAL PARTNERS VII LP COMMON STOCK",
+# "ASTORG VII COMMON STOCK EUR"); dropped for rule evaluation when what's left
+# carries a strong marker, so real stocks ("NVA HOLDINGS COMMON") still hold.
+ALT_JV_CUSTODIAN_SUFFIX_REGEX = r"\s+(pooled\s+)?common(\s+(stock|stk|s))?(\s+[a-z]{3})?\s*$"
 ALT_JV_STRONG_REGEX = (
     r"\bl\.?\s?p\.?\b|\blimited\s+partnership|\bpartners\b|\boffshore\b|\bcayman\b|\bspc\b|segregated\s+portfolio|"
     r"\bventure|\bhedge|private\s+(equity|credit|debt|markets)|\bcapital\s+(partners|fund|opportunit)|\bopportunit|"
@@ -1400,13 +1411,26 @@ ALT_JV_STRONG_REGEX = (
     r"\bindustrial\s+(value\s+)?fund\b|\bcatastrophe\b|\blongevity\b|"
     # JPMorgan Strategic Property Fund, filed as "JPMCB SPF" (Shell Pension, $120M);
     # without it the JPMCB long-only marker holds the row at R07.
-    r"\bspf\b|strategic\s+property"
+    r"\bspf\b|strategic\s+prop|\blong[\s/-]*short\b|\bfarmland\b|\btimberland\b"
+)
+# Fund vintage numeral (DYAL IV, KAREP VI, Cerberus Inst RE Ptnr III, JPMorgan
+# Corp Finance Instl Investors V LLC). Strong unless the name is a hard long-only
+# vehicle (index / CIT / collective / mutual / money market / bond), and share
+# class / series numerals are dropped first.
+ALT_JV_VINTAGE_REGEX = (
+    r"\b(ii|iii|iv|vi|vii|viii|ix|xi|xii|xiii|xiv|xv|xvi|xvii|xviii|xix|xx)\b|"
+    r"\b[a-z]{3,}\s+[vx](\s+(llc|l\.?\s?p\.?))?\s*$"
+)
+ALT_JV_VINTAGE_DROP_REGEX = r"\b(class|series|tier|share|shares)\s+[a-z0-9]+\b"
+ALT_JV_HARD_LONG_ONLY_REGEX = (
+    r"\bindex\b|\bcit\b|collective|\bmutual\b|\bmoney\s+market|\bcore\s+(fixed|bond|plus)|"
+    r"\bfixed\s+income\b|\bbond\s+fund\b"
 )
 # Legal-form words operating companies use too (Wave Life Sciences Ltd).
 ALT_JV_WEAK_REGEX = r"\bltd\.?\b|\blimited\b|\bllc\b|\bclass\s+[a-z0-9]+\b|\bfund\b"
 # Strong markers that are only the wrapper (LSV International Equity Fund LP):
 # with a long-only term present, a strong marker must survive their removal.
-ALT_JV_LP_WRAPPER_REGEX = r"\bl\.?\s?p\.?\b|\blimited\s+partnership|\bpartners\b|\bfund\s+[ivx]+\b|\bclass\b"
+ALT_JV_LP_WRAPPER_REGEX = r"\bl\.?\s?p\.?\b|\blimited\s+partnership|\bpartners\b|\bclass\b"
 ALT_JV_LONG_ONLY_REGEX = (
     r"\bindex\b|\bstock\s+index\b|\bcore\s+(fixed|bond|plus)|\bfixed\s+income\b|\bbond\s+fund\b|"
     r"\b(n\.?a\.?)\s*$|\bcit\b|collective|\bjpmcb\b|-i\s*$|\binstl?\b|\bmutual\b|\bmoney\s+market|"
@@ -1682,10 +1706,13 @@ def _alt_jv_norm_sql(expr: str) -> str:
 
 
 def _alt_jv_strong_sql(expr: str) -> str:
-    """Strong alt marker that isn't just an LP wrapper on a long-only strategy."""
+    """Strong alt marker that isn't just an LP wrapper on a long-only strategy,
+    or a fund vintage numeral on a name that isn't a hard long-only vehicle."""
     return (
-        f"(regexp_like({expr}, '{ALT_JV_STRONG_REGEX}') AND (NOT regexp_like({expr}, '{ALT_JV_LONG_ONLY_REGEX}')"
+        f"((regexp_like({expr}, '{ALT_JV_STRONG_REGEX}') AND (NOT regexp_like({expr}, '{ALT_JV_LONG_ONLY_REGEX}')"
         f" OR regexp_like(regexp_replace({expr}, '{ALT_JV_LP_WRAPPER_REGEX}', ' '), '{ALT_JV_STRONG_REGEX}')))"
+        f" OR (regexp_like(regexp_replace({expr}, '{ALT_JV_VINTAGE_DROP_REGEX}', ' '), '{ALT_JV_VINTAGE_REGEX}')"
+        f" AND NOT regexp_like({expr}, '{ALT_JV_HARD_LONG_ONLY_REGEX}')))"
     )
 
 
@@ -1704,8 +1731,9 @@ def _alt_asset_type_pass_sql(glue_db: str, source: str, routed_sql: str, vehicle
     subclass_case = "CASE " + " ".join(
         f"WHEN atype = '{t}' THEN '{c}'" for t, c in sorted(ALT_ROUTED_ASSET_TYPES.items())
     ) + " ELSE NULL END"
-    n = "lower(c.raw_entity_name)"
+    n = "c.nm"
     sp = "lower(c.sponsor_clean)"
+    stripped = f"regexp_replace(lower(s.raw_entity_name), '{ALT_JV_CUSTODIAN_SUFFIX_REGEX}', '')"
     label = lambda x: f"regexp_like({x}, '{ALT_JV_LABEL_REGEX}')"
     # Trino inlines every CTE reference, and atr_routed re-runs passes 1-4, so
     # it is read exactly once: typed and routed rows share one relation and the
@@ -1721,13 +1749,15 @@ def _alt_asset_type_pass_sql(glue_db: str, source: str, routed_sql: str, vehicle
                    CAST(s.plan_investment_amt AS double) AS amt_d,
                    trim(regexp_replace(coalesce(s.raw_sponsor_name, ''), '(\\s+[\\d,.]+)+\\s*$', '')) AS sponsor_clean,
                    {_alt_jv_norm_sql('s.raw_entity_name')} AS norm,
+                   CASE WHEN {_alt_jv_strong_sql(stripped)} THEN {stripped}
+                        ELSE lower(s.raw_entity_name) END AS nm,
                    false AS is_r
             FROM {source} s
             WHERE lower(trim(s.asset_type)) IN ({routed_types})
             UNION ALL
             SELECT r.ack_id, r.raw_entity_name, NULL, NULL, NULL, NULL, NULL, NULL,
                    CAST(r.plan_investment_amt AS double), NULL,
-                   {_alt_jv_norm_sql('r.raw_entity_name')}, true
+                   {_alt_jv_norm_sql('r.raw_entity_name')}, NULL, true
             FROM atr_routed r
         ),
         atr_flag AS (
@@ -1743,6 +1773,11 @@ def _alt_asset_type_pass_sql(glue_db: str, source: str, routed_sql: str, vehicle
         ),
         atr_rule AS (
             SELECT c.*, TRY_CAST(a.amt_joint_venture AS double) AS cert,
+                -- NULL with cert, so P1 is still skipped where it was
+                CASE WHEN TRY_CAST(a.amt_joint_venture AS double) IS NOT NULL THEN
+                    TRY_CAST(a.amt_joint_venture AS double)
+                    + greatest(coalesce(TRY_CAST(a.amt_other_invest AS double), 0e0), 0e0)
+                    + greatest(coalesce(TRY_CAST(a.amt_real_estate AS double), 0e0), 0e0) END AS cert_x,
                 CASE
                     -- JV-typed row another pass (or a kept row) already holds by name
                     WHEN c.by_name = 1 THEN 'HELD'
@@ -1761,10 +1796,13 @@ def _alt_asset_type_pass_sql(glue_db: str, source: str, routed_sql: str, vehicle
                     WHEN {label(n)} THEN 'R05'
                     WHEN regexp_like({n}, '{ALT_JV_CASH_REGEX}')
                       OR regexp_like({n}, '{ALT_ASSET_TYPE_NOISE_REGEX}')
-                      OR regexp_like({n}, '{ALT_ASSET_TYPE_OTHER_ROUTER_REGEX}')
                       OR (regexp_like({n}, '{ALT_ASSET_TYPE_STOCK_REGEX}')
                           AND NOT regexp_like({n}, '{ALT_ASSET_TYPE_FUND_MARKER_REGEX}'))
-                      OR (regexp_like({n}, '{ALT_JV_SECURITY_REGEX}') AND NOT {_alt_jv_strong_sql(n)}) THEN 'R06'
+                      OR ((regexp_like({n}, '{ALT_JV_SECURITY_REGEX}')
+                           OR regexp_like({n}, '{ALT_ASSET_TYPE_OTHER_ROUTER_REGEX}')
+                           OR (regexp_like({n}, '{ALT_JV_DATE_REGEX}')
+                               AND NOT regexp_like({n}, '{ALT_JV_DATE_FUND_REGEX}')))
+                          AND NOT {_alt_jv_strong_sql(n)}) THEN 'R06'
                     WHEN regexp_like({n}, '{ALT_JV_LONG_ONLY_REGEX}') AND NOT {_alt_jv_strong_sql(n)} THEN 'R07'
                     WHEN {_alt_jv_strong_sql(n)} THEN 'R08'
                     ELSE 'R09'
@@ -1789,9 +1827,9 @@ def _alt_asset_type_pass_sql(glue_db: str, source: str, routed_sql: str, vehicle
         atr_plan_rule AS (
             SELECT p.*,
                    p.n_sec >= 0.5 * p.n_all AND p.n_all >= 4 AS p0,
-                   p.cert IS NOT NULL AND p.alt + p.strong
+                   p.cert_x IS NOT NULL AND p.alt + p.strong
                        + CASE WHEN p.n_sec >= 0.5 * p.n_all AND p.n_all >= 4 THEN 0 ELSE p.weak END
-                       > 1.1 * p.cert AS p1
+                       > 1.1 * p.cert_x AS p1
             FROM atr_plan p
         ),
         atr_final AS (
