@@ -483,6 +483,33 @@ Plan (ack 20260713113402NAL0000112945001, pp.35-76): private equity and
 debt $423,498,000 plus real estate and other alternatives $116,650,000 =
 $540,148,000, its certified JV.
 
+A thirty-eighth layout, "nt_market_erisa" (2026-10-18), is Northern Trust's
+"Current Value of Assets and Liabilities" statement ("Security Description /
+Asset ID Shares/Par Value Market Price Market Value ERISA Cost Security
+Movements Gain/Loss"), printed rotated: category headings, region-currency
+sub-groups with their own "Total ..." lines, rows ending "<shares> <price>
+<market value> <cost> <movements> <gain>" over a bare asset-id line, "Total
+<category>" lines of four amounts, liabilities as categories of their own,
+and an unnamed grand "Total". A row's description can print on the line
+above its amounts. First seen on PepsiCo, Inc. Defined Benefit Master Trust
+(ack 20251006103730NAL0003275857001, pp.73-262 after the 5% reports): all
+categories and the grand total $10,749,742,228.97 tie; partnership/joint
+venture interests $175,939,811.26.
+
+A thirty-ninth layout, "asset_liability_positions" (2026-10-18), is a
+custodian's "Asset and Liability Positions" statement attached in place of a
+schedule: nested headings ("Equity" / "Common Stocks" / "Consumer
+Discretionary"), each closed by a "Total <heading>" line of "<% of category>
+<cost> <market> <appr/depr> <% of account> ..."; rows "<account id> -
+<description> <shares/par> <% of category> <cost> <market> <appr/depr> <% of
+account> ...", the description continuing over the next lines until the
+"<CUSIP> [/ <ticker>]" line; and the statement's "Total Assets and Accruals"
+as its grand total. The "Limited Partnerships" and "Other" categories mix
+index CITs with private funds, so fund rows are typed by name. First seen on
+Local 705, International Brotherhood of Teamsters Pension Plan (ack
+20251002153605NAL0000429059002, pp.85-160): every heading and the grand total
+$1,788,321,430.58 tie.
+
 Registered per plan, not per filing: PLAN_PARSERS is keyed by plan_master
 plan_id (EIN-PN), which stays fixed across years while ack_id and page
 numbers change. run_pipeline.py resolves each PDF's ack_id to a plan_id via
@@ -841,6 +868,19 @@ PLAN_PARSERS = {
     # (2026-10-17).
     "061059331-006": {"name": "Cigna Pension Plans Trust", "layout": "cusip_type_blocks",
                       "start_heading": r"^NON-POOLED\s+SEPARATE\s+ACCOUNTS$", "amount_scale": 1000},
+    # PepsiCo, Inc. Defined Benefit Master Trust: the rotated Northern Trust
+    # statement pp.73-262 (pp.1-72 are 5% reports). Partnership/JV interests
+    # $175.9M; Sch H's JV $555M also counts PRISA ($107.1M, a pooled separate
+    # account here) and two private credit trusts ($210.2M) (2026-10-18).
+    "412205169-120": {"name": "PepsiCo, Inc. Defined Benefit Master Trust", "layout": "nt_market_erisa",
+                      "start_heading": r"^Account\s+Name\s+PEPSI\s+NON-UNIT\s+ACCOUNTS$"},
+    # Local 705, International Brotherhood of Teamsters Pension Plan: the
+    # custodian's statement pp.85-160 stands in for the schedule. Its $522M
+    # "Limited Partnerships" bucket is mostly index CITs; the private funds
+    # are a realty LP, an infrastructure LP and Grosvenor credit (2026-10-18).
+    "366492502-001": {"name": "Local 705, International Brotherhood of Teamsters Pension Plan",
+                      "layout": "asset_liability_positions",
+                      "start_heading": r"^Asset\s+and\s+Liability\s+Positions$"},
     # Ohio Carpenters' Pension Plan (FYE 2025-04-30): the two-page summary
     # pp.25-26; its attached statements (pp.27-166) stay one row each. Limited
     # partnerships $650,271,125 = cert JV (2026-10-17).
@@ -1853,6 +1893,41 @@ _NHR_FOOTER_RE = re.compile(r"^(?:\*\*|••)\s*All\s+or\s+a\s+portion\b|^North
 _NHR_ID_RE = re.compile(r"\b(?:CUSIP|SEDOL|ISIN|TICKER)\s*:\s*(\S+)"
                         r"|^(?::\s*)?((?=[A-Z0-9]*\d)[A-Z0-9]{7}(?:[A-Z0-9]{2})?)(?:-[A-Z0-9]{8,9})?$",
                         re.I)
+# asset_liability_positions: page title, last title-block line, footer, grand
+# total, rows "<account> - <description> <shares> <% cat> <cost> <market>
+# [-] <appr> <% acct> ..." and "Total <heading> [<% cat>] <cost> <market> ..."
+# (the accrual totals print no % of category).
+_ALP_TITLE_RE = re.compile(r"^Asset\s+and\s+Liability\s+Positions$", re.M)
+_ALP_COLUMNS_RE = re.compile(r"^Asset\s+ID\s+\(CUSIP\)\s+/\s+Ticker\s+Unit\s+Price\s+Unit\s+Price\s+Rate$", re.M)
+_ALP_FOOTER_RE = re.compile(r"^\d{3}\s+Page\s+\d+\s+of\s+\d+$")
+_ALP_GRAND_RE = re.compile(r"^Total\s+Assets\s+and\s+Accruals\s+([\d,]+\.\d\d)\s+([\d,]+\.\d\d)\s", re.M)
+_ALP_AMT = r"-?[\d,]*\d\.\d\d"
+_ALP_ROW_RE = re.compile(rf"^([A-Z]{{2}})\s+-\s+(.*?)\s+(-?[\d,]*\.\d{{3}})\s+(\d*\.\d\d)\s+({_ALP_AMT})\s+"
+                         rf"({_ALP_AMT})\s+(?:-\s)?[\d,]*\.\d\d\s+\d*\.\d\d\b")
+_ALP_TOTAL_RE = re.compile(rf"^Total\s+(.+?)\s+(?:\d*\.\d\d\s+)?({_ALP_AMT})\s+({_ALP_AMT})\s+"
+                           rf"(?:-\s)?[\d,]*\.\d\d\s+\d*\.\d\d\b")
+# "<CUSIP/SEDOL/internal id> [/ <ticker>]", unit prices after it.
+_ALP_ID_RE = re.compile(r"^((?=[A-Z0-9]*\d)[A-Z0-9]{7,10})(?:\s+/\s+([A-Z][A-Z0-9.]*))?(?:\s+-?[\d,]*\.\d+)*$")
+# Heading path -> asset_type, first match wins; fund rows under "Limited
+# Partnerships", "Closely Held", "Other" and the fund headings are typed by
+# _ALP_FUND_TYPES instead.
+_ALP_HEADING_TYPES = [
+    (r"\bCommon\s+Stocks\b", "Common Stock"),
+    (r"\bObligations\b|Treasury|Federal\s+Agenc", "Bond"),
+    (r"^Cash\s+Equivalent", "Short-Term Investment Fund"),
+    (r"^Real\s+Estate$", "Real Estate"),
+]
+_ALP_FUND_TYPES = [
+    (r"\bRealty\b|\bPropert(?:y|ies)\b|\bReal\s+Estate\b|\bREIT\b", "Real Estate"),
+    (r"\bHedged?\s+(?:LP|Fund)\b|\bInfrastructure\b|\bOpportunistic\s+Credit\b|\bPrivate\b", "Partnership Interest"),
+]
+# nt_market_erisa: page title, column header (last title-block line), the
+# unnamed grand total (four amounts) and the page footer.
+_NME_TITLE_RE = re.compile(r"^Current\s+Value\s+of\s+Assets\s+and\s+Liabilities$", re.M)
+_NME_COLUMNS_RE = re.compile(r"^Security\s+Description\s+/\s+Asset\s+ID\s+Shares/Par\s+Value\s+Market\s+Price\s+"
+                             r"Market\s+Value\s+ERISA\s+Cost\s+Security\s+Movements\s+Gain/Loss$", re.M)
+_NME_GRAND_RE = re.compile(r"^Total(?:\s+-?[\d,]+\.\d{2}){4}$", re.M)
+_NME_FOOTER_RE = re.compile(r"^Northern\s+Trust\s+-|^Generated\s+by\s+Northern\s+Trust\b")
 _NAD_HEADER_RE = re.compile(r"^Asset\s+Detail\s+-\s+Base\s+Currency$", re.M)
 # Last line of the column header; holdings start below it.
 _NAD_COLUMNS_RE = re.compile(r"^Shares/PAR\s+value\s+local\s+market\s+price\s+income/expense\s+Market\s+Value\s+"
@@ -2971,6 +3046,34 @@ def find_schedule_4i_pages(pdf_path: str, start_heading: str, layout: str = "def
                     if _CTB_GRAND_RE.search(text):
                         return run
         return []
+    if layout == "asset_liability_positions":
+        # Title on every statement page: run from the first page matching
+        # start_heading to the page with "Total Assets and Accruals".
+        with pdfplumber.open(pdf_path) as pdf:
+            for page_num, page in enumerate(pdf.pages, start=1):
+                text = page.extract_text() or ""
+                if start is None and _ALP_TITLE_RE.search(text) and re.search(start_heading, text, re.M):
+                    start = page_num
+                if start is not None:
+                    if not _ALP_TITLE_RE.search(text):
+                        return []
+                    run.append(page_num)
+                    if _ALP_GRAND_RE.search(text):
+                        return run
+        return []
+    if layout == "nt_market_erisa":
+        # Title on every page: run from the first page whose title block matches
+        # start_heading to the page with the unnamed grand total.
+        with pdfplumber.open(pdf_path) as pdf:
+            for page_num, page in enumerate(pdf.pages, start=1):
+                text = _upright_text(page)
+                if start is None and _NME_COLUMNS_RE.search(text) and re.search(start_heading, text, re.M):
+                    start = page_num
+                if start is not None:
+                    run.append(page_num)
+                    if any(_NME_GRAND_RE.match(_nme_join_split_amounts(l.strip())) for l in text.splitlines()):
+                        return run
+        return []
     if layout == "fmv_cost_summary":
         # Header on every summary page: run from start_heading's page until it stops.
         with pdfplumber.open(pdf_path) as pdf:
@@ -3099,6 +3202,10 @@ def parse_schedule_4i_pages(pdf_path: str, page_nums: List[int], layout: str = "
         return _parse_leading_category(pdf_path, page_nums)
     if layout == "fmv_cost_summary":
         return _parse_fmv_cost_summary(pdf_path, page_nums)
+    if layout == "nt_market_erisa":
+        return _parse_nt_market_erisa(pdf_path, page_nums)
+    if layout == "asset_liability_positions":
+        return _parse_asset_liability_positions(pdf_path, page_nums)
     if layout == "typed_column_totals":
         return _parse_typed_column_totals(pdf_path, page_nums,
                                           PLAN_PARSERS.get(plan_id, {}).get("section_types", []),
@@ -4618,6 +4725,325 @@ def _parse_nt_held_regions(pdf_path: str, page_nums: List[int],
         abs(sum(s["value"] for s in sections) + sum(v[1] for v in missing.values()) - grand_total[1]) <= 1.0
     if no_grand_total and grand_total is None:
         grand_reconciled = None if not unparsed else False
+    return {"pages": pages, "sections": sections, "unparsed": unparsed,
+            "grand_total": grand_total, "grand_reconciled": grand_reconciled}
+
+
+def _alp_body(text: str) -> List[str]:
+    """asset_liability_positions lines below the title block, footer dropped."""
+    lines = [l.strip() for l in text.splitlines()]
+    start = next((i + 1 for i, l in enumerate(lines) if _ALP_COLUMNS_RE.match(l)), len(lines))
+    end = next((i for i, l in enumerate(lines) if i >= start and _ALP_FOOTER_RE.match(l)), len(lines))
+    return [l for l in lines[start:end] if l]
+
+
+def _parse_asset_liability_positions(pdf_path: str, page_nums: List[int]) -> Optional[Dict]:
+    """parse_schedule_4i_pages for the asset_liability_positions layout. The
+    pages must run from the first statement page to "Total Assets and Accruals"."""
+    pdf_stem = pdf_path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+    page_nums = sorted(set(page_nums))
+    with pdfplumber.open(pdf_path) as pdf:
+        bodies = {}
+        for page_num in page_nums:
+            if not 1 <= page_num <= len(pdf.pages):
+                return None
+            text = pdf.pages[page_num - 1].extract_text() or ""
+            if not _ALP_COLUMNS_RE.search(text):
+                return None
+            bodies[page_num] = _alp_body(text)
+
+    sections, unparsed, pages = [], [], []
+    stack = []  # open headings, outermost first: {"heading", "cost", "value", "section"}
+    grand_total, accrued, parents_ok = None, None, True
+    row = None  # last row; its description runs on until its id line
+    done = False
+    for page_num in page_nums:
+        mapped_rows = []
+        for line in bodies[page_num]:
+            if done:
+                break
+            g = _ALP_GRAND_RE.match(line)
+            if g:
+                grand_total, done = [_num(g.group(1)), _num(g.group(2))], True
+                break
+            t = _ALP_TOTAL_RE.match(line)
+            if t:
+                row = None
+                name, cost, value = t.group(1), _num(t.group(2)), _num(t.group(3))
+                if name == "Accrued Income":
+                    accrued = value
+                    while stack and stack[-1]["heading"] != "Accruals":
+                        stack.pop()
+                    stack = stack[:-1]
+                    continue
+                depth = next((i for i in range(len(stack) - 1, -1, -1) if stack[i]["heading"] == name), None)
+                if depth is None:
+                    unparsed.append({"page_number": page_num, "line": line})
+                    continue
+                node = stack[depth]
+                if node["section"] is not None:
+                    node["section"]["subtotal"] = [cost, value]
+                elif abs(node["value"] - value) > 1.0 or abs(node["cost"] - cost) > 1.0:
+                    parents_ok = False
+                    unparsed.append({"page_number": page_num, "line": f"{line} (rows sum {node['value']:,.2f})"})
+                del stack[depth:]
+                continue
+            r = _ALP_ROW_RE.match(line)
+            if r:
+                if not stack:
+                    unparsed.append({"page_number": page_num, "line": line})
+                    continue
+                node = stack[-1]
+                if node["section"] is None:
+                    node["section"] = {"heading": " / ".join(n["heading"] for n in stack), "partial": False,
+                                       "rows": 0, "cost": 0.0, "value": 0.0, "subtotal": None,
+                                       "asset_type": ""}
+                    node["section"]["asset_type"] = next((label for pattern, label in _ALP_HEADING_TYPES
+                                                          if re.search(pattern, node["section"]["heading"])), "")
+                    sections.append(node["section"])
+                section = node["section"]
+                units, cost, value = _num(r.group(3)), _num(r.group(5)), _num(r.group(6))
+                section["rows"] += 1
+                section["cost"] += cost or 0.0
+                section["value"] += value or 0.0
+                for n in stack:
+                    n["cost"] += cost or 0.0
+                    n["value"] += value or 0.0
+                row = {
+                    "issuer_name": "",
+                    "investment_description": r.group(2),
+                    "asset_type": section["asset_type"],
+                    "asset_type_source": "heading" if section["asset_type"] else "none",
+                    "par_value": "",
+                    "cost": _fmt(cost),
+                    "current_value": _fmt(value),
+                    "units_or_shares": _fmt(abs(units) if units is not None else None),
+                    "asset_identifier": "",
+                    "interest_rate": "",
+                    "maturity_date": "",
+                    "section_heading": section["heading"],
+                    "extraction_method": "sch4i_text",
+                    "page_number": page_num,
+                    "row_id": len(mapped_rows) + 1,
+                    "_ticker": "",
+                }
+                if value:
+                    # A zero row still owns its description and id lines.
+                    mapped_rows.append(row)
+                continue
+            m = _ALP_ID_RE.match(line)
+            if m and row is not None:
+                row["asset_identifier"], row["_ticker"] = m.group(1), m.group(2) or ""
+                row = None
+                continue
+            if row is not None:
+                # Description continues ("Group #G18461 2.500% Dtd 04/01/2013 103.361 97.231 0.02500"),
+                # the unit prices and rate trailing it.
+                text = re.sub(r"(?:\s+-?[\d,]*\.\d+)+$", "", line)
+                if not re.match(r"^Last\s+Priced\b", text) and text:
+                    row["investment_description"] += " " + text
+                continue
+            if stack and stack[-1]["heading"] == "Accruals":
+                continue  # "Dividends <cost> <market> ...", checked through "Total Accrued Income"
+            if re.search(r"\d\.\d\d$", line) or m:
+                unparsed.append({"page_number": page_num, "line": line})
+                continue
+            stack.append({"heading": line, "cost": 0.0, "value": 0.0, "section": None})
+        pages.append({
+            "pdf": pdf_path, "pdf_stem": pdf_stem, "page_number": page_num,
+            "mapped_rows": mapped_rows, "ocr_cells": [], "normalized_path": pdf_path,
+        })
+
+    for page in pages:
+        for m in page["mapped_rows"]:
+            ticker = m.pop("_ticker")
+            if m["asset_type"] == "Bond":
+                # "... 2.500% Dtd 04/01/2013 Due 04/01/2028 IPD14"
+                rate = re.search(r"\b(\d{1,2}\.\d+)%", m["investment_description"])
+                due = re.search(r"\bDue\s+(\d{2}/\d{2}/\d{4})\b", m["investment_description"])
+                m["interest_rate"], m["maturity_date"] = rate.group(1) if rate else "", due.group(1) if due else ""
+            if m["asset_type"]:
+                continue
+            m["asset_type"] = "Mutual Fund" if ticker else next(
+                (label for pattern, label in _ALP_FUND_TYPES if re.search(pattern, m["investment_description"])),
+                "Common/Collective Trust Fund")
+            m["asset_type_source"] = "row"
+    for section in sections:
+        sub = section["subtotal"]
+        section["cost_diff"] = None if sub is None else section["cost"] - sub[0]
+        section["value_diff"] = None if sub is None else section["value"] - sub[1]
+        section["reconciled"] = False if sub is None else (
+            abs(section["value_diff"]) <= 1.0 and abs(section["cost_diff"]) <= 1.0)
+    grand_reconciled = False if grand_total is None or not parents_ok or stack else \
+        abs(sum(s["value"] for s in sections) + (accrued or 0.0) - grand_total[1]) <= 1.0
+    return {"pages": pages, "sections": sections, "unparsed": unparsed,
+            "grand_total": grand_total, "grand_reconciled": grand_reconciled}
+
+
+def _nme_body(text: str) -> List[str]:
+    """nt_market_erisa lines below the column header, footer dropped."""
+    lines = [l.strip() for l in text.splitlines()]
+    start = next((i + 1 for i, l in enumerate(lines) if _NME_COLUMNS_RE.match(l)), len(lines))
+    end = next((i for i, l in enumerate(lines) if i >= start and _NME_FOOTER_RE.match(l)), len(lines))
+    return [_nme_join_split_amounts(l) for l in lines[start:end] if l]
+
+
+def _nme_join_split_amounts(line: str) -> str:
+    """Every amount here prints with decimals, so a bare digit run after a
+    decimal amount among the line's trailing amounts is that amount's tail
+    ("Total 10,749,742,228.9 7 ...", PepsiCo 2026-10-18). Two amounts run
+    together ("-969,442,656.25-1,005,122,079.12") are split."""
+    tokens = re.sub(r"(?<=\d,\d{3}\.\d\d)(?=-\d)", " ", line).split()
+    i = len(tokens)
+    while i > 0 and _NUM_RE.match(tokens[i - 1]):
+        i -= 1
+    tail = tokens[i:]
+    j = 0
+    while j < len(tail) - 1:
+        if re.match(r"^-?[\d,]*\.\d+$", tail[j]) and re.match(r"^\d+$", tail[j + 1]):
+            tail[j:j + 2] = [tail[j] + tail[j + 1]]
+        else:
+            j += 1
+    return " ".join(tokens[:i] + tail)
+
+
+def _parse_nt_market_erisa(pdf_path: str, page_nums: List[int]) -> Optional[Dict]:
+    """parse_schedule_4i_pages for the nt_market_erisa layout. The last page
+    must carry the unnamed grand "Total" line."""
+    pdf_stem = pdf_path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+    page_nums = sorted(set(page_nums))
+    with pdfplumber.open(pdf_path) as pdf:
+        bodies = {}
+        for page_num in page_nums:
+            if not 1 <= page_num <= len(pdf.pages):
+                return None
+            text = _upright_text(pdf.pages[page_num - 1])
+            if not _NME_COLUMNS_RE.search(text):
+                return None
+            bodies[page_num] = _nme_body(text)
+
+    sections, unparsed, pages = [], [], []
+    grand_total = None
+    current = None  # open category
+    group = None  # open "<region> - <currency>" sub-group heading
+    # "category": the next unnumbered line is a category heading; "group": a
+    # sub-group heading; "row": a description line (of the last row, or of
+    # the next row when that one prints its amounts alone).
+    expect = "category"
+    last_row = None
+    pending = None  # (row, text) last appended to a row's description
+    done = False
+    for page_num in page_nums:
+        mapped_rows = []
+        body = bodies[page_num]
+        # Every page repeats the open category (and sometimes sub-group) heading.
+        while body and current and body[0] in (current["heading"], group):
+            body = body[1:]
+        for line in body:
+            if done:
+                break
+            t4 = _trailing_nums(line, 4)
+            if t4 and (t4[0] == "Total" or t4[0].startswith("Total ")):
+                name = t4[0][len("Total"):].strip()
+                last_row, pending = None, None
+                market, cost = t4[1][0], t4[1][1]
+                if not name:
+                    grand_total, done = [cost, market], True
+                    break
+                if current and current["heading"].startswith(name):
+                    current["subtotal"] = [cost, market]
+                    current, group, expect = None, None, "category"
+                else:
+                    # A sub-group (or "- all currencies") total; the category total checks the sum.
+                    group, expect = None, "group"
+                continue
+            t6 = _trailing_nums(line, 6)
+            if not t6:
+                if _ID_RE.match(line) or re.match(r"^MAT:\s", line):
+                    if last_row is not None and not last_row["asset_identifier"]:
+                        last_row["asset_identifier"] = line.split()[-1]
+                    continue
+                if _trailing_nums(line, 2):
+                    unparsed.append({"page_number": page_num, "line": line})
+                elif expect == "category":
+                    current = {"heading": line, "partial": False, "rows": 0, "cost": 0.0, "value": 0.0,
+                               "subtotal": None,
+                               "asset_type": next((label for pattern, label in _CTL_ASSET_TYPES
+                                                   if re.search(pattern, line, re.I)), "")}
+                    sections.append(current)
+                    expect = "group"
+                elif expect == "group" and re.search(r"\s-\s[A-Z]{3}$", line):
+                    group, expect = line, "row"
+                elif last_row is not None:
+                    # "CLASS C998035125": description tail plus the row's asset id.
+                    words = line.split()
+                    if len(words) > 1 and _ID_RE.match(words[-1]):
+                        if not last_row["asset_identifier"]:
+                            last_row["asset_identifier"] = words[-1]
+                        line = " ".join(words[:-1])
+                    last_row["investment_description"] += " " + line
+                    pending = (last_row, line)
+                elif current is not None:
+                    pending = (None, line)
+                else:
+                    unparsed.append({"page_number": page_num, "line": line})
+                continue
+            if current is None:
+                unparsed.append({"page_number": page_num, "line": line})
+                continue
+            expect = "row"
+            title = re.sub(r"(?:^|\s+)-$", "", t6[0].lstrip("* ").strip())
+            if not title and pending is not None:
+                # The description printed on the line above the amounts.
+                owner, text = pending
+                if owner is not None:
+                    owner["investment_description"] = owner["investment_description"][:-len(text) - 1]
+                title = text
+            pending = None
+            units, _price, value, cost = t6[1][0], t6[1][1], t6[1][2], t6[1][3]
+            current["rows"] += 1
+            current["cost"] += cost or 0.0
+            current["value"] += value or 0.0
+            last_row = None
+            if not value:
+                continue
+            asset_type = current["asset_type"] or next(
+                (label for pattern, label in _FCV_ASSET_TYPES if re.search(pattern, title)
+                 and label not in ("Partnership Interest", "Hedge Fund")), "")
+            rd = _CTL_RATE_DATE_RE.search(title)
+            rate, maturity = ((rd.group(2), rd.group(1)) if rd.group(1) else (rd.group(3), rd.group(4))) \
+                if rd else ("", "")
+            last_row = {
+                "issuer_name": "",
+                "investment_description": title,
+                "asset_type": asset_type,
+                "asset_type_source": "heading" if current["asset_type"] else ("row" if asset_type else "none"),
+                "par_value": "",
+                "cost": _fmt(cost),
+                "current_value": _fmt(value),
+                "units_or_shares": _fmt(abs(units) if units is not None else None),
+                "asset_identifier": "",
+                "interest_rate": rate,
+                "maturity_date": maturity,
+                "section_heading": current["heading"] + (f" / {group}" if group else ""),
+                "extraction_method": "sch4i_text",
+                "page_number": page_num,
+                "row_id": len(mapped_rows) + 1,
+            }
+            mapped_rows.append(last_row)
+        pages.append({
+            "pdf": pdf_path, "pdf_stem": pdf_stem, "page_number": page_num,
+            "mapped_rows": mapped_rows, "ocr_cells": [], "normalized_path": pdf_path,
+        })
+
+    for section in sections:
+        sub = section["subtotal"]
+        section["cost_diff"] = None if sub is None else section["cost"] - sub[0]
+        section["value_diff"] = None if sub is None else section["value"] - sub[1]
+        section["reconciled"] = False if sub is None else (
+            abs(section["value_diff"]) <= 1.0 and abs(section["cost_diff"]) <= 1.0)
+    grand_reconciled = False if grand_total is None else \
+        abs(sum(s["value"] for s in sections) - grand_total[1]) <= 1.0
     return {"pages": pages, "sections": sections, "unparsed": unparsed,
             "grand_total": grand_total, "grand_reconciled": grand_reconciled}
 

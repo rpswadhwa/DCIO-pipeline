@@ -1236,6 +1236,10 @@ ALT_FUND_PATTERNS: List[Tuple[str, str, str, str, str]] = [
     ("real estate fund", "Real Estate Fund", "Real Estate", "HIGH", "keyword:real_estate_fund"),
     ("infrastructure fund", "Infrastructure Fund", "Infrastructure", "HIGH", "keyword:infrastructure_fund"),
     ("hedge fund", "Hedge Fund", "Hedge Fund", "HIGH", "keyword:hedge_fund"),
+    # Prudential's Property Investment Separate Account, filed as a separate
+    # account, CCT, LP or blank ("CF PRUDENTIAL PRISA SA", "PRISA III FUND LP");
+    # ~$2.9B of staging rows matched no rule (2026-10-18).
+    ("prisa", "Real Estate Fund", "Real Estate", "HIGH", "keyword:prisa"),
     ("private equity", "Private Equity Fund", "Private Equity", "MEDIUM", "keyword:private_equity"),
     ("buyout", "Private Equity Fund", "Private Equity", "MEDIUM", "keyword:buyout"),
     ("venture capital", "Private Equity Fund", "Private Equity", "MEDIUM", "keyword:venture_capital"),
