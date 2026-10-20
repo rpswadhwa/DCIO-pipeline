@@ -1384,10 +1384,13 @@ ALT_ASSET_TYPE_FUND_MARKER_REGEX = (
 #   P1 alt + R04/R08 + R09 > 110% cert_x -> R09 held, where cert_x = cert + Sch H
 #      other investments + real estate (filers book LP interests on either line:
 #      McKinsey $11.9B other / $0 JV, Boeing, GE; added 2026-10-18)
-#   P2 else, under 90% cert and alt + routed + held <= 110% cert -> R07 + P0 holds route
+#   P2 removed 2026-10-20: it promoted R07 holds to fill a plan's cert JV gap, which
+#      routed long-only funds the filer booked on the JV line (Parametric Defense
+#      Equity $148M, LSV / First Eagle / GQG equity, FTSE RAFI index, high-yield bond
+#      LPs; ~$1.95B). A row now routes on its own name or not at all.
 #   P3 R10 held when the ack has no plan_asset_allocation row, or P0 / P1 holds
 #      (R10 counts as weak in P1), so a mistyped public-stock section can't route
-# P1/P2 are skipped when the ack has no plan_asset_allocation row.
+# P1 is skipped when the ack has no plan_asset_allocation row.
 ALT_JV_TOTAL_REGEX = (
     r"\b(sub)?total\b|brought\s+forward|carried\s+forward|balance\s+forward|"
     r"fair\s+value\s+adj|^\s*(net\s+)?(unrealized|accrued)|grand\s+total"
@@ -1432,7 +1435,11 @@ ALT_JV_STRONG_REGEX = (
     r"\bindustrial\s+(value\s+)?fund\b|\bcatastrophe\b|\blongevity\b|"
     # JPMorgan Strategic Property Fund, filed as "JPMCB SPF" (Shell Pension, $120M);
     # without it the JPMCB long-only marker holds the row at R07.
-    r"\bspf\b|strategic\s+prop|\blong[\s/-]*short\b|\bfarmland\b|\btimberland\b"
+    r"\bspf\b|strategic\s+prop|\blong[\s/-]*short\b|\bfarmland\b|\btimberland\b|"
+    # Alt funds whose names carry a long-only term, routed by P2 until it was
+    # dropped (2026-10-20): Magnitude Inst (hedge FoF, $104M), ABS Direct Equity
+    # (long/short), Windjammer Senior Equity (PE), "MONROE ENGINEERING EQUITY CO-I".
+    r"\bmagnitude\s+inst|\babs\s+direct\s+equity\b|\bwindjammer\b|\bco-i\s*$"
 )
 # Fund vintage numeral (DYAL IV, KAREP VI, Cerberus Inst RE Ptnr III, JPMorgan
 # Corp Finance Instl Investors V LLC). Strong unless the name is a hard long-only
@@ -1867,9 +1874,6 @@ def _alt_asset_type_pass_sql(glue_db: str, source: str, routed_sql: str, vehicle
                     WHEN p.rule = 'R09' AND p.p0 THEN 'P0'
                     WHEN p.rule = 'R09' AND p.p1 THEN 'P1'
                     WHEN p.rule = 'R10' AND (p.cert_x IS NULL OR p.p0 OR p.p1) THEN 'P3'
-                    WHEN p.rule = 'R07' AND p.cert IS NOT NULL AND NOT p.p1
-                     AND p.alt + p.strong + CASE WHEN p.p0 THEN 0 ELSE p.weak END < 0.9 * p.cert
-                     AND p.alt + p.strong + p.weak + p.held <= 1.1 * p.cert THEN 'P2'
                     ELSE p.rule
                 END AS final_rule
             FROM atr_plan_rule p
@@ -1893,7 +1897,7 @@ def _alt_asset_type_pass_sql(glue_db: str, source: str, routed_sql: str, vehicle
                 CASE WHEN f._mgr IS NOT NULL THEN 'HIGH' ELSE NULL END AS manager_match_confidence,
                 CASE WHEN f._mgr IS NOT NULL THEN 'brand_regex_v1' ELSE NULL END AS manager_match_method
             FROM atr_final f
-            WHERE f.final_rule IN ('R04', 'R08', 'R09', 'R10', 'P2')
+            WHERE f.final_rule IN ('R04', 'R08', 'R09', 'R10')
         )"""
 
 
