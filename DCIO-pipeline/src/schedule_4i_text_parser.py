@@ -715,6 +715,8 @@ PLAN_PARSERS = {
                       "join_next": r"^(?:Limited\s+partnerships,\s+limited\s+liability\s+companies,\s+and\s+limited"
                                    r"|Total\s+limited\s+partnerships,\s+limited\s+liability\s+companies,\s+and)$",
                       "skip_lines": r"^E$",
+                      # identity column is the custodian on every row (2026-10-20)
+                      "leading_party": r"^(?:BNY\s+MELLON|JPMORGAN)\s+",
                       "own_section_rows": [(r"^JPMORGAN\s+Money\s+market\s+fund", "Money market fund",
                                             "Short-Term Investment Fund")],
                       "heading_asset_types": [(r"^Limited\s+partnerships", "Partnership Interest")]},
@@ -5453,6 +5455,9 @@ def _parse_typed_maturity_rate(pdf_path: str, page_nums: List[int],
       leading_id: every row's name starts with its CUSIP or SEDOL, which
         fills asset_identifier; the name is the rest of the line before the
         amounts (Factory Mutual, 2026-10-17).
+      leading_party: pattern of the custodian a row's identity column names;
+        the name is the description after it (Operating Engineers' Local 324:
+        "BNY MELLON <fund> <cost> <value>", 2026-10-20).
       grand_clipped_digits: the grand total's last digits fall off the page
         edge (Factory Mutual's "$ 2,693,464,31", one digit short); its
         printed digits are scaled back up and checked to that many places.
@@ -5478,6 +5483,7 @@ def _parse_typed_maturity_rate(pdf_path: str, page_nums: List[int],
     scale = options.get("amount_scale", 1)
     skip_re = re.compile(options["skip_lines"]) if options.get("skip_lines") else None
     join_re = re.compile(options["join_next"]) if options.get("join_next") else None
+    party_re = re.compile(options["leading_party"]) if options.get("leading_party") else None
     held = None   # join_next: the line wrapping onto this one
 
     def scaled(x: Optional[float]) -> Optional[float]:
@@ -5707,11 +5713,16 @@ def _parse_typed_maturity_rate(pdf_path: str, page_nums: List[int],
             ident = ""
             if pending is not None and not headings_re:
                 name, rest, pending = f"{pending} {title}".strip(), ["", ""], None
+                if party_re:
+                    # leading_party: a wrapped row's first line opens with the party too.
+                    name = party_re.sub("", name, count=1)
             elif not title:
                 name, rest = current["heading"], ["", ""]
             elif options.get("leading_id"):
                 ident, name = (title.split(None, 1) + [""])[:2]
                 rest = ["", ""]
+            elif party_re and party_re.match(title):
+                name, rest = title[party_re.match(title).end():].strip(), ["", ""]
             elif tm:
                 name = title[:tm.start()].strip()
                 # "<maturity> <rate>", where the rate may be "VARIABLE RATE".
