@@ -5389,6 +5389,11 @@ def run_post_extract_validation(
                         fill_managers(validated_glue_db, alt_table, alt_ack_ids)
                     except Exception:  # manager fill is best-effort; routing already succeeded
                         logger.exception("alt manager LLM fill failed for %d acks", len(alt_ack_ids))
+                try:  # spelling-variant / brand-name managers the exact alias join missed
+                    from .alt_manager_fuzzy import fill as fill_fuzzy_managers
+                    fill_fuzzy_managers(validated_glue_db, alt_table, alt_ack_ids)
+                except Exception:  # labelling only; routing already succeeded
+                    logger.exception("alt fuzzy manager fill failed for %d acks", len(alt_ack_ids))
         else:
             write_iceberg_via_athena(combined, validated_glue_db, validated_table)
 
