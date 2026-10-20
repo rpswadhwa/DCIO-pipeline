@@ -2295,6 +2295,10 @@ _CHT_TOTAL_RE = re.compile(r"^Total(?:\s+(.+))?$", re.I)
 _CHT_GRAND_LABEL_RE = re.compile(r"^Grand\s+Total$", re.I)
 _CHT_GRAND_RE = re.compile(r"(?m)^(?:Grand\s+Total\s+)?\$\s*[\d,]+\s+\$\s*[\d,]+$")
 _CHT_WRAPPED_RE = re.compile(r"\b(?:CUSIP|SEDOL):$")
+# A row's trailing "CUSIP: <id>" / "SEDOL: ^ <id>" (2026-10-20): moved to asset_identifier,
+# since the staging writer drops every name containing CUSIP/SEDOL as a continuation-line
+# artifact -- US Steel's first run lost all 3,221 such rows and kept its stale staging.
+_CHT_ID_RE = re.compile(r"\s+(?:CUSIP|SEDOL|ISIN)\s*:\s*[*^]*\s*(\S+)$")
 _CHT_FOOTER_RE = re.compile(r"^\d+$|^\*\s*The\s+above\s+named\s+is\s+a\s+party-in-interest$"
                             r"|^The\s+above\s+data\s+is\s+based\s+solely\b|^complete\s+and\s+accurate\s+by\b"
                             r"|^Information\s+certified\s+as\s+complete\b|^Northern\s+Trust\s+Company,\s+excluding\b", re.I)
@@ -7424,6 +7428,9 @@ def _parse_colon_heading_totals(pdf_path: str, page_nums: List[int], section_typ
             title, units, (cost, value) = (t3[0], t3[1][0], t3[1][1:]) if t3 else (t2[0], None, t2[1])
             # "*" marks a party in interest, "^" an investment the trustee does not certify.
             title = re.sub(r"^[*^]+\s*", "", title)
+            ident = _CHT_ID_RE.search(title)
+            if ident:
+                title = title[:ident.start()].strip()
             if not is_open() or not title:
                 unparsed.append({"page_number": page_num, "line": line})
                 continue
@@ -7439,7 +7446,7 @@ def _parse_colon_heading_totals(pdf_path: str, page_nums: List[int], section_typ
                 "cost": _fmt(cost),
                 "current_value": _fmt(value),
                 "units_or_shares": _fmt(units) if units is not None else "",
-                "asset_identifier": "",
+                "asset_identifier": ident.group(1) if ident else "",
                 "interest_rate": "",
                 "maturity_date": "",
                 "section_heading": current["heading"],
