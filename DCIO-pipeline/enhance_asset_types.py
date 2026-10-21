@@ -9,11 +9,11 @@ from pathlib import Path
 
 # Import shared patterns — works whether run standalone or as part of the package
 try:
-    from src.asset_type_patterns import detect_asset_type, looks_like_security
+    from src.asset_type_patterns import detect_asset_type, looks_like_security, is_generic_holding_name
     from src.post_extract_validator import pick_fund_name
 except ImportError:
     sys.path.insert(0, os.path.dirname(__file__))
-    from asset_type_patterns import detect_asset_type, looks_like_security
+    from asset_type_patterns import detect_asset_type, looks_like_security, is_generic_holding_name
     from post_extract_validator import pick_fund_name
 
 # Fund types a name alone may never assign to a bond, note or futures contract
@@ -55,10 +55,15 @@ def _lookup_known_mf_names(candidates, verbose=True):
     workgroup = os.environ.get("ATHENA_WORKGROUP", "primary")
 
     quoted = ", ".join("'" + c.replace("'", "''") + "'" for c in candidates)
+    # asset_class is the fund's investment class ("Alternatives" holds REIT index
+    # mutual funds), so classes are not excluded wholesale; only Vehicle Wrapper
+    # (trust-company names, "general account") and Other (loan funds, forfeitures)
+    # never name a mutual fund (2026-10-21).
     sql = f"""
         SELECT DISTINCT lower(trim(raw_entity_name)) AS k
         FROM {mapping_db}.{mapping_table}
         WHERE lower(trim(raw_entity_name)) IN ({quoted})
+          AND coalesce(asset_class, '') NOT IN ('Vehicle Wrapper', 'Other')
     """
     try:
         df = wr.athena.read_sql_query(sql=sql, database=mapping_db, workgroup=workgroup, s3_output=staging)
@@ -130,7 +135,8 @@ def enhance_asset_types(db_path, verbose=True):
     # The mapping is fed from plan_mf_history_v3, so a bond or future that once
     # reached v3 by mistake sits in it and would be re-typed Mutual Fund on every
     # later run (US Steel's Treasuries, Liberty Mutual's Treasury futures,
-    # 2026-10-21). Security-looking names are never looked up.
+    # 2026-10-21). Security-looking names are never looked up, nor are generic
+    # names that identify no fund ("vanguard", "companies", "sedol").
     cursor.execute("""
         SELECT id, issuer_name, investment_description
         FROM investments
@@ -143,7 +149,8 @@ def enhance_asset_types(db_path, verbose=True):
         for record_id, issuer, description in still_missing:
             name = pick_fund_name(issuer or "", description or "")
             key = name.strip().lower()
-            if key and not looks_like_security(f"{description or ''} {issuer or ''} {name}"):
+            if key and not is_generic_holding_name(key) \
+                    and not looks_like_security(f"{description or ''} {issuer or ''} {name}"):
                 candidates_by_key.setdefault(key, []).append(record_id)
 
         matched_keys = _lookup_known_mf_names(list(candidates_by_key.keys()), verbose=verbose)

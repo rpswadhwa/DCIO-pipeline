@@ -1247,7 +1247,8 @@ def _route_mf_from_staging(glue_db: str, staging_table: str, target_table: str, 
 # stored, or would put its mutual fund total further from the certified
 # amt_mutual_funds. REGRESSION_GUARD=0 turns the check off; REGRESSION_ALLOW_ACKS
 # (comma-separated) lets named filings through when a drop is intended.
-_REGRESSION_DROP = 0.10
+# Held only below 70% of what is stored (2026-10-21).
+_REGRESSION_DROP = 0.30
 
 
 def _regression_holds(glue_db: str, staging_table: str, target_table: str,

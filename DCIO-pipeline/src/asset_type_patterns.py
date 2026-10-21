@@ -327,6 +327,35 @@ def looks_like_security(name: str) -> bool:
     return bool(_SECURITY_SOFT_RE.search(name)) and not _FUND_VEHICLE_RE.search(name)
 
 
+# A holding name that names no particular fund: a bare fund family ("vanguard", "bny
+# mellon", "t rowe price"), a container or subtotal label ("companies", "investment
+# companies", "interest held in master trust", "see attached", "n/a") or a stray
+# column header ("sedol"). fund_intelligence_mapping_mf holds such names because they
+# once reached plan_mf_history_v3, and on 2026-10-21 they carried $107B of MF-typed
+# staging rows ("sedol" alone $32.7B over 47 filings). A name is generic when every
+# word is a family word or a filler word; any other word ("income", "500", "2040",
+# "growth") makes it specific, so "dodge cox income" and "institutional index fund"
+# still match.
+_FAMILY_WORDS = frozenset("""
+    vanguard vang fidelity fid american bny mellon blackrock blk btc pimco schwab rowe price trowe jpmorgan jpm jp
+    morgan dodge cox tiaa cref principal prudential pgim voya empower massmutual franklin templeton invesco nuveen
+    northern ssga putnam janus mfs lord abbett columbia goldman sachs wells fargo transamerica hancock john metlife
+    lincoln nationwide t""".split())
+_FILLER_WORDS = frozenset("""
+    fund funds fd fds fnd investment investments companies company shares share mutual trust tr account accounts
+    plan see attached sedol cusip interest held in master n a na none other various total group and the of for inc
+    co corp llc exhibit refer to registered""".split())
+
+
+def is_generic_holding_name(name: str) -> bool:
+    """True when a holding name is only fund-family and filler words, so it cannot
+    identify a fund (see _FAMILY_WORDS). Numbers count as identifying unless they
+    are a single digit or all zeros ("vanguard 0")."""
+    words = [w for w in re.findall(r'[a-z]+|\d+', (name or '').lower())
+             if not (w.isdigit() and (len(w) < 2 or set(w) == {'0'}))]
+    return not any(w not in _FAMILY_WORDS and w not in _FILLER_WORDS for w in words)
+
+
 def detect_asset_type_row(text: str) -> str:
     """Detect a per-row asset-type DECLARATION carried in the row (a Type-column value or a
     vehicle-type phrase in the description). Non-name-based: only explicit vehicle-type
