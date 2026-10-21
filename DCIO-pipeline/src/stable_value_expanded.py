@@ -13,7 +13,7 @@ def eligible(row):
         'insurance_mandate_evidence_required', 'classification_conflict', 'security_conflict'})
 
 
-def build_decisions(staging, history, resolver):
+def build_decisions(staging, history, resolver, approved_rules=None):
     source_by_ack, history_by_ack = defaultdict(list), defaultdict(list)
     for row in staging:
         source_by_ack[row['ack_id']].append(row)
@@ -39,7 +39,7 @@ def build_decisions(staging, history, resolver):
                 continue
             row = candidates[0]
             d = decide(row, indexes, pairs, label_conflict=len(labels[key]) > 1,
-                       staging_amount_names=amounts)
+                       staging_amount_names=amounts, approved_rules=approved_rules)
             destination, vehicle, account, contract, rule = choose_vehicle(row)
             d.update(vehicle_type=vehicle, account_structure=account, contract_type=contract,
                      routing_rule=rule, routing_reason=d['reason'], routing_version=VERSION,

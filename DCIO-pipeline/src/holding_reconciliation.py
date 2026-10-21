@@ -6,6 +6,8 @@ never an existing-holding match; share classes and years survive normalization.
 from collections import defaultdict
 from functools import lru_cache
 import hashlib
+import json
+from pathlib import Path
 import re
 
 from .stable_value_routing import amount, choose_vehicle, normalize_name, similar_name
@@ -115,15 +117,39 @@ def possible_history_variants(row, history):
     return [h for h in history if similar_name(row.get('raw_entity_name', ''), h.get('raw_entity_name', ''))]
 
 
+def approval_key(row):
+    """Scope of a reviewed product rule: product name, provider and the three source labels."""
+    return (product_name(row.get('raw_entity_name')),
+            *[normalize_name(row.get(k)) for k in ('raw_sponsor_name', 'asset_type', 'asset_class', 'asset_sub_class')])
+
+
+def load_product_rules(path):
+    if not path:
+        return {}
+    data = json.loads(Path(path).read_text(encoding='utf-8-sig'))
+    if not isinstance(data, list):
+        raise ValueError('Product rules must be a JSON list')
+    result = {}
+    for rule in data:
+        for key in ('rule_id', 'raw_entity_name', 'raw_sponsor_name', 'asset_type',
+                    'asset_class', 'asset_sub_class', 'destination_table', 'evidence', 'approved_by'):
+            if key not in rule or not isinstance(rule[key], str):
+                raise ValueError('Missing/invalid product-rule field: ' + key)
+        if rule['destination_table'] not in set(SOURCES) - {'plan_mf_history_v3'}:
+            raise ValueError('Unsupported product-rule destination')
+        if any(not rule[k].strip() for k in ('rule_id', 'raw_entity_name', 'evidence', 'approved_by')):
+            raise ValueError('Rules require named product, evidence and approver')
+        key = approval_key(rule)
+        if key in result:
+            raise ValueError('Duplicate product-rule scope')
+        result[key] = rule
+    return result
+
+
 def decide(row, indexes, pair_identities, duplicate_of='', alternative_patterns=(), label_conflict=False,
            staging_amount_names=None, approved_rules=None):
     status, destination, reason, rule = classify(row, alternative_patterns)
-    approval_key = (product_name(row.get('raw_entity_name')),
-                    normalize_name(row.get('raw_sponsor_name')),
-                    normalize_name(row.get('asset_type')),
-                    normalize_name(row.get('asset_class')),
-                    normalize_name(row.get('asset_sub_class')))
-    approval = (approved_rules or {}).get(approval_key)
+    approval = (approved_rules or {}).get(approval_key(row))
     if approval and reason in {'stable_value_product_evidence_required', 'account_structure_or_menu_evidence_required',
                               'alternative_keyword_requires_review', 'insurance_wrapper_without_stable_value_mandate'}:
         status, destination, reason, rule = 'INSERT', approval['destination_table'], 'approved_product_rule', approval['rule_id']

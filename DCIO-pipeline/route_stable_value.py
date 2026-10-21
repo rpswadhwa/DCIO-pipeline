@@ -451,6 +451,8 @@ def main():
     parser.add_argument('--apply', action='store_true')
     parser.add_argument('--ack-ids', default='')
     parser.add_argument('--approved-candidates', help='Reviewed proposal CSV; limits promotion to these exact identities')
+    parser.add_argument('--product-rules', help='Reviewed product-rule JSON (evidence + approver per product); '
+                        'promotes holdings held only for missing stable value / structure evidence. Requires --approved-candidates')
     parser.add_argument('--region', default='us-east-1')
     parser.add_argument('--database', default='default')
     parser.add_argument('--workgroup', default='primary')
@@ -473,6 +475,14 @@ def main():
     athena = Athena(args)
     ack_ids = [a.strip() for a in args.ack_ids.split(',') if a.strip()]
     approved = None
+    product_rules = {}
+    if args.product_rules:
+        if not args.approved_candidates:
+            parser.error('--product-rules requires --approved-candidates')
+        from src.holding_reconciliation import load_product_rules
+        product_rules = load_product_rules(args.product_rules)
+        if any(r['destination_table'] not in {'plan_cit_history', *TARGETS} for r in product_rules.values()):
+            raise ValueError('Product-rule destination is not a stable value router target')
     if args.approved_candidates:
         with open(args.approved_candidates, encoding='utf-8-sig', newline='') as f:
             proposal_rows = list(csv.DictReader(f))
@@ -488,7 +498,7 @@ def main():
         ack_ids = proposal_scope
 
     def scoped_decisions(staging, history):
-        decisions = build_decisions(staging, history, resolver)
+        decisions = build_decisions(staging, history, resolver, product_rules)
         if approved is not None:
             decisions = [d for d in decisions if d['candidate_id'] in approved]
             if {d['candidate_id'] for d in decisions} != approved:

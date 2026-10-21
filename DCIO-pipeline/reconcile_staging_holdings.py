@@ -19,32 +19,9 @@ from urllib.parse import urlparse
 
 from route_stable_value import Athena, quote
 from src.holding_reconciliation import FIELDS, SOURCES, VERSION, decide, history_index, identity, product_name
+from src.holding_reconciliation import load_product_rules as approved_rules
 from src.stable_value_manager import ManagerResolver
 from src.stable_value_routing import amount, normalize_name
-
-
-def approved_rules(path):
-    if not path:
-        return {}
-    data = json.loads(Path(path).read_text(encoding='utf-8-sig'))
-    if not isinstance(data, list):
-        raise ValueError('Product rules must be a JSON list')
-    result = {}
-    for rule in data:
-        for key in ('rule_id', 'raw_entity_name', 'raw_sponsor_name', 'asset_type',
-                    'asset_class', 'asset_sub_class', 'destination_table', 'evidence', 'approved_by'):
-            if key not in rule or not isinstance(rule[key], str):
-                raise ValueError('Missing/invalid product-rule field: ' + key)
-        if rule['destination_table'] not in set(SOURCES) - {'plan_mf_history_v3'}:
-            raise ValueError('Unsupported product-rule destination')
-        if any(not rule[k].strip() for k in ('rule_id', 'raw_entity_name', 'evidence', 'approved_by')):
-            raise ValueError('Rules require named product, evidence and approver')
-        key = (product_name(rule['raw_entity_name']), *[normalize_name(rule[k]) for k in
-               ('raw_sponsor_name', 'asset_type', 'asset_class', 'asset_sub_class')])
-        if key in result:
-            raise ValueError('Duplicate product-rule scope')
-        result[key] = rule
-    return result
 
 
 def sha256(path):

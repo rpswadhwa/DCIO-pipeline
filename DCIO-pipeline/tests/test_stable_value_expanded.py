@@ -25,6 +25,18 @@ class ExpandedRouterTests(unittest.TestCase):
     def decisions(self, rows, history=()):
         return build_decisions(rows, history, NoManager())
 
+    def test_reviewed_product_rule_promotes_evidence_hold_but_keeps_duplicate_guards(self):
+        from src.holding_reconciliation import approval_key
+        r = row(raw_entity_name='Prudential Guaranteed Income', asset_type='stable value fund')
+        self.assertEqual(self.decisions([r])[0]['routing_reason'], 'stable_value_product_evidence_required')
+        rules = {approval_key(r): dict(rule_id='reviewed-pru-gi', destination_table='plan_insurance_history')}
+        d = build_decisions([r], [], NoManager(), rules)[0]
+        self.assertEqual((d['routing_status'], d['destination_table'], d['routing_reason']),
+                         ('READY', 'plan_insurance_history', 'approved_product_rule'))
+        same_amount = row(raw_entity_name='Some Other Contract', source_table='plan_insurance_history')
+        d = build_decisions([r], [same_amount], NoManager(), rules)[0]
+        self.assertEqual(d['routing_status'], 'REVIEW')
+
     def test_large_scope_splits_athena_array_constructors(self):
         from route_stable_value import load_inputs
         client = Mock()
