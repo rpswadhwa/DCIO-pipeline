@@ -8,6 +8,8 @@ OVER-capturing plans -- a cascade of removals, each stopping the moment the plan
 lands within tolerance and never overshooting below certified:
   0. subtotal labels              (a name of filler words only: "investment companies",
                                    "companies", "trust" -- a block total counted twice)
+  0b. exact certified match       (one set of 2-3 rows sums to certified to the dollar:
+                                   keep those, move every other MF row out)
   1. money-market rows            (often not counted in certified amt_mutual_funds)
   2. other non-MF by name         (employer/company stock, stable value, contract,
                                    separate account, non-CREF annuity, general acct, brokerage)
@@ -73,6 +75,31 @@ def _mf_total(rows, type_key, value_key):
                if str(r.get(type_key, '') or '').strip().lower() in MF_ASSET_TYPES)
 
 
+def _exact_certified_subset(mf_rows, cm, value_key, max_rows=60):
+    """ids of the one set of 2-3 rows summing to certified within a few dollars, else None.
+    A single row is never enough (it may be a subtotal), nor is a row plus a $0 line,
+    so every kept row must be at least 1% of certified; two different sets mean no answer."""
+    tol = max(5.0, cm * 1e-6)
+    vals = [(id(r), _fv(r.get(value_key))) for r in mf_rows]
+    vals = [x for x in vals if x[1] >= cm * 0.01]
+    if len(vals) < 3 or len(vals) > max_rows:
+        return None
+    found = set()
+    n = len(vals)
+    for i in range(n):
+        for j in range(i + 1, n):
+            s = vals[i][1] + vals[j][1]
+            if abs(s - cm) <= tol:
+                found.add(frozenset((vals[i][0], vals[j][0])))
+            if s < cm + tol:
+                for k in range(j + 1, n):
+                    if abs(s + vals[k][1] - cm) <= tol:
+                        found.add(frozenset((vals[i][0], vals[j][0], vals[k][0])))
+        if len(found) > 1:
+            return None
+    return next(iter(found)) if len(found) == 1 else None
+
+
 def reconcile_plan(rows, certified_mf, certified_cit=0.0, tolerance=0.05,
                    name_key='raw_entity_name', type_key='asset_type', value_key='plan_investment_amt'):
     """Reclassify rows of ONE plan so extracted MF matches certified_mf.
@@ -126,6 +153,27 @@ def reconcile_plan(rows, certified_mf, certified_cit=0.0, tolerance=0.05,
         # stage may land down to 90% of certified.
         strip(lambda r: bool(nm(r).strip()) and is_generic_holding_name(nm(r)),
               SUBTOTAL_OUT_TYPE, '0-subtotal-label', floor=cm * 0.90)
+        # 0b) exact certified match: when exactly one set of 2-3 MF-typed rows adds up to
+        # the certified total to the dollar, those rows are the plan's mutual funds and
+        # everything else is not (Disney Savings: Vanguard Mid-Cap $856.1M + Small-Cap
+        # $474.9M = certified $1,331.0M, among $15B of trusts and stock all typed MF).
+        if cur > hi:
+            keep = _exact_certified_subset([r for r in rows if is_mf(r)], cm, value_key)
+            if keep is not None:
+                for r in rows:
+                    if is_mf(r) and id(r) not in keep:
+                        n = nm(r)
+                        if str(r.get(type_key, '') or '').strip().lower() == 'money market fund':
+                            new_type = MMF_OUT_TYPE
+                        elif _OTHER.search(n) and not _KEEP.search(n):
+                            new_type = OTHER_OUT_TYPE
+                        else:
+                            new_type = CIT_TYPE
+                        v = _fv(r.get(value_key))
+                        changes.append({'name': n, 'value': v, 'old_type': str(r.get(type_key, '') or ''),
+                                        'new_type': new_type, 'stage': '0b-exact-match', 'needs_review': False})
+                        r[type_key] = new_type
+                        cur -= v
         # 1) money-market
         strip(lambda r: str(r.get(type_key, '') or '').strip().lower() == 'money market fund',
               MMF_OUT_TYPE, '1-money-market')
