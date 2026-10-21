@@ -56,14 +56,15 @@ def _lookup_known_mf_names(candidates, verbose=True):
 
     quoted = ", ".join("'" + c.replace("'", "''") + "'" for c in candidates)
     # asset_class is the fund's investment class ("Alternatives" holds REIT index
-    # mutual funds), so classes are not excluded wholesale; only Vehicle Wrapper
-    # (trust-company names, "general account") and Other (loan funds, forfeitures)
-    # never name a mutual fund (2026-10-21).
+    # mutual funds), so classes are not excluded wholesale; only Other (loan funds,
+    # forfeitures) never names a mutual fund. Vehicle Wrapper names ("Capital Bank
+    # Trust Company") are mostly real fund money checked against certified MF
+    # totals, so they still match (2026-10-21).
     sql = f"""
         SELECT DISTINCT lower(trim(raw_entity_name)) AS k
         FROM {mapping_db}.{mapping_table}
         WHERE lower(trim(raw_entity_name)) IN ({quoted})
-          AND coalesce(asset_class, '') NOT IN ('Vehicle Wrapper', 'Other')
+          AND coalesce(asset_class, '') <> 'Other'
     """
     try:
         df = wr.athena.read_sql_query(sql=sql, database=mapping_db, workgroup=workgroup, s3_output=staging)
@@ -136,7 +137,7 @@ def enhance_asset_types(db_path, verbose=True):
     # reached v3 by mistake sits in it and would be re-typed Mutual Fund on every
     # later run (US Steel's Treasuries, Liberty Mutual's Treasury futures,
     # 2026-10-21). Security-looking names are never looked up, nor are generic
-    # names that identify no fund ("vanguard", "companies", "sedol").
+    # names that identify no fund ("investment companies", "sedol").
     cursor.execute("""
         SELECT id, issuer_name, investment_description
         FROM investments
