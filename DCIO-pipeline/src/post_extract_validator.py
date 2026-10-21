@@ -1519,7 +1519,7 @@ ALT_RE_FUND_REGEX = (
 )
 # named real estate fund programs that often carry no fund word
 ALT_RE_FUND_KNOWN_REGEX = (
-    r"prime\s+property|harrison\s+st|lion\s+industrial|clarion|nuveen|usaa\s+eagle|"
+    r"\bprisa\b|prime\s+property|harrison\s+st|lion\s+industrial|clarion|nuveen|usaa\s+eagle|"
     r"bell\s+institutional|blackstone\s+property|\bara\s+core|indure|rreef\s+(america|core|u\.?s\.?|property)|"
     r"\bamb\s+inst|heitman|invesco\s+(us\s+)?(real|core|income)|trumbull\s+property|"
     r"morgan\s+stanley\s+prime|principal\s+(u\.?s\.?\s+)?property|\bcbre\b|\bbgo\b|\bbentall|lasalle\s+(property|income)|"
@@ -1533,8 +1533,10 @@ ALT_RE_FUND_EXCLUDE_REGEX = (
     r"\bsr\.?\s+(unsec|notes?|sec)|\bdeb\b|\d{2}/\d{2}/\d{2,4}|\b\d{8}\b|\bmtg\b|\bgnma\b|\bfnma\b|\bfhlmc\b|"
     # insurance contracts / fiduciary lines, decided case by case
     r"\bins(urance)?\s+co|\binsurance\b|pension\s+realty|fiduciary|"
-    # collective trusts -> plan_cit_history
-    r"^cf\s|\bcf\s|\bjpmcb\b|collective|commingled|group\s+trust|\bcit\b|\bctf\b|common\s+trust|"
+    # collective trusts -> plan_cit_history. A custodian's "CF" prefix is no sign
+    # of one: it tags private funds ("CF RREEF AMERICA REIT II", "CF PRUDENTIAL
+    # PRISA II") and mutual funds alike, so those rows read on the name after it.
+    r"\bjpmcb\b|collective|commingled|group\s+trust|\bcit\b|\bctf\b|common\s+trust|building\s+investment\s+trust|"
     # JPMCB's commingled pension trusts, often filed without the bank prefix
     r"\bsspf\b|j\.?\s*p\.?\s*morgan\s+(strategic|special|ssp)|special\s+situation\s+property"
 )
