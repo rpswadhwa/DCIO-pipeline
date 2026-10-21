@@ -1500,12 +1500,81 @@ ALT_JV_NORM_STOPWORDS_REGEX = (
     r"partnership|partnerships|interests?|units?|cf|sub)\b"
 )
 
+# Real estate funds (pass 6, added 2026-10-21). Filers' "real estate" heading
+# types every row under it alike: pooled funds ("PRIME PROPERTY FUND LLC",
+# "PRISA III FUND LP", "RREEF AMERICA REIT II"), directly owned buildings
+# ("1001 COLUMBIA AVE DIRECT DEAL", "CAST IRON LOFTS"), listed stocks and,
+# under heading inheritance, Treasuries and Apple. $18.5B of such staging rows
+# sat in no history table. Only the pooled funds route here; direct property
+# and stocks are out of scope for now (user, 2026-10-21), and real estate
+# collective trusts ("CF JPMCB STRATEGIC PROPERTY FUND") belong in
+# plan_cit_history, so they are left for that table. A row any of passes 1-5
+# claims, or already in plan_cit_history / plan_mf_history_v3 for the filing
+# (by name or amount), is skipped.
+ALT_RE_FUND_ASSET_TYPE_REGEX = r"^\s*real\s+estate"
+ALT_RE_FUND_REGEX = (
+    r"\bfund\b|\bfd\b|\bfds\b|\bl\.?\s?p\.?\b|\blp\b|\bpartners\b|\bpartnership\b|\bcore\s+plus\b|\bvalue[- ]add|"
+    r"\bopen[- ]end|\bfeeder\b|\bprisa\b|\binvestors\s+[ivx]+\b|\b(reit|trust|fund|partners|investors)\s+[ivx]+\b|"
+    r"\b[ivx]+\s+l\.?p\b|\binstitutional\b|\bseries\b|\bclass\s+[a-z]\b|\breal\s+estate\s+account\b|\bsep(arate)?\s+acc"
+)
+# named real estate fund programs that often carry no fund word
+ALT_RE_FUND_KNOWN_REGEX = (
+    r"prime\s+property|harrison\s+st|lion\s+industrial|clarion|nuveen|usaa\s+eagle|"
+    r"bell\s+institutional|blackstone\s+property|\bara\s+core|indure|rreef\s+(america|core|u\.?s\.?|property)|"
+    r"\bamb\s+inst|heitman|invesco\s+(us\s+)?(real|core|income)|trumbull\s+property|"
+    r"morgan\s+stanley\s+prime|principal\s+(u\.?s\.?\s+)?property|\bcbre\b|\bbgo\b|\bbentall|lasalle\s+(property|income)|"
+    r"\bintercontinental\b|\bstockbridge|american\s+core\s+realty|american\s+strategic\s+value|\bsmart\s+markets|"
+    r"\bkkr\s+real|\bstarwood|\bbreit\b|carlyle\s+property|\bgreystar|\bpgim\s+real|metlife\s+core|\bjamestown|"
+    r"angelo\s+gordon|\bwalton|berkeley\s+partners|\bavanti\b|\bwoodbourne"
+)
+ALT_RE_FUND_EXCLUDE_REGEX = (
+    # bonds, notes, futures
+    r"\d+(\.\d+)?\s*%|\bdue\b|\bnotes?\b|\bnts\b|\bbds?\b|\btreas|\bfutures?\b|\b144a\b|callable|"
+    r"\bsr\.?\s+(unsec|notes?|sec)|\bdeb\b|\d{2}/\d{2}/\d{2,4}|\b\d{8}\b|\bmtg\b|\bgnma\b|\bfnma\b|\bfhlmc\b|"
+    # insurance contracts / fiduciary lines, decided case by case
+    r"\bins(urance)?\s+co|\binsurance\b|pension\s+realty|fiduciary|"
+    # collective trusts -> plan_cit_history
+    r"^cf\s|\bcf\s|\bjpmcb\b|collective|commingled|group\s+trust|\bcit\b|\bctf\b|common\s+trust|"
+    # JPMCB's commingled pension trusts, often filed without the bank prefix
+    r"\bsspf\b|j\.?\s*p\.?\s*morgan\s+(strategic|special|ssp)|special\s+situation\s+property"
+)
+# a property-level holding a custodian suffixes "OPEN-END FUND USD"
+# ("EWA DORAL OWNER, LLC OPEN-END FUND USD")
+ALT_RE_FUND_PROPERTY_REGEX = r"\bllc\b|\bowner\b|\bjv\b|\binvestor\b"
+# a long-only/cash fund under a real estate heading
+ALT_RE_FUND_NON_RE_REGEX = (
+    r"stockplus|\bbd\b|\bbond\b|\bequity\b|\bindex\b|treasury|\bgovt\b|money\s+market|\bstif\b|short\s+term"
+)
+ALT_RE_FUND_RE_WORD_REGEX = r"real|realty|propert|reit"
+# a listed company: routes only with a known program name or a hard fund word
+ALT_RE_FUND_STOCK_REGEX = (
+    r"\binc\b|\bcorp\b|\bcom\b|\bcl\s+[a-z]\b|\bpar\b|\bshs\b|\bsh\s+ben|\bplc\b|\bltd\b|\badr\b|\bco\b|"
+    r"\bn\.?v\.?$|\bs\.?a\.?$|\bag\b|\bdkk|\bcorporation\b"
+)
+ALT_RE_FUND_HARD_REGEX = r"\bfund\b|\bl\.?\s?p\.?\b|\bpartners\b"
+
+
+def _alt_re_fund_sql(expr: str) -> str:
+    """True when lower-cased, space-collapsed expr reads as a real estate fund
+    (see ALT_RE_FUND_REGEX)."""
+    known = f"regexp_like({expr}, '{ALT_RE_FUND_KNOWN_REGEX}')"
+    return (
+        f"(({known} OR regexp_like({expr}, '{ALT_RE_FUND_REGEX}'))"
+        f" AND NOT regexp_like({expr}, '{ALT_RE_FUND_EXCLUDE_REGEX}')"
+        f" AND NOT (regexp_like({expr}, 'open-end') AND regexp_like({expr}, '{ALT_RE_FUND_PROPERTY_REGEX}'))"
+        f" AND NOT (regexp_like({expr}, '{ALT_RE_FUND_NON_RE_REGEX}')"
+        f" AND NOT regexp_like({expr}, '{ALT_RE_FUND_RE_WORD_REGEX}'))"
+        f" AND NOT (regexp_like({expr}, '{ALT_RE_FUND_STOCK_REGEX}') AND NOT {known}"
+        f" AND NOT regexp_like({expr}, '{ALT_RE_FUND_HARD_REGEX}')))"
+    )
+
+
 # Rows the router can regenerate on a re-route: its own pass methods, plus any
 # override-table method on a row still present in staging. Everything else in
 # the target (e.g. manual:appendix_x_decomposition rows typed from a filing
 # appendix that staging never sees) is kept by the DELETE and the re-insert
 # skips names it already holds -- see _alt_route_delete_sql (2026-10-13).
-ALT_ROUTER_METHOD_REGEX = r"^(keyword:|asset_type:|debt_carveout|manual:brand_match:|manual:sponsor_brand_match:)"
+ALT_ROUTER_METHOD_REGEX = r"^(keyword:|asset_type:|debt_carveout|manual:brand_match:|manual:sponsor_brand_match:|re_fund:)"
 
 
 def _alt_case_sql(value_index: int) -> str:
@@ -1971,6 +2040,7 @@ def _route_alternatives_chunk(glue_db: str, staging_table: str, target_table: st
     brand_excluded = ", ".join("'" + t + "'" for t in sorted(ALT_EXCLUDED_ASSET_TYPES))
     noise_only = ", ".join("'" + t + "'" for t in sorted(ALT_NOISE_ASSET_TYPES))
     trusted = ", ".join("'" + t + "'" for t in sorted(ALT_BRAND_TRUSTED_ASSET_TYPES))
+    re_fund_cond = _alt_re_fund_sql("regexp_replace(lower(s.raw_entity_name), '\\s+', ' ')")
     # Pass 5 dedupes against every row the other passes route plus the rows the
     # guarded DELETE kept (manual:*), so a re-route can't double-insert them.
     asset_type_pass = _alt_asset_type_pass_sql(
@@ -2251,6 +2321,51 @@ def _route_alternatives_chunk(glue_db: str, staging_table: str, target_table: st
         ),
         {asset_type_pass}
         ,
+        re_fund_matched_rows AS (
+            -- 6. real estate funds: see ALT_RE_FUND_REGEX
+            SELECT
+                s.ack_id, s.raw_entity_name, s.raw_sponsor_name, s.plan_investment_amt,
+                'Real Estate' AS asset_sub_class,
+                s.validation_status,
+                {vehicle_case} AS asset_type,
+                'MEDIUM' AS classification_confidence,
+                're_fund:v1' AS classification_method,
+                true AS manual_review_required,
+                current_timestamp AS routed_at,
+                'Alternatives' AS asset_class,
+                s._mgr AS matched_manager_name,
+                CASE WHEN s._mgr IS NOT NULL THEN 'HIGH' ELSE NULL END AS manager_match_confidence,
+                CASE WHEN s._mgr IS NOT NULL THEN 'brand_regex_v1' ELSE NULL END AS manager_match_method
+            FROM entity_mgr_lookup s
+            WHERE regexp_like(lower(coalesce(s.asset_type, '')), '{ALT_RE_FUND_ASSET_TYPE_REGEX}')
+              AND TRY_CAST(s.plan_investment_amt AS double) > 0
+              AND {re_fund_cond}
+              AND NOT EXISTS (
+                  SELECT 1 FROM (
+                      SELECT ack_id, raw_entity_name FROM override_matches
+                      UNION ALL SELECT ack_id, raw_entity_name FROM phrase_matched_rows
+                      UNION ALL SELECT ack_id, raw_entity_name FROM debt_carveout_matched_rows
+                      UNION ALL SELECT ack_id, raw_entity_name FROM brand_matched_rows
+                      UNION ALL SELECT ack_id, raw_entity_name FROM sponsor_matched_rows
+                      UNION ALL SELECT ack_id, raw_entity_name FROM asset_type_matched_rows
+                  ) p
+                  WHERE p.ack_id = s.ack_id AND p.raw_entity_name = s.raw_entity_name
+              )
+              -- the same holding already in a vehicle table, by name or amount
+              AND NOT EXISTS (
+                  SELECT 1 FROM (
+                      SELECT ack_id, raw_entity_name, plan_investment_amt FROM {glue_db}.plan_cit_history
+                      WHERE ack_id IN ({ids})
+                      UNION ALL
+                      SELECT ack_id, raw_entity_name, plan_investment_amt FROM {glue_db}.plan_mf_history_v3
+                      WHERE ack_id IN ({ids})
+                  ) v
+                  WHERE v.ack_id = s.ack_id
+                    AND (v.raw_entity_name = s.raw_entity_name
+                         OR round(CAST(v.plan_investment_amt AS double))
+                            = round(CAST(s.plan_investment_amt AS double)))
+              )
+        ),
         all_rows AS (
             SELECT {_ALT_INSERT_COLUMNS} FROM override_matches
             UNION ALL
@@ -2263,6 +2378,8 @@ def _route_alternatives_chunk(glue_db: str, staging_table: str, target_table: st
             SELECT {_ALT_INSERT_COLUMNS} FROM sponsor_matched_rows
             UNION ALL
             SELECT {_ALT_INSERT_COLUMNS} FROM asset_type_matched_rows
+            UNION ALL
+            SELECT {_ALT_INSERT_COLUMNS} FROM re_fund_matched_rows
         ),
         llm_lookup AS (
             -- Name-keyed Gemini answers (src/alt_manager_llm.py). Filling from the
