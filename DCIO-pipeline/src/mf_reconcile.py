@@ -130,6 +130,10 @@ def reconcile_plan(rows, certified_mf, certified_cit=0.0, tolerance=0.05,
 
     elif cur < lo:
         def mflike(r):
+            # _mf_excluded: an untyped security name the junk filter kept for staging only
+            # ("WELLS FARGO & CO" would read as a fund family) (2026-10-20)
+            if r.get('_mf_excluded'):
+                return False
             n = nm(r)
             return bool((_FAM.search(n) or _FUNDY.search(n)) and not _NONMFSIG.search(n))
 

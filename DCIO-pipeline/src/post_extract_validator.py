@@ -482,6 +482,32 @@ def _is_file_typed_non_mf(row) -> bool:
     return str(row.get("asset_type", "") or "").strip().lower() in _FILE_TYPED_NON_MF
 
 
+# An untyped row whose NAME is a security (coupon%+maturity bond, 144A / US Treasury issue,
+# a confirmed individual-stock name) is a real holding too: it belongs in staging like its
+# file-typed neighbours. Merck (2026-10-20) lost 107 untyped Treasury strips / muni /
+# sovereign bonds, $351.8M; CA Ironworkers $4.7M, Central PA Teamsters $1.1M. The other
+# "non-MF vehicle" names (master-trust interest, financial-statement narrative) stay dropped.
+_UNTYPED_SECURITY_RE = _re.compile(r"144a|^u\.?\s?s\.? treasury", _re.IGNORECASE)
+# Boilerplate entries that are only a Treasury issuer label ("US TREASURY N/B"); kept when
+# the file typed the row (Central PA Teamsters 2026-10-20: 4 bonds, $8.2M).
+_TYPED_TREASURY_RE = _re.compile(r"^\s*u\.?\s?s\.? treasury\b", _re.IGNORECASE)
+
+
+def _junk_restorable(row, reason: str) -> bool:
+    """True if a junk_detect drop only means "not a mutual fund" for this row."""
+    if _is_file_typed_non_mf(row):
+        if reason.startswith(_MF_ONLY_JUNK_REASONS):
+            return True
+        return reason.startswith("v3 cleanup: boilerplate") and bool(
+            _TYPED_TREASURY_RE.search(str(row.get("fund_name", "") or "")))
+    if str(row.get("asset_type", "") or "").strip():
+        return False
+    if reason.startswith(("individual bond (coupon% + maturity date", "v3 cleanup: confirmed individual stock")):
+        return True
+    return reason.startswith("v3 cleanup: non-MF vehicle") and bool(
+        _UNTYPED_SECURITY_RE.search(" ".join(str(row.get("fund_name", "") or "").split())))
+
+
 def _write_junk_drop_log(drop_log):
     """Write rows removed by the JUNK_FILTER stage to a CSV for audit/visibility.
     drop_log: list of (ack_id, name, value, reason). Best-effort; never fatal."""
@@ -776,7 +802,9 @@ def build_mf_rows_df(rows: List[Dict],
             continue
         # Mode 1 over-capture: drop CUSIP/SEDOL-continuation-line artifacts (name contains the
         # token "CUSIP" or "SEDOL"; the security id was mis-read as the value). See _CUSIP_ARTIFACT_RE.
-        if _CUSIP_ARTIFACT_RE.search(_name):
+        # Staging keeps a file-typed row: "Republic of philippines sedol 2mr8kd2", typed Bond with
+        # its real value -- Teamsters Philadelphia lost 7 bonds / $1.6M (2026-10-20).
+        if _CUSIP_ARTIFACT_RE.search(_name) and (mf_only or asset_type not in _FILE_TYPED_NON_MF):
             continue
         # Scope: annuity / insurance vehicles (CREF, TIAA Traditional, Voya/Empower
         # Retirement Insurance & Annuity, variable annuity accounts) are not mutual funds --
@@ -5215,10 +5243,13 @@ def run_post_extract_validation(
         # already typed as a non-MF vehicle (bond, stock, partnership...) is a real holding:
         # staging keeps it, and the MF-only path drops it by type anyway. Shell Pension
         # (2026-10-14) lost 874 bonds / $620M to these rules, plus 6 distinct same-issuer bonds
-        # merged as "near-duplicates".
+        # merged as "near-duplicates". Untyped security names too, see _junk_restorable;
+        # _mf_excluded keeps mf_reconcile's blank-row recovery from re-typing those as MFs.
         _junk, _restored = [], []
         for _r, _reason in _res["removed_junk"]:
-            if _is_file_typed_non_mf(_r) and _reason.startswith(_MF_ONLY_JUNK_REASONS):
+            if _junk_restorable(_r, _reason):
+                if not _is_file_typed_non_mf(_r):
+                    _r["_mf_excluded"] = True
                 _restored.append(_r)
             else:
                 _junk.append((_r, _reason))
@@ -5280,6 +5311,8 @@ def run_post_extract_validation(
         if _remed:
             logger.info("MF reconciliation re-typed %d row(s) across over/under-capture plans", _remed)
             extracted_totals = compute_extracted_mf_totals(rows)   # recompute with corrected types
+    for _r in rows:
+        _r.pop("_mf_excluded", None)
 
     for pdf_stem in sorted(rows_by_stem):
         stem_rows = rows_by_stem[pdf_stem]
