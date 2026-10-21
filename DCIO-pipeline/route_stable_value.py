@@ -325,9 +325,31 @@ def merge_parquet(athena, table, rows, columns, key, extra_guard):
         athena.run(f'DROP TABLE {athena.table(temp_name)}', fetch=False)
 
 
+# (2026-10-21) Shared stable value sub-class vocabulary, keyed on how the money is held. Keep in sync with
+# sch_a_06_load_plan_sch_a_stable_value_history.sql and the 5updatesubasset*.sql classifiers (CITs, MFs and public
+# DC funds are all 'Stable Value Pooled Fund').
+def sv_sub_class(d):
+    if d.get('vehicle_type') == 'collective_investment_trust':
+        return 'Stable Value Pooled Fund'
+    if d.get('vehicle_type') == 'separately_managed_account':
+        return 'Stable Value Separately Managed'
+    if d.get('vehicle_type') != 'insurance_contract':
+        return 'Stable Value Unclassified'
+    account, contract = d.get('account_structure'), d.get('contract_type')
+    if account == 'general_account':
+        return 'Stable Value General Account'
+    if account == 'synthetic_wrap':
+        return 'Stable Value Synthetic'
+    if account == 'insurance_separate_account':
+        return 'Stable Value Separate Account'
+    if contract in ('gic', 'guaranteed_investment_contract'):
+        return 'Stable Value GIC'
+    return 'Stable Value Insurance Contract'
+
+
 def target_record(d, run_id, canon_version, now):
     record = {k: d.get(k) for k in COMMON_COLUMNS}
-    record.update(asset_class='Stable Value', asset_sub_class='Stable Value',
+    record.update(asset_class='Stable Value', asset_sub_class=sv_sub_class(d),
                   source_table='plan_holdings_staging', routing_run_id=run_id,
                   canon_version=canon_version, created_at=now, updated_at=now,
                   resolution_status='vehicle_unresolved' if d['vehicle_type'] == 'unknown' else 'vehicle_resolved')
@@ -360,7 +382,7 @@ def write_cit(athena, decisions, run_id, now):
             'manager_matched_by_ai': d['manager_match_method'],
             'manager_confidence_ai': d['manager_match_confidence'],
             'normalized_version_ai': VERSION + ':' + run_id, 'asset_class': 'Stable Value',
-            'asset_sub_class': 'Stable Value Pooled Fund',
+            'asset_sub_class': sv_sub_class(d),
             'classification_method': VERSION + ':' + d['routing_rule'],
             'classification_confidence': 'HIGH',
         })

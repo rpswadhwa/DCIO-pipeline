@@ -28,6 +28,11 @@ DEPLOY_PATHS=(
   "DCIO-pipeline/cleanup_investment_names.py"
   "DCIO-pipeline/llm_enhance_investments.py"
   "DCIO-pipeline/enhance_asset_types.py"
+  # (2026-10-21) Root-level stable value scripts: the pipeline hook runs route_stable_value.py, which stayed
+  # frozen at its 10-12 version on EC2 because it was not in this list.
+  "DCIO-pipeline/route_stable_value.py"
+  "DCIO-pipeline/extract_stable_value_lines.py"
+  "DCIO-pipeline/reconcile_staging_holdings.py"
 )
 
 REPO_ROOT="$(git rev-parse --show-toplevel)"
@@ -83,7 +88,7 @@ echo ${HEAD_SHA} > ${REMOTE_CODE_DIR}/.deployed_commit
 date -u +"%Y-%m-%dT%H:%M:%SZ" >> ${REMOTE_CODE_DIR}/.deployed_commit
 cd ${REMOTE_CODE_DIR}
 find src config -type f -exec md5sum {} \; | sort -k2
-for f in run.sh process_page_request.sh run_classification.py cleanup_investment_names.py llm_enhance_investments.py enhance_asset_types.py; do
+for f in run.sh process_page_request.sh run_classification.py cleanup_investment_names.py llm_enhance_investments.py enhance_asset_types.py route_stable_value.py extract_stable_value_lines.py reconcile_staging_holdings.py; do
   [ -f "\$f" ] && md5sum "\$f"
 done
 python3.11 -c "import compileall,sys; sys.exit(0 if compileall.compile_dir('src', quiet=1) else 1)" && echo COMPILE_OK || echo COMPILE_FAILED
