@@ -47,3 +47,16 @@ PYTHONPATH=. python3.11 -m src.run_pipeline
 
 echo "[CLASSIFICATION] Running asset class classification pipeline..."
 PYTHONPATH=. python3.11 run_classification.py
+
+# (2026-10-21) Last step: one holding lives in one table (MF / CIT / alternatives). Runs after
+# classification because classification is what tags MF rows Alternatives. Scoped to this batch's
+# filings (PDF stems); every change is logged to default.alt_holding_dedup_log first.
+echo "[DEDUP] Cross-table alternative holding de-duplication for this batch..."
+DEDUP_ACKS=data/dedup_acks.txt
+ls data/inputs/*.pdf 2>/dev/null | xargs -r -n1 basename | sed 's/\.pdf$//' > "$DEDUP_ACKS" || true
+if [ -s "$DEDUP_ACKS" ]; then
+  PYTHONPATH=. python3.11 -m src.dedup_alt_holdings --ack-file "$DEDUP_ACKS" --apply \
+    || echo "!!! WARNING: dedup_alt_holdings failed -- duplicates for this batch are NOT removed; rerun it by hand"
+else
+  echo "[DEDUP] no PDFs in data/inputs, skipping"
+fi

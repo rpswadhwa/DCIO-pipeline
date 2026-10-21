@@ -73,4 +73,9 @@ LLM_PAGE_OVERRIDES_FILE=llm_page_overrides.json \
 LLM_FULL_EXTRACT=1 \
 PYTHONPATH=. python3.11 -m src.run_pipeline || fail "run_pipeline.py failed"
 
+# (2026-10-21) One holding lives in one table (MF / CIT / alternatives); see src/dedup_alt_holdings.py.
+echo "[STEP 4] Cross-table alternative holding de-duplication for ${ACK_ID}"
+PYTHONPATH=. python3.11 -m src.dedup_alt_holdings --ack-ids "$ACK_ID" --apply \
+  || echo "!!! WARNING: dedup_alt_holdings failed for ${ACK_ID} -- duplicates NOT removed; rerun it by hand"
+
 echo "PROCESS_PAGE_REQUEST: SUCCESS ack_id=${ACK_ID}"
