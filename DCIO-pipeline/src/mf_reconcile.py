@@ -6,6 +6,8 @@ off by more than `tolerance`.
 
 OVER-capturing plans -- a cascade of removals, each stopping the moment the plan
 lands within tolerance and never overshooting below certified:
+  0. subtotal labels              (a name of filler words only: "investment companies",
+                                   "companies", "trust" -- a block total counted twice)
   1. money-market rows            (often not counted in certified amt_mutual_funds)
   2. other non-MF by name         (employer/company stock, stable value, contract,
                                    separate account, non-CREF annuity, general acct, brokerage)
@@ -23,9 +25,9 @@ needs_review=True so callers can hold it for sign-off if desired.
 import re
 
 try:
-    from .asset_type_patterns import looks_like_security
+    from .asset_type_patterns import looks_like_security, is_generic_holding_name
 except ImportError:
-    from asset_type_patterns import looks_like_security
+    from asset_type_patterns import looks_like_security, is_generic_holding_name
 
 MF_ASSET_TYPES = frozenset({'mutual fund', 'money market fund', 'etf', 'index fund', 'target date fund'})
 
@@ -55,6 +57,7 @@ _NONMFSIG = re.compile(
 CIT_TYPE = 'Common/Collective Trust Fund'
 MMF_OUT_TYPE = 'Cash/Money Market'
 OTHER_OUT_TYPE = 'Other (non-MF)'
+SUBTOTAL_OUT_TYPE = 'Subtotal Line'
 MF_TYPE = 'Mutual Fund'
 
 
@@ -94,8 +97,9 @@ def reconcile_plan(rows, certified_mf, certified_cit=0.0, tolerance=0.05,
         return str(r.get(name_key, '') or '')
 
     if cur > hi:
-        def strip(pred, new_type, stage, needs_review=False, budget=None):
+        def strip(pred, new_type, stage, needs_review=False, budget=None, floor=None):
             nonlocal cur
+            floor = lo if floor is None else floor
             elig = sorted([r for r in rows if is_mf(r) and pred(r)],
                           key=lambda r: -_fv(r.get(value_key)))
             for r in elig:
@@ -104,7 +108,7 @@ def reconcile_plan(rows, certified_mf, certified_cit=0.0, tolerance=0.05,
                 if budget is not None and budget[0] <= 0:
                     break
                 v = _fv(r.get(value_key))
-                if cur - v < lo:          # would overshoot into under-capture -> skip, try smaller
+                if cur - v < floor:       # would overshoot into under-capture -> skip, try smaller
                     continue
                 old = str(r.get(type_key, '') or '')
                 r[type_key] = new_type
@@ -114,6 +118,14 @@ def reconcile_plan(rows, certified_mf, certified_cit=0.0, tolerance=0.05,
                 changes.append({'name': nm(r), 'value': v, 'old_type': old,
                                 'new_type': new_type, 'stage': stage, 'needs_review': needs_review})
 
+        # 0) subtotal label: the junk filter's grand-total rule sums ALL holdings, so a
+        # line totalling only the fund block ("investment companies" $1.16B on a plan
+        # certified at $1.16B) gets through. 150 such rows / $5.58B over 62 filings were
+        # deleted from plan_mf_history_v3 by hand on 2026-10-21. A subtotal often equals
+        # the certified total itself, leaving the plan a few % short once removed, so this
+        # stage may land down to 90% of certified.
+        strip(lambda r: bool(nm(r).strip()) and is_generic_holding_name(nm(r)),
+              SUBTOTAL_OUT_TYPE, '0-subtotal-label', floor=cm * 0.90)
         # 1) money-market
         strip(lambda r: str(r.get(type_key, '') or '').strip().lower() == 'money market fund',
               MMF_OUT_TYPE, '1-money-market')
