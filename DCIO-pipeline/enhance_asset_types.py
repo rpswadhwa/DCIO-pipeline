@@ -9,16 +9,23 @@ from pathlib import Path
 
 # Import shared patterns — works whether run standalone or as part of the package
 try:
-    from src.asset_type_patterns import detect_asset_type
+    from src.asset_type_patterns import detect_asset_type, looks_like_security
     from src.post_extract_validator import pick_fund_name
 except ImportError:
     sys.path.insert(0, os.path.dirname(__file__))
-    from asset_type_patterns import detect_asset_type
+    from asset_type_patterns import detect_asset_type, looks_like_security
     from post_extract_validator import pick_fund_name
+
+# Fund types a name alone may never assign to a bond, note or futures contract
+_MF_FAMILY_TYPES = frozenset({"Mutual Fund", "ETF", "Index Fund", "Target Date Fund", "Money Market Fund"})
 
 
 def infer_asset_type(issuer, description):
-    return detect_asset_type(f"{description} {issuer}")
+    text = f"{description} {issuer}"
+    inferred = detect_asset_type(text)
+    if inferred in _MF_FAMILY_TYPES and looks_like_security(text):
+        return ''
+    return inferred
 
 
 def _lookup_known_mf_names(candidates, verbose=True):
@@ -120,6 +127,10 @@ def enhance_asset_types(db_path, verbose=True):
     # Second pass: regex found no keyword match, but this exact fund name may
     # already be a confirmed mutual fund from some other plan's prior run --
     # check fund_intelligence_mapping_mf before giving up on these rows.
+    # The mapping is fed from plan_mf_history_v3, so a bond or future that once
+    # reached v3 by mistake sits in it and would be re-typed Mutual Fund on every
+    # later run (US Steel's Treasuries, Liberty Mutual's Treasury futures,
+    # 2026-10-21). Security-looking names are never looked up.
     cursor.execute("""
         SELECT id, issuer_name, investment_description
         FROM investments
@@ -132,7 +143,7 @@ def enhance_asset_types(db_path, verbose=True):
         for record_id, issuer, description in still_missing:
             name = pick_fund_name(issuer or "", description or "")
             key = name.strip().lower()
-            if key:
+            if key and not looks_like_security(f"{description or ''} {issuer or ''} {name}"):
                 candidates_by_key.setdefault(key, []).append(record_id)
 
         matched_keys = _lookup_known_mf_names(list(candidates_by_key.keys()), verbose=verbose)

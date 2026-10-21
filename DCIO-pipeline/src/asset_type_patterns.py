@@ -139,7 +139,8 @@ ASSET_TYPE_PATTERNS = [
     (r'(?:Interest\s+Rate\s+)?Swaps?\s+Contracts?',             'Derivative'),
     (r'Partnership\s+Interests?',                               'Partnership Interest'),
     (r'Participant\s+Loans?',                                   'Participant Loan'),
-    (r'ETFs?',                                                  'ETF'),
+    # word-bounded: unanchored, "NETFLIX INC 5.4% 08-15-2054" read as an ETF (2026-10-21)
+    (r'\bETFs?\b',                                              'ETF'),
     (r'Currenc(?:y|ies)',                                       'Currency'),
 ]
 
@@ -289,6 +290,41 @@ ROW_TYPE_PATTERNS = [
     # \s* between every letter of "mutual" tolerates any such split point.
     (r'\bm\s*u\s*t\s*u\s*a\s*l\s*fund\s*s?\b',          'Mutual Fund'),
 ]
+
+
+# A directly held security: a bond, note, Treasury, agency pool or futures contract
+# ("UNITED STATES TREAS BDS 2% 11-15-2041", "US 10YR TREAS NTS FUTURE (CBT) EXP MAR 25",
+# "JPMORGAN CHASE & CO 5.35%"). Name-based typing must never make one of these a
+# mutual fund or ETF: on 2026-10-21, US Steel's and Liberty Mutual's untyped bonds and
+# futures reached plan_mf_history_v3 that way. A 144A tag or a futures exchange/expiry
+# marks a security outright. The softer signals (a coupon rate, a maturity date, an
+# abbreviated "BDS"/"NTS"/"FUT", an agency pool) yield to a fund or cash-vehicle word
+# ("FIRST AM TREAS OB FD", "DREYFUS GOVT CAS MGMT INST ... 12/31/2075", "Fidelity
+# Asset Manager 85%", "iShares 7-10 YR Treasry BD ETF"). A bare "bond", "treasury"
+# or "pool" is no signal: "Fidelity Total Bond K6", "Vanguard Treasury MoneyMkt" and
+# "FID CONTRA POOL CL F" are funds. Checked against every plan_mf_history_v3 name.
+_SECURITY_HARD_RE = re.compile(
+    r'\b144a\b|\b(?:cbt|xcbt|cme|cbot)\b|\bfutures?\s+(?:contract|cbt|exp)|\bexp\s+[a-z]{3}\s+\d{2}\b',
+    re.IGNORECASE)
+_SECURITY_SOFT_RE = re.compile(
+    r'\d(?:\.\d+)?\s*%|\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b|\bdue\b|\bnts\b|\bbds\b|\bfut\b|\b\d{1,2}\s*yr\s+(?:treas|ultra)|'
+    r'\bfnma\b|\bfhlmc\b|\bgnma\b|\bfhlb\b|\bdeb\b|\bmtn\b|\bcallable\b|\bsr\s+(?:unsec|nt|notes?|sec)|z-?cpn|\bstrips?\b',
+    re.IGNORECASE)
+_FUND_VEHICLE_RE = re.compile(
+    r'\bfunds?\b|\bfnd\b|\bfds?\b|\betfs?\b|\bindex\b|\bidx\b|\bportfolio\b|money\s*(?:market|mkt)|\bmmkt\b|\bmm\b|'
+    r'ishares|\bspdr\b|\badm(?:iral|in)?\b|\binstl?\b|\bcas(?:h)?\s+mgmt|\bcsh\s+mgmt|liquidity|\bliq\b|'
+    r'asset\s+(?:manager|mgr)|\ballocation\b|target\s+(?:retirement|date)|lifetime|registered\s+investment',
+    re.IGNORECASE)
+
+
+def looks_like_security(name: str) -> bool:
+    """True when a holding name reads as a directly held bond, note, Treasury, agency
+    pool or futures contract rather than a pooled fund (see _SECURITY_HARD_RE)."""
+    if not name:
+        return False
+    if _SECURITY_HARD_RE.search(name):
+        return True
+    return bool(_SECURITY_SOFT_RE.search(name)) and not _FUND_VEHICLE_RE.search(name)
 
 
 def detect_asset_type_row(text: str) -> str:

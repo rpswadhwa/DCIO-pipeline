@@ -529,6 +529,16 @@ from pdfminer.pdftypes import resolve1
 
 from .asset_type_patterns import detect_asset_type
 
+
+def _section_type(section_types, heading):
+    """A section heading's asset type: the plan's own section_types first, then the
+    generic heading patterns. A plan config lists only the sections its parser was
+    built for; without the fallback every other heading typed its rows blank (US
+    Steel's "Debt Securities - Corporate Bonds", $804M, and its government bonds,
+    2026-10-21), and blank rows were then typed by name downstream."""
+    return next((t for pat, t in section_types if re.search(pat, heading, re.I)), "") \
+        or detect_asset_type(heading)
+
 # plan_master plan_id -> filer whose 4i schedule uses this layout (2026-10-12).
 # start_heading: parse from the page carrying this section heading to the end
 # of the schedule. Mayo: only the Mutual funds / Collective trust / Absolute
@@ -7206,7 +7216,7 @@ def _parse_typed_column_totals(pdf_path: str, page_nums: List[int], section_type
                 if is_open():
                     unparsed.append({"page_number": page_num, "line": line})
                     continue
-                asset_type = next((t for pat, t in section_types if re.search(pat, clean, re.I)), "")
+                asset_type = _section_type(section_types, clean)
                 current = {"heading": clean, "asset_type": asset_type, "partial": False, "rows": 0,
                            "cost": 0.0, "value": 0.0, "subtotal": None, "cost_diff": None,
                            "value_diff": None, "reconciled": None}
@@ -7302,7 +7312,7 @@ def _parse_cusip_column_totals(pdf_path: str, page_nums: List[int], section_type
                 if is_open():
                     unparsed.append({"page_number": page_num, "line": line})
                     continue
-                asset_type = next((t for pat, t in section_types if re.search(pat, clean, re.I)), "")
+                asset_type = _section_type(section_types, clean)
                 current = {"heading": clean, "asset_type": asset_type, "partial": False, "rows": 0,
                            "cost": 0.0, "value": 0.0, "subtotal": None, "cost_diff": None,
                            "value_diff": None, "reconciled": None}
@@ -7413,7 +7423,7 @@ def _parse_colon_heading_totals(pdf_path: str, page_nums: List[int], section_typ
                     unparsed.append({"page_number": page_num, "line": line})
                     continue
                 heading = clean[:-1].strip()
-                asset_type = next((t for pat, t in section_types if re.search(pat, heading, re.I)), "")
+                asset_type = _section_type(section_types, heading)
                 current = {"heading": heading, "asset_type": asset_type, "partial": False, "rows": 0,
                            "cost": 0.0, "value": 0.0, "subtotal": None, "cost_diff": None,
                            "value_diff": None, "reconciled": None}
@@ -7511,7 +7521,7 @@ def _parse_bold_heading_totals(pdf_path: str, page_nums: List[int], section_type
     pending_total = ""   # a "Total ..." line wrapping onto the next
 
     def type_of(name):
-        return next((t for pat, t in section_types if re.search(pat, name, re.I)), "")
+        return _section_type(section_types, name)
 
     def open_section(heading):
         section = {"heading": heading, "partial": False, "rows": 0, "cost": 0.0, "value": 0.0,

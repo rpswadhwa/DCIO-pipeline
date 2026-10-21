@@ -1238,6 +1238,81 @@ def _route_mf_from_staging(glue_db: str, staging_table: str, target_table: str, 
     logger.info("Routed MF rows %s -> %s for %d acks", staging_table, target_table, len(ack_ids))
 
 
+# A re-run replaces a filing's staging rows and its plan_mf_history_v3 rows
+# wholesale, so a worse extraction silently overwrote a better one: between
+# 2026-10-18 and 2026-10-21 US Steel's 198 staged bonds came back untyped and
+# Liberty Mutual's Treasury futures came back as mutual funds, with nothing to
+# stop either write. A filing is now held (left as it is) when its new rows
+# would hold fewer rows, fewer dollars or fewer TYPED dollars than what is
+# stored, or would put its mutual fund total further from the certified
+# amt_mutual_funds. REGRESSION_GUARD=0 turns the check off; REGRESSION_ALLOW_ACKS
+# (comma-separated) lets named filings through when a drop is intended.
+_REGRESSION_DROP = 0.10
+
+
+def _regression_holds(glue_db: str, staging_table: str, target_table: str,
+                      combined: "pd.DataFrame", reference: dict, tolerance: float) -> dict:
+    """{ack_id: reason} for filings whose new rows would replace better stored ones."""
+    import awswrangler as wr
+    import os
+    if os.getenv("REGRESSION_GUARD", "1") == "0" or combined.empty:
+        return {}
+    allow = {a.strip() for a in os.getenv("REGRESSION_ALLOW_ACKS", "").split(",") if a.strip()}
+    acks = [a for a in combined["ack_id"].dropna().unique().tolist() if a not in allow]
+    if not acks:
+        return {}
+    ids = ", ".join("'" + str(a).replace("'", "''") + "'" for a in acks)
+    mf = ", ".join("'" + t + "'" for t in sorted(MF_ASSET_TYPES))
+    sql = f"""
+        SELECT 'stg' AS src, ack_id, count(*) AS n,
+               sum(TRY_CAST(plan_investment_amt AS double)) AS v,
+               sum(CASE WHEN trim(coalesce(asset_type, '')) <> ''
+                        THEN TRY_CAST(plan_investment_amt AS double) ELSE 0 END) AS typed
+        FROM {glue_db}.{staging_table} WHERE ack_id IN ({ids}) GROUP BY ack_id
+        UNION ALL
+        SELECT 'mf', ack_id, count(*), sum(TRY_CAST(plan_investment_amt AS double)), 0
+        FROM {glue_db}.{target_table} WHERE ack_id IN ({ids}) GROUP BY ack_id
+    """
+    try:
+        old = wr.athena.read_sql_query(sql=sql, database=glue_db, workgroup=os.getenv("ATHENA_WORKGROUP", "primary"),
+                                       s3_output=os.getenv("ATHENA_STAGING_S3"), ctas_approach=False)
+    except Exception:
+        # a guard that cannot read the stored rows must not let the write through blind
+        logger.exception("regression guard could not read stored rows; holding all %d acks", len(acks))
+        return {a: "guard could not read stored rows" for a in acks}
+    stored = {(r.src, r.ack_id): r for r in old.itertuples(index=False)}
+
+    new = combined.assign(_v=pd.to_numeric(combined["plan_investment_amt"], errors="coerce").fillna(0.0),
+                          _t=combined["asset_type"].fillna("").astype(str).str.strip())
+    holds = {}
+    for ack, g in new.groupby("ack_id"):
+        if ack in allow:
+            continue
+        n, v = len(g), float(g["_v"].sum())
+        typed = float(g.loc[g["_t"] != "", "_v"].sum())
+        mf_new = float(g.loc[g["_t"].str.lower().isin(MF_ASSET_TYPES), "_v"].sum())
+        s = stored.get(("stg", ack))
+        if s is not None and s.n:
+            keep = 1 - _REGRESSION_DROP
+            if n < s.n * keep:
+                holds[ack] = f"staging rows {s.n} -> {n}"
+            elif (s.v or 0) > 0 and v < s.v * keep:
+                holds[ack] = f"staging ${s.v:,.0f} -> ${v:,.0f}"
+            elif (s.typed or 0) > 0 and typed < s.typed * keep:
+                holds[ack] = f"typed staging ${s.typed:,.0f} -> ${typed:,.0f}"
+            if ack in holds:
+                continue
+        m = stored.get(("mf", ack))
+        cert = float((reference.get(ack) or {}).get("amt_mutual_funds") or 0)
+        if m is not None and cert > 0:
+            mf_old = float(m.v or 0)
+            if abs(mf_new - cert) > abs(mf_old - cert) + tolerance * cert:
+                holds[ack] = f"MF ${mf_old:,.0f} -> ${mf_new:,.0f} vs certified ${cert:,.0f}"
+    for ack, why in sorted(holds.items()):
+        logger.warning("REGRESSION HOLD %s: %s (stored rows kept; REGRESSION_ALLOW_ACKS to override)", ack, why)
+    return holds
+
+
 # ---------------------------------------------------------------------------
 # Alternatives routing (real estate / private credit / private equity /
 # infrastructure / hedge fund). Unlike the MF router, this does NOT trust the
@@ -5532,6 +5607,13 @@ def run_post_extract_validation(
     if all_rows:
         combined = pd.concat(all_rows, ignore_index=True)
         if staging_table:
+            _holds = _regression_holds(validated_glue_db, staging_table, validated_table,
+                                       combined, reference, tolerance)
+            if _holds:
+                combined = combined[~combined["ack_id"].isin(set(_holds))].reset_index(drop=True)
+        if staging_table and combined.empty:
+            logger.warning("every filing in this run was held by the regression guard; nothing written")
+        elif staging_table:
             write_iceberg_via_athena(combined, validated_glue_db, staging_table, include_asset_type=True)
             _route_mf_from_staging(validated_glue_db, staging_table, validated_table,
                                    combined["ack_id"].dropna().unique().tolist())

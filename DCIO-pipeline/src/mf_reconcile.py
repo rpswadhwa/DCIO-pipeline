@@ -22,6 +22,11 @@ needs_review=True so callers can hold it for sign-off if desired.
 """
 import re
 
+try:
+    from .asset_type_patterns import looks_like_security
+except ImportError:
+    from asset_type_patterns import looks_like_security
+
 MF_ASSET_TYPES = frozenset({'mutual fund', 'money market fund', 'etf', 'index fund', 'target date fund'})
 
 # --- name signals ---
@@ -135,6 +140,10 @@ def reconcile_plan(rows, certified_mf, certified_cit=0.0, tolerance=0.05,
             if r.get('_mf_excluded'):
                 return False
             n = nm(r)
+            # a bond or future under a fund family's name ("JPMORGAN CHASE & CO 5.35%")
+            # is no fund (2026-10-21)
+            if looks_like_security(n):
+                return False
             return bool((_FAM.search(n) or _FUNDY.search(n)) and not _NONMFSIG.search(n))
 
         blanks = sorted([r for r in rows if not str(r.get(type_key, '') or '').strip() and mflike(r)],
