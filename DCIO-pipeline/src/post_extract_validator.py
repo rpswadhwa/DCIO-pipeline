@@ -5476,6 +5476,23 @@ def run_post_extract_validation(
         if stem:
             rows_by_stem[stem].append(row)
 
+    # CIT share-class tags (ALWAYS ON, every plan, certified total or not): a row typed MF or
+    # left blank whose issuer + description carries "NL Ser"/"Non-Lending"/"JPMCB" is a bank
+    # collective trust. Runs before reconciliation so plans with no reference row (master
+    # trusts outside plan_master, e.g. Timken 2026-10-21) still get it.
+    from .asset_type_patterns import looks_like_cit as _looks_like_cit
+    _cit_tagged = 0
+    for _r in rows:
+        _t = str(_r.get("asset_type") or "").strip().lower()
+        if _t and _t not in MF_ASSET_TYPES:
+            continue
+        if _looks_like_cit(f"{_r.get('issuer_name') or ''} {_r.get('investment_description') or ''}"):
+            _r["asset_type"] = "Common/Collective Trust Fund"
+            _cit_tagged += 1
+    if _cit_tagged:
+        logger.info("CIT share-class tag re-typed %d row(s) to Common/Collective Trust Fund", _cit_tagged)
+        extracted_totals = compute_extracted_mf_totals(rows)
+
     # MF RECONCILIATION (post-extraction): reconcile each plan's extracted MF total to the
     # certified amt_mutual_funds. OVER plans: cascade removals (money-market -> other non-MF ->
     # CIT-by-name -> amt_cit reconciliation); UNDER plans: recover blank rows that read as MFs.

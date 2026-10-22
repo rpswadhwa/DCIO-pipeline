@@ -350,6 +350,20 @@ def is_generic_holding_name(name: str) -> bool:
     return not any(w not in _FILLER_WORDS for w in words)
 
 
+# A bank collective trust named by its share-class tag alone: State Street/SSgA/BlackRock
+# "NL Ser"/"NL Cl"/"Non-Lending" series and JPMorgan Chase Bank ("JPMCB") funds. No
+# registered mutual fund carries these tags, yet the name-typing loop typed them MF:
+# Timken Master Trust (2026-10-21) kept $343M of them in plan_mf_history_v3 because the
+# filing has no certified total, so mf_reconcile never ran. 209 v3 rows / $6.9B over 89
+# filings matched on 2026-10-22, every one a CIT on review.
+_CIT_TAG_RE = re.compile(r'\bnl\s+(?:ser(?:ies)?|cl(?:ass)?)\b|\bnon[\-\s]?lending\b|\bjpmcb\b', re.IGNORECASE)
+
+
+def looks_like_cit(name: str) -> bool:
+    """True when a holding name carries a tag only a bank collective trust uses (see _CIT_TAG_RE)."""
+    return bool(name) and bool(_CIT_TAG_RE.search(name))
+
+
 def detect_asset_type_row(text: str) -> str:
     """Detect a per-row asset-type DECLARATION carried in the row (a Type-column value or a
     vehicle-type phrase in the description). Non-name-based: only explicit vehicle-type
