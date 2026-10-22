@@ -2756,6 +2756,70 @@ ALT_BRAND_PATTERNS: List[Tuple[str, str, str]] = [
     # line only.
 ]
 
+# Added 2026-10-22 (per user request, staging gap check): Apollo, Ares,
+# Carlyle and AlpInvest fund rows that no phrase/asset_type pass catches
+# (blank asset_type, or a filer's "common stock"/"bond" tag on an LP) never
+# reached this table -- 95 rows / $1.13B were left in staging only. These
+# were kept manager-only (ALT_MANAGER_ONLY_TERMS) so a bare name never forced
+# an asset class guess; the narrower strategy terms below pick the class
+# first (CASE order = list order), and the bare brand defaults to Private
+# Equity. Every term carries ALT_PARENT_BRAND_ISSUER_REGEX as a term override
+# so the parents' own listed securities (Ares Management Corp, Carlyle Group
+# Inc, Apollo Commercial RE Finance), their CLO note tranches and BDC
+# preferreds stay out. Appended last so every older, more specific brand
+# keeps priority for matched_manager_name.
+ALT_PARENT_BRAND_PATTERNS: List[Tuple[str, str, str]] = [
+    ("ares real estate", "Real Estate Fund", "Real Estate"),
+    ("ares us real estate", "Real Estate Fund", "Real Estate"),
+    ("ares industrial", "Real Estate Fund", "Real Estate"),
+    ("black creek industrial", "Real Estate Fund", "Real Estate"),
+    ("carlyle property", "Real Estate Fund", "Real Estate"),
+    ("carlyle realty", "Real Estate Fund", "Real Estate"),
+    ("apollo natural resource", "Infrastructure Fund", "Infrastructure"),
+    ("carlyle power", "Infrastructure Fund", "Infrastructure"),
+    ("carlyle infrastructure", "Infrastructure Fund", "Infrastructure"),
+    ("apollo total return", "Private Credit Fund", "Private Credit"),
+    ("apollo accord", "Private Credit Fund", "Private Credit"),
+    ("apollo debt", "Private Credit Fund", "Private Credit"),
+    ("apollo diversified credit", "Private Credit Fund", "Private Credit"),
+    ("apollo credit", "Private Credit Fund", "Private Credit"),
+    ("apollo asset backed", "Private Credit Fund", "Private Credit"),
+    ("apollo euro principal finance", "Private Credit Fund", "Private Credit"),
+    ("apollo atlas", "Private Credit Fund", "Private Credit"),
+    ("ares senior direct", "Private Credit Fund", "Private Credit"),
+    ("ares sdl", "Private Credit Fund", "Private Credit"),
+    ("ares private credit", "Private Credit Fund", "Private Credit"),
+    ("ares pcs", "Private Credit Fund", "Private Credit"),
+    ("ares pathfinder", "Private Credit Fund", "Private Credit"),
+    ("ares global multi", "Private Credit Fund", "Private Credit"),
+    ("ares multi", "Private Credit Fund", "Private Credit"),
+    ("ares credit", "Private Credit Fund", "Private Credit"),
+    ("ares strategic income", "Private Credit Fund", "Private Credit"),
+    ("ares diversified credit", "Private Credit Fund", "Private Credit"),
+    ("ares difersified credit", "Private Credit Fund", "Private Credit"),  # filer typo
+    ("ares dynamic credit", "Private Credit Fund", "Private Credit"),
+    ("carlyle credit", "Private Credit Fund", "Private Credit"),
+    ("carlyle tactical", "Private Credit Fund", "Private Credit"),
+    ("carlyle direct lending", "Private Credit Fund", "Private Credit"),
+    ("carlyle energy mezzanine", "Private Credit Fund", "Private Credit"),
+    ("apollo", "Private Equity Fund", "Private Equity"),
+    ("ares", "Private Equity Fund", "Private Equity"),
+    ("carlyle", "Private Equity Fund", "Private Equity"),
+    ("alpinvest", "Private Equity Fund", "Private Equity"),
+]
+ALT_BRAND_PATTERNS += ALT_PARENT_BRAND_PATTERNS
+ALT_PARENT_BRAND_TERMS = {t for t, _, _ in ALT_PARENT_BRAND_PATTERNS}
+ALT_PARENT_BRAND_ISSUER_REGEX = (
+    r"\bclo\b|144a|\bfltg\b|\bvar\s+rt\b|\bcl\s+a\b|"
+    r"preferred\s+stock|group\s+inc|inc/the|management\s+(corp|lp|inc)|"
+    r"global\s+(management|mgmt)|capital\s+corp|acquisition\s+corp|"
+    r"commercial\s+real\s+estat|coml\s+real\s+estate|real\s+estate\s+fin|"
+    r"secd\s+lending|\bnotes?\b|\bdue\b|finance\s+(co|llc)|\bfin\s+(co|llc|subsidiary)|"
+    r"\bpar\b|fixed\s+income|corporate\s+(bonds?|debt)|management\s+holdings|"
+    r"hospitals|future\s+mobility|\bccia\b|"
+    r"\d{1,2}[\s-](jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*[\s-]\d{4}"
+)
+
 # Per-term extra restriction, ANDed onto that term's match only. Both entries
 # were confirmed false-positive-prone during 2026-09-20 verification: bare
 # "intercontinental" mostly matches Intercontinental Exchange Inc (ICE) stock/
@@ -2885,6 +2949,11 @@ ALT_BRAND_TERM_OVERRIDES: Dict[str, str] = {
     # global advisors" above, now that bare "white oak" is also a brand term.
     "white oak": r"NOT regexp_like(lower(raw_entity_name), 'dreyfus|government cash management|short term investment fund')",
 }
+# 2026-10-22: see ALT_PARENT_BRAND_PATTERNS.
+ALT_BRAND_TERM_OVERRIDES.update({
+    t: f"NOT regexp_like(lower(raw_entity_name), '{ALT_PARENT_BRAND_ISSUER_REGEX}')"
+    for t, _, _ in ALT_PARENT_BRAND_PATTERNS
+})
 
 # Terms that need a word-boundary match rather than plain substring -- "gso"
 # is a substring of unrelated names ("Kingsoft", "GSODLN" swap tickers,
@@ -2900,7 +2969,7 @@ ALT_BRAND_WORD_BOUNDARY_TERMS = {
     # the same collision risk, boundary-matched defensively.
     "ares",
     "kps",
-}
+} | {t for t, _, _ in ALT_PARENT_BRAND_PATTERNS if t.startswith("ares ")}
 
 # Same word-boundary protection, extended 2026-10-06 for ALT_MANAGER_ONLY_TERMS
 # bare terms short/common enough to collide mid-word: bare "ares" plain-substring
@@ -3104,7 +3173,7 @@ ALT_SPONSOR_EXCLUDE_REGEX = (
 )
 
 
-def _alt_brand_term_cond(term: str, column: str = "raw_entity_name") -> str:
+def _alt_brand_term_cond(term: str, column: str = "raw_entity_name", use_override: bool = True) -> str:
     """Shared condition-builder for one ALT_BRAND_PATTERNS term (consumed by
     _alt_manager_case_sql/_alt_manager_display_name): word-boundary regex for
     terms in ALT_BRAND_WORD_BOUNDARY_TERMS,
@@ -3125,7 +3194,7 @@ def _alt_brand_term_cond(term: str, column: str = "raw_entity_name") -> str:
         cond = f"regexp_like(lower(trim({column})), '\\b{term_sql}\\b')"
     else:
         cond = f"strpos(lower(trim({column})), '{term_sql}') > 0"
-    override = ALT_BRAND_TERM_OVERRIDES.get(term)
+    override = ALT_BRAND_TERM_OVERRIDES.get(term) if use_override else None
     if override:
         cond = f"({cond} AND {override})"
     return cond
@@ -3430,6 +3499,39 @@ ALT_MANAGER_OVERRIDES: Dict[str, str] = {
     # Industrial Real Estate after Ares acquired Black Creek (2021).
     "alpinvest": "Carlyle Group",
     "black creek industrial": "Ares Management",
+    # 2026-10-22: ALT_PARENT_BRAND_PATTERNS strategy terms.
+    "ares real estate": "Ares Management",
+    "ares us real estate": "Ares Management",
+    "ares industrial": "Ares Management",
+    "ares senior direct": "Ares Management",
+    "ares sdl": "Ares Management",
+    "ares private credit": "Ares Management",
+    "ares pcs": "Ares Management",
+    "ares pathfinder": "Ares Management",
+    "ares global multi": "Ares Management",
+    "ares multi": "Ares Management",
+    "ares credit": "Ares Management",
+    "ares strategic income": "Ares Management",
+    "ares diversified credit": "Ares Management",
+    "ares difersified credit": "Ares Management",
+    "ares dynamic credit": "Ares Management",
+    "apollo natural resource": "Apollo Global Management",
+    "apollo total return": "Apollo Global Management",
+    "apollo accord": "Apollo Global Management",
+    "apollo debt": "Apollo Global Management",
+    "apollo diversified credit": "Apollo Global Management",
+    "apollo credit": "Apollo Global Management",
+    "apollo asset backed": "Apollo Global Management",
+    "apollo euro principal finance": "Apollo Global Management",
+    "apollo atlas": "Apollo Global Management",
+    "carlyle property": "Carlyle Group",
+    "carlyle realty": "Carlyle Group",
+    "carlyle power": "Carlyle Group",
+    "carlyle infrastructure": "Carlyle Group",
+    "carlyle credit": "Carlyle Group",
+    "carlyle tactical": "Carlyle Group",
+    "carlyle direct lending": "Carlyle Group",
+    "carlyle energy mezzanine": "Carlyle Group",
     "tennenbaum": "BlackRock",
     "owl rock": "Blue Owl Capital",
     "ipi data center": "IPI Partners",
@@ -5339,7 +5441,9 @@ def _alt_manager_case_sql(column: str = "raw_entity_name") -> str:
         lines.append(f"        WHEN {cond} THEN '{val}'")
     for term in ALT_MANAGER_ONLY_TERMS:
         manager = _alt_manager_display_name(term)
-        cond = _alt_brand_term_cond(term, column)
+        # 2026-10-22: the ALT_PARENT_BRAND_PATTERNS issuer guard gates routing
+        # only; the manager-only branch labels exactly as it did before it.
+        cond = _alt_brand_term_cond(term, column, use_override=term not in ALT_PARENT_BRAND_TERMS)
         val = manager.replace("'", "''")
         lines.append(f"        WHEN {cond} THEN '{val}'")
     lines.append("        ELSE NULL END")
