@@ -5480,17 +5480,21 @@ def run_post_extract_validation(
     # left blank whose issuer + description carries "NL Ser"/"Non-Lending"/"JPMCB" is a bank
     # collective trust. Runs before reconciliation so plans with no reference row (master
     # trusts outside plan_master, e.g. Timken 2026-10-21) still get it.
-    from .asset_type_patterns import looks_like_cit as _looks_like_cit
-    _cit_tagged = 0
+    # 2026-10-22: widened to non_mf_override_type (collective/commingled, Fidelity/Spartan
+    # pools, brokerage windows, stable value/GIC, coupon+date bonds, loan rate lines, company
+    # stock); each rule was spot-checked against every v3 name for real-fund false positives.
+    from .asset_type_patterns import non_mf_override_type as _non_mf_type
+    _retyped: Dict[str, int] = defaultdict(int)
     for _r in rows:
         _t = str(_r.get("asset_type") or "").strip().lower()
         if _t and _t not in MF_ASSET_TYPES:
             continue
-        if _looks_like_cit(f"{_r.get('issuer_name') or ''} {_r.get('investment_description') or ''}"):
-            _r["asset_type"] = "Common/Collective Trust Fund"
-            _cit_tagged += 1
-    if _cit_tagged:
-        logger.info("CIT share-class tag re-typed %d row(s) to Common/Collective Trust Fund", _cit_tagged)
+        _new = _non_mf_type(f"{_r.get('issuer_name') or ''} {_r.get('investment_description') or ''}".strip())
+        if _new:
+            _r["asset_type"] = _new
+            _retyped[_new] += 1
+    if _retyped:
+        logger.info("Non-MF name rules re-typed MF/blank rows: %s", dict(_retyped))
         extracted_totals = compute_extracted_mf_totals(rows)
 
     # MF RECONCILIATION (post-extraction): reconcile each plan's extracted MF total to the

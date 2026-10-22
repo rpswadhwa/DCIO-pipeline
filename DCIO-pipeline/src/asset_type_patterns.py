@@ -364,6 +364,67 @@ def looks_like_cit(name: str) -> bool:
     return bool(name) and bool(_CIT_TAG_RE.search(name))
 
 
+# Names that can never be a mutual fund, whatever type the cleaner or the fund mapping gave
+# them. Spot check of plan_mf_history_v3 on 2026-10-22 found ~$39B of such rows typed MF
+# (collective/commingled trusts, Fidelity/Spartan pools, brokerage windows, stable value,
+# bonds and loan-rate lines, single company stocks). A bare "trust" is NOT a signal:
+# Templeton Developing Markets Trust, JP Morgan Trust II Core Bond, MFS Series Trust I and
+# Neuberger Berman Genesis "Trust Class" are registered mutual funds. Ordered first-wins.
+_CIT_NAME_RE = re.compile(r'collective|commingled|comingled|\bcit\b|\bctf\b|common\s+trust', re.IGNORECASE)
+_FID_POOL_RE = re.compile(r'\bpool\b', re.IGNORECASE)
+_FID_FAMILY_RE = re.compile(r'\bfid\b|fidelity|spartan|geode|contra|growth\s+co\b', re.IGNORECASE)
+_BROKERAGE_RE = re.compile(r'brokerage|\bsdba\b|self[\-\s]?direct|self[\-\s]?managed', re.IGNORECASE)
+_STABLE_VALUE_RE = re.compile(
+    r'stable\s*val|\bgic\b|guaranteed\s+(?:option|account|income|interest)|wrapped\s+holdings|wrap(?:per)?\s+contracts?',
+    re.IGNORECASE)
+_LOAN_RATE_RE = re.compile(r'\brates?\s+(?:from|range)|interest\s+rates?\s+(?:from|range)', re.IGNORECASE)
+# A bond needs a coupon AND a date, a STRIPS/zero-coupon tag, or a variable-rate note with a
+# date. looks_like_security() alone is too loose here: its GNMA/%/FUT signals match real
+# funds ("Fidelity GNMA", "Fidelity Asset Manager 70%", "AHL Managed Futures").
+_DATE = r'\b\d{1,2}[/-]\d{1,2}[/-]\d{2,4}\b'
+_BOND_RE = re.compile(
+    r'\d(?:\.\d+)?\s*%.{0,40}' + _DATE + r'|' + _DATE + r'.{0,40}\d(?:\.\d+)?\s*%|z-?cpn|\bstrips\b|'
+    r'\bvar(?:iable)?\s+r(?:ate|t)\b.{0,40}' + _DATE + r'|\bdue\s+' + _DATE,
+    re.IGNORECASE)
+# Money-market funds also print "VAR RT 12/31/2049" ("DREYFUS GOVT CAS MGMT INST 289 VAR RT ...").
+_NOT_BOND_RE = re.compile(
+    r'100\s*%|money|\bmm\b|mmkt|\bm\s+monthly|\bfu?n?d\b|\bind(?:e?x)?\b|\bidx\b|\btrusts?\b|\btr\b|\betf\b|'
+    r'\binstl?\b|cas(?:h)?\s+mgmt|csh|\bliq|\bobl\b|\bcf\b|\bplus\b|12/31/20(?:49|75)', re.IGNORECASE)
+# "Inc" alone is no company signal ("Dodge Cox Inc", "VANG EQUITY INC ADM" mean Income), nor
+# "Company"/"Corp" after a fund word ("Fidelity Growth Company", "Vanguard High Yield Corp",
+# "DFA Japanese Small Company"); insurers are contracts, not stock. Only corporate endings.
+_COMPANY_END_RE = re.compile(
+    r'(?:\b(?:cos|co)\.?\s+inc|&\s*co|\bcorp(?:oration)?(?:\s+inc)?|\bincorporated|\bplc|\bltd|\b(?:group|holdings?)\s+inc)\.?\s*$',
+    re.IGNORECASE)
+_NOT_COMPANY_RE = re.compile(
+    r'insur|\blife\b|annuit|assur|invest|regist|yield|bond|growth|small|value|\bcap\b|income|partners|offshore|mutual|'
+    r'\btrust\b|\btr\b|capital\s+management|asset\s+management|advis|vanguard|fidelity|\bfid\b|short[\-\s]term|'
+    r'\bterm\b|\bindex\b|\bdfa\b|dimensions', re.IGNORECASE)
+
+
+def non_mf_override_type(name: str) -> str:
+    """Asset type for a holding NAME that can never be a mutual fund (see _CIT_NAME_RE etc.),
+    else ''. Used to re-type rows the cleaner labelled Mutual Fund."""
+    if not name:
+        return ''
+    if _STABLE_VALUE_RE.search(name):   # before CIT: "Stable Value Common Trust Fund"
+        return 'Stable Value Fund'
+    if looks_like_cit(name) or _CIT_NAME_RE.search(name):
+        return 'Common/Collective Trust Fund'
+    if _FID_POOL_RE.search(name) and _FID_FAMILY_RE.search(name):
+        return 'Common/Collective Trust Fund'
+    if _BROKERAGE_RE.search(name):
+        return 'Self-Directed Brokerage Account'
+    if _LOAN_RATE_RE.search(name) and not _FUND_VEHICLE_RE.search(name):
+        return 'Participant Loan'
+    if _BOND_RE.search(name) and not _NOT_BOND_RE.search(name):
+        return 'Bond'
+    if (_COMPANY_END_RE.search(name.strip()) and not _FUND_VEHICLE_RE.search(name)
+            and not _NOT_COMPANY_RE.search(name)):
+        return 'Employer Stock'
+    return ''
+
+
 def detect_asset_type_row(text: str) -> str:
     """Detect a per-row asset-type DECLARATION carried in the row (a Type-column value or a
     vehicle-type phrase in the description). Non-name-based: only explicit vehicle-type
