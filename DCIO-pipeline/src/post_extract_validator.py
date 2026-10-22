@@ -2563,6 +2563,14 @@ ALT_BRAND_PATTERNS: List[Tuple[str, str, str]] = [
     ("insight partners", "Private Equity Fund", "Private Equity"),
     ("intercontinental", "Real Estate Fund", "Real Estate"),  # overridden below
     ("kayne anderson", "Infrastructure Fund", "Infrastructure"),
+    # Added 2026-10-22: "orchard landmark" (Orchard Global Asset Management
+    # fund) and "landmark infrastructure" (Landmark Infrastructure Partners,
+    # a Landmark Dividend vehicle) MUST precede bare "landmark", which now
+    # resolves to Ares Management (see ALT_MANAGER_OVERRIDES). Same asset
+    # type/class as "landmark" so routing of these rows is unchanged -- only
+    # matched_manager_name differs.
+    ("orchard landmark", "Private Equity Fund", "Private Equity"),
+    ("landmark infrastructure", "Private Equity Fund", "Private Equity"),
     ("landmark", "Private Equity Fund", "Private Equity"),
     ("mc credit", "Private Credit Fund", "Private Credit"),
     ("mcmorgan", "Real Estate Fund", "Real Estate"),
@@ -3410,7 +3418,18 @@ ALT_MANAGER_OVERRIDES: Dict[str, str] = {
     # match what it really resolves. Also makes R706's proposed "onex
     # partners" -> "Onex Partners" entry redundant; not added separately.
     "onex": "Onex Partners",
-    "landmark": "Landmark Partners",
+    # Changed 2026-10-22 (per user request): Ares acquired Landmark Partners
+    # in 2021 -- rolled up to the parent, same convention as Oaktree ->
+    # Brookfield. Orchard Landmark / Landmark Infrastructure are carved out
+    # ahead of this term in ALT_BRAND_PATTERNS.
+    "landmark": "Ares Management",
+    "orchard landmark": "Orchard Global Asset Management",
+    "landmark infrastructure": "Landmark Infrastructure Partners",
+    # Added 2026-10-22 (per user request): AlpInvest Partners is owned by
+    # Carlyle (since 2011); Black Creek Industrial REIT became Ares
+    # Industrial Real Estate after Ares acquired Black Creek (2021).
+    "alpinvest": "Carlyle Group",
+    "black creek industrial": "Ares Management",
     "tennenbaum": "BlackRock",
     "owl rock": "Blue Owl Capital",
     "ipi data center": "IPI Partners",
@@ -4456,6 +4475,10 @@ ALT_MANAGER_ONLY_TERMS: List[str] = [
     "nuveen",
     "american century",
     "apollo",
+    # 2026-10-22: AlpInvest -> Carlyle, Black Creek Industrial -> Ares (see
+    # ALT_MANAGER_OVERRIDES).
+    "alpinvest",
+    "black creek industrial",
     "brookfield premier re",
     "brookfield us premier real estate",
     "brookfield real estate solutions",
