@@ -3200,6 +3200,35 @@ def _alt_brand_term_cond(term: str, column: str = "raw_entity_name", use_overrid
     return cond
 
 
+def _alt_brand_when_lines(items, column: str = "raw_entity_name") -> list:
+    """WHEN lines for (term, THEN-literal) pairs in ALT_BRAND_PATTERNS order.
+    Added 2026-10-22: each contiguous run of ALT_PARENT_BRAND_TERMS becomes one
+    WHEN carrying the ALT_PARENT_BRAND_ISSUER_REGEX guard once, with a nested
+    CASE picking the first matching term. Same result as one guarded WHEN per
+    term (the guard is identical for every term in the run), but inlining the
+    ~600-char guard per term pushed the routing SQL from 155K to 254K chars --
+    past _ALT_ROUTE_MAX_SQL_CHARS for even a single ack."""
+    lines = []
+    i = 0
+    while i < len(items):
+        term, val = items[i]
+        if term not in ALT_PARENT_BRAND_TERMS:
+            lines.append(f"        WHEN {_alt_brand_term_cond(term, column)} THEN {val}")
+            i += 1
+            continue
+        j = i
+        while j < len(items) and items[j][0] in ALT_PARENT_BRAND_TERMS:
+            j += 1
+        run = [(t, v, _alt_brand_term_cond(t, column, use_override=False)) for t, v in items[i:j]]
+        any_cond = " OR ".join(c for _, _, c in run)
+        inner = " ".join(f"WHEN {c} THEN {v}" for _, v, c in run)
+        lines.append(
+            f"        WHEN {ALT_BRAND_TERM_OVERRIDES[run[0][0]]} AND ({any_cond}) THEN CASE {inner} END"
+        )
+        i = j
+    return lines
+
+
 # A brand-name match only counts as an alternatives holding if the name also
 # carries a private-fund structural marker, OR the staging asset_type is
 # already one we trust for alts -- same two-sided gate validated against
@@ -3432,10 +3461,10 @@ def _alt_brand_case_sql(value_index: int, column: str = "raw_entity_name") -> st
     `column`, honoring ALT_BRAND_TERM_OVERRIDES. Mirrors _alt_case_sql()
     above so the two stay easy to compare/audit side by side."""
     lines = ["CASE"]
-    for term, asset_type, asset_class in ALT_BRAND_PATTERNS:
-        cond = _alt_brand_term_cond(term, column)
-        val = (asset_type if value_index == 1 else asset_class).replace("'", "''")
-        lines.append(f"        WHEN {cond} THEN '{val}'")
+    lines += _alt_brand_when_lines([
+        (term, "'" + (asset_type if value_index == 1 else asset_class).replace("'", "''") + "'")
+        for term, asset_type, asset_class in ALT_BRAND_PATTERNS
+    ], column)
     lines.append("        ELSE NULL END")
     return "\n".join(lines)
 
@@ -3447,13 +3476,14 @@ def _alt_brand_method_case_sql(column: str = "raw_entity_name", method_prefix: s
     `method_prefix` lets the sponsor-name fallback pass tag its rows
     distinctly (manual:sponsor_brand_match:*) from entity-name brand matches."""
     lines = ["CASE"]
+    items = []
     for term, _asset_type, _asset_class in ALT_BRAND_PATTERNS:
-        cond = _alt_brand_term_cond(term, column)
         suffix = (
             term.replace(" ", "_").replace(",", "").replace("&", "and")
                 .replace(".", "").replace("'", "")
         )
-        lines.append(f"        WHEN {cond} THEN '{method_prefix}{suffix}'")
+        items.append((term, f"'{method_prefix}{suffix}'"))
+    lines += _alt_brand_when_lines(items, column)
     lines.append("        ELSE NULL END")
     return "\n".join(lines)
 
@@ -5434,11 +5464,10 @@ def _alt_manager_case_sql(column: str = "raw_entity_name") -> str:
     covered by the router's curated list keeps resolving the same way it
     always has -- the extra terms only catch rows the curated list missed."""
     lines = ["CASE"]
-    for term, _asset_type, _asset_class in ALT_BRAND_PATTERNS:
-        manager = _alt_manager_display_name(term)
-        cond = _alt_brand_term_cond(term, column)
-        val = manager.replace("'", "''")
-        lines.append(f"        WHEN {cond} THEN '{val}'")
+    lines += _alt_brand_when_lines([
+        (term, "'" + _alt_manager_display_name(term).replace("'", "''") + "'")
+        for term, _asset_type, _asset_class in ALT_BRAND_PATTERNS
+    ], column)
     for term in ALT_MANAGER_ONLY_TERMS:
         manager = _alt_manager_display_name(term)
         # 2026-10-22: the ALT_PARENT_BRAND_PATTERNS issuer guard gates routing
