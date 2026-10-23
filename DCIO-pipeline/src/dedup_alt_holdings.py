@@ -26,6 +26,10 @@ account, E=103-12 IE, M=master trust):
                            -> drop both, insert into RH (classification_method 'schedule_d_move:v1')
   CIT vs MF   code P, mutual-fund name -> drop CIT copy (insurer separate account wrapping an MF)
   RH  vs MF   NOT_MF name  -> drop MF copy, else drop RH copy
+Non-Alternatives CIT vs MF (2026-10-22, pair citx_mfx): a fund the filer lists on Schedule D Part I
+with code C (a bank collective trust) that MF extraction also wrote to plan_mf_history_v3 under an
+Equity/Fixed Income/Target Date class (Timken: "WESTERN ASSET CORE PLUS BOND R1" $31.6M in both).
+Same matching tiers; only code C acts (drop the MF copy), any other code is reported and left alone.
 Rows under $100 are never matched ($1 placeholder lines pair up on amount alone).
 A CIT row with no Schedule D code is left alone, and so is any delete whose (ack, name, amount) key
 matches more live rows than it targets (twins we can't tell apart).
@@ -71,6 +75,9 @@ CONFIRMED = {1, 2, 3}
 NOT_MF = re.compile(r"\bl\.?\s?p\.?\b|limited\s+partnership|\bllc\b|\bfeeder\b|\breit\s+ii\b|closely\s*held|\bpartners\b"
                     r"|separate\s+acc|tiaa\s+real\s+estate(?!\s+(sec|index|idx))|\bprisa\b|\bullico\b", re.I)
 MOVE_ASSET_TYPE = {"P": "Separate Account", "E": "Private Fund - LP", "M": "Master Trust Interest"}
+
+# Rows outside the Alternatives pass (NULL asset_class included).
+NOT_ALT_SQL = "coalesce(asset_class, '') <> 'Alternatives'"
 
 LOG_DDL = f"""
 CREATE TABLE IF NOT EXISTS {DB}.{LOG_TABLE} (
@@ -172,9 +179,10 @@ def ack_clause(acks, col="ack_id"):
 
 
 def fetch(acks):
-    """Live rows of the three tables for these acks (None = all). CIT/MF only their Alternatives rows."""
+    """Live rows of the three tables for these acks (None = all). cit/mf = their Alternatives rows,
+    citx/mfx = every other CIT/MF row (compared only with each other)."""
     chunks = [None] if acks is None else [acks[i:i + ACK_CHUNK] for i in range(0, len(acks), ACK_CHUNK)]
-    parts = {"rh": [], "cit": [], "mf": []}
+    parts = {"rh": [], "cit": [], "mf": [], "citx": [], "mfx": []}
     for ch in chunks:
         parts["rh"].append(read(f"SELECT * FROM {DB}.plan_alternatives_history WHERE true{ack_clause(ch)}"))
         parts["cit"].append(read(f"""
@@ -185,12 +193,21 @@ def fetch(acks):
                  AND cast(s.row_order AS varchar) = cast(c.row_order AS varchar)
             WHERE c.asset_class = 'Alternatives'{ack_clause(ch, 'c.ack_id')}"""))
         parts["mf"].append(read(f"SELECT * FROM {DB}.plan_mf_history_v3 WHERE asset_class = 'Alternatives'{ack_clause(ch)}"))
+        parts["citx"].append(read(f"""
+            SELECT c.*, coalesce(d.dfe_p1_entity_code, s.dfe_p1_entity_code) AS sch_d_code
+            FROM {DB}.plan_cit_history c
+            LEFT JOIN {DB}.schedule_d_part1 d ON d.ack_id = c.ack_id AND cast(d.row_order AS varchar) = cast(c.row_order AS varchar)
+            LEFT JOIN {DB}.schedule_d_part1_stp s ON d.ack_id IS NULL AND s.ack_id = c.ack_id
+                 AND cast(s.row_order AS varchar) = cast(c.row_order AS varchar)
+            WHERE {NOT_ALT_SQL.replace('asset_class', 'c.asset_class')}{ack_clause(ch, 'c.ack_id')}"""))
+        parts["mfx"].append(read(f"SELECT * FROM {DB}.plan_mf_history_v3 WHERE {NOT_ALT_SQL}{ack_clause(ch)}"))
     live = {k: pd.concat(v, ignore_index=True) for k, v in parts.items()}
     for k, d in live.items():
         d["ack_id"] = d["ack_id"].astype(str)
         d["_amt"] = pd.to_numeric(d["plan_investment_amt"], errors="coerce")
         d["_key"] = [name_key(a, n, x) for a, n, x in zip(d.ack_id, d.raw_entity_name, d.plan_investment_amt)]
     live["cit"]["_cit_key"] = cit_keys(live["cit"])
+    live["citx"]["_cit_key"] = cit_keys(live["citx"])
     return live
 
 
@@ -199,7 +216,8 @@ def cit_keys(cit):
 
 
 def find_actions(live):
-    mgr_col = {"rh": "matched_manager_name", "cit": "normalized_manager", "mf": "normalized_sponsor_name"}
+    mgr_col = {"rh": "matched_manager_name", "cit": "normalized_manager", "mf": "normalized_sponsor_name",
+               "citx": "normalized_manager", "mfx": "normalized_sponsor_name"}
     frames = []
     for src, d in live.items():
         f = pd.DataFrame({"src": src, "ack_id": d.ack_id, "amt": d._amt, "row": d.index,
@@ -211,7 +229,7 @@ def find_actions(live):
     H["tok"] = [toks(a, b) for a, b in zip(H.name, H.mgr)]
     H["tier"] = 0
     pairs = []
-    for l, r in [("rh", "cit"), ("rh", "mf"), ("cit", "mf")]:
+    for l, r in [("rh", "cit"), ("rh", "mf"), ("cit", "mf"), ("citx", "mfx")]:
         free = ~H.tier.isin(CONFIRMED)
         A = H[(H.src == l) & free][["ack_id", "amt", "tok"]]
         B = H[(H.src == r) & free][["ack_id", "amt", "tok"]]
@@ -225,14 +243,19 @@ def find_actions(live):
     acts = []  # dicts: op (delete/insert), table, row (live index), pair, tier, code, kept_table, kept_name
     skipped = []
     for pair, tier, a, b in pairs:
-        cit = a if pair == "cit_mf" else b if pair == "rh_cit" else None
-        code = live["cit"].loc[cit.row, "sch_d_code"] if cit is not None else None
+        cit = a if pair in ("cit_mf", "citx_mfx") else b if pair == "rh_cit" else None
+        code = live[cit.src].loc[cit.row, "sch_d_code"] if cit is not None else None
         code = code if isinstance(code, str) and code.strip() else None
         base = dict(pair=pair, tier=tier, code=code)
-        if pair in ("rh_cit", "cit_mf") and code is None:
+        if pair in ("rh_cit", "cit_mf", "citx_mfx") and code is None:
             skipped.append((pair, a.ack_id, a["name"], "no Schedule D code on the CIT row"))
             continue
-        if pair == "rh_cit":
+        if pair == "citx_mfx":
+            if code == "C":
+                acts.append(dict(base, op="delete", table="mfx", row=b.row, kept_table="citx", kept_name=a["name"]))
+            else:
+                skipped.append((pair, a.ack_id, a["name"], f"Schedule D code {code}, not C"))
+        elif pair == "rh_cit":
             if code == "C":
                 acts.append(dict(base, op="delete", table="rh", row=a.row, kept_table="cit", kept_name=b["name"]))
             else:
@@ -257,7 +280,7 @@ def find_actions(live):
 
     # Twin guard: a name-keyed DELETE removes every live row with that key, so only allow it when
     # the number of live rows with the key equals the number of rows we mean to delete.
-    for tbl in ("rh", "mf"):
+    for tbl in ("rh", "mf", "mfx"):
         want = pd.Series([live[tbl].loc[x["row"], "_key"] for x in acts if x["op"] == "delete" and x["table"] == tbl]).value_counts()
         have = live[tbl]["_key"].value_counts()
         bad = {k for k, n in want.items() if have.get(k, 0) != n}
@@ -279,7 +302,8 @@ def row_json(series):
                        for k, v in series.items() if not str(k).startswith("_")}, default=str)
 
 
-TABLES = {"rh": "plan_alternatives_history", "cit": "plan_cit_history", "mf": "plan_mf_history_v3"}
+TABLES = {"rh": "plan_alternatives_history", "cit": "plan_cit_history", "mf": "plan_mf_history_v3",
+          "citx": "plan_cit_history", "mfx": "plan_mf_history_v3"}
 
 
 def chunked(lst, n=STMT_CHUNK, max_chars=MAX_STMT_CHARS):
@@ -296,7 +320,7 @@ def chunked(lst, n=STMT_CHUNK, max_chars=MAX_STMT_CHARS):
 
 
 def build_statements(live, acts, run_id, run_at):
-    log_rows, ins_rows, del_keys = [], [], {"rh": [], "cit": [], "mf": []}
+    log_rows, ins_rows, del_keys = [], [], {"rh": [], "cit": [], "mf": [], "mfx": []}
     for x in acts:
         src_tbl = "cit" if x["op"] == "insert" else x["table"]
         r = live[src_tbl].loc[x["row"]]
@@ -326,7 +350,7 @@ def build_statements(live, acts, run_id, run_at):
     for ch in chunked(sorted(set(del_keys["cit"]))):
         stmts.append(("delete_cit", f"DELETE FROM {DB}.plan_cit_history WHERE asset_class = 'Alternatives' AND "
                       f"concat(ack_id,'|',cast(row_order AS varchar)) IN ({','.join(q(k) for k in ch)})"))
-    for tbl, extra in (("mf", "asset_class = 'Alternatives' AND "), ("rh", "")):
+    for tbl, extra in (("mf", "asset_class = 'Alternatives' AND "), ("mfx", NOT_ALT_SQL + " AND "), ("rh", "")):
         for ch in chunked(sorted(set(del_keys[tbl]))):
             stmts.append((f"delete_{tbl}", f"DELETE FROM {DB}.{TABLES[tbl]} WHERE {extra}{NAME_KEY_SQL} IN ({','.join(q(k) for k in ch)})"))
     return stmts, del_keys, len(ins_rows)
