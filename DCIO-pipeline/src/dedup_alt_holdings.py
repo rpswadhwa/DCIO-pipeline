@@ -121,7 +121,9 @@ def execute(sql):
 def amt_key(x):
     try:
         v = float(x)
-        return "nan" if math.isnan(v) else f"{round(v):.0f}"
+        # Half away from zero like Athena's round(); Python's round() is half-to-even, so a
+        # $1,497,096.50 row keyed ...096 here and ...097 in the DELETE (2026-10-22).
+        return "nan" if math.isnan(v) else f"{math.copysign(math.floor(abs(v) + 0.5), v) + 0.0:.0f}"
     except (TypeError, ValueError):
         return "nan"
 
