@@ -3255,7 +3255,11 @@ ALT_BRAND_TRUSTED_ASSET_TYPES = frozenset({
 ALT_BRAND_NOISE_REGEX = (
     r"%|\bsr\.?\s+unsecured\b|\bcallable\s+notes?\b|\bdue\s+\d|"
     r"\bcorp\.?\s+debt\b|\bcorporate\s+(bond|debt)\b|\bcom\b|\badr\b|"
-    r"\bcusip\b|\bsedol\b|\bnew\s+issue\b|\bcorporation\b\s*$"
+    r"\bcusip\b|\bsedol\b|\bnew\s+issue\b|\bcorporation\b\s*$|"
+    # Added 2026-10-24: floating-rate CLO tranches ("ARES DIRECT LENDING 3A A2
+    # 144A VAR RT") and the Apollo/Ares listed mortgage REITs (ARI, ACRE)
+    # were routing via keyword:direct_lending / keyword:real_estate.
+    r"\bares\b.*\bvar\s+rt\b|\b(apollo|ares)\s+(commercial|coml|cmmrl)\s+real\b"
 )
 
 # Additional asset_type exclusions beyond ALT_EXCLUDED_ASSET_TYPES |
