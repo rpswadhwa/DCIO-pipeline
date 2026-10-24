@@ -14,7 +14,7 @@ Matching (same rules as the DC ALTA deck, build_ge100m.match_pairs), within an a
 pair order RH-vs-CIT, RH-vs-MF, CIT-vs-MF:
   tier 1  amount within $1 and names match
   tier 2  amount within $1, names differ
-  tier 3  amount within 1% and names match
+  tier 3  amount within 1%, names match, and same fund kind/vintage (same_fund_kind, 2026-10-23)
   tier 4  names only -> NOT treated as the same holding (never acted on)
 
 Which copy stays (Schedule D Part I dfe_p1_entity_code of the CIT row; C=CCT, P=pooled separate
@@ -43,6 +43,7 @@ Usage:
   ACK_IDS=A,B python3.11 -m src.dedup_alt_holdings --apply
   python3.11 -m src.dedup_alt_holdings --ack-file acks.txt --apply
   python3.11 -m src.dedup_alt_holdings --all                    # whole-table sweep
+  python3.11 -m src.dedup_alt_holdings --undo-file rows.csv --apply   # put logged deletes back
 """
 import argparse
 import json
@@ -153,6 +154,43 @@ def name_match(a, b):
     return i / len(a | b) >= 0.34 or i / min(len(a), len(b)) >= 0.6
 
 
+# Tier 3 (amount only within 1%) needs the two names to be the same KIND of fund too: a shared brand
+# ("T. Rowe Price", "Vanguard") passed name_match and paired different funds of similar size
+# (Retirement 2025 vs TRP Stable Value, Growth Index vs 500 Index, 2055 vs 2035) -- 103 rows / $1.5B
+# wrongly dropped from MF in the 2026-10-22 cleanup.
+VINTAGE = re.compile(r"(?<!\d)(20[0-7][05])(?!\d)")
+FUND_KIND = {
+    "tdf": r"RETIRE|TARGET|LIFETIME|FREEDOM|FRDM|LIFEPATH|TRGT|TGT|\bRET\b|BLEND|MYCOMPASS|FLEXPATH|(?<!\d)20[1-7][05](?!\d)",
+    "sv": r"STABLE|SAVINGS TR|SVGS TR|SAV TR|PRESERV|\bGIC\b",
+    "mm": r"MONEY|\bMMKT\b|GVMNT MON|CASH",
+    "growth": r"GROWTH|\bGRW|\bGRTH|\bGR\b",
+    "value": r"(?<!STABLE )(?<!ST )VALUE|\bVAL\b",
+    "midsmall": r"\bMID|SMALL|SMID|\bSM ?CAP|SMMID",
+    "intl": r"INT'?L|INTERNATIONAL|INTERNATL|FOREIGN|EMERG|EAFE|\bWORLD|EX[- ]?US",
+    "sector": r"\bSCI|TECH|HEALTH|REAL ESTATE|\bREIT|ENERGY",
+}
+FUND_KIND = {k: re.compile(p) for k, p in FUND_KIND.items()}
+
+
+def fund_kinds(name):
+    s = name.upper() if isinstance(name, str) else ""
+    return {k for k, p in FUND_KIND.items() if p.search(s)}
+
+
+def same_fund_kind(a, b):
+    """False when two names point at different funds: different vintage years, a vintage on only one of
+    two target-date names, or a fund kind (stable value, money market, growth, ...) on only one side."""
+    a = a.upper() if isinstance(a, str) else ""
+    b = b.upper() if isinstance(b, str) else ""
+    ya, yb = set(VINTAGE.findall(a)), set(VINTAGE.findall(b))
+    if ya and yb and not ya & yb:
+        return False
+    ka, kb = fund_kinds(a), fund_kinds(b)
+    if "tdf" in ka and "tdf" in kb and bool(ya) != bool(yb) and "INCOME" not in a + b:
+        return False
+    return ka == kb
+
+
 def match_pairs(L, R_):
     """Greedy one-to-one match of rows in L to rows in R_ on the same ack_id. Returns index_l, index_r, tier."""
     j = L.reset_index().merge(R_.reset_index(), on="ack_id", suffixes=("_l", "_r"))
@@ -163,7 +201,8 @@ def match_pairs(L, R_):
     j["tier"] = 0
     j.loc[(j["diff"] <= 1) & nm, "tier"] = 1
     j.loc[(j["diff"] <= 1) & ~nm, "tier"] = 2
-    j.loc[(j.tier == 0) & (j["diff"] <= 0.01 * j[["amt_l", "amt_r"]].max(axis=1)) & nm, "tier"] = 3
+    kind = pd.Series([same_fund_kind(a, b) for a, b in zip(j.name_l, j.name_r)], index=j.index)
+    j.loc[(j.tier == 0) & (j["diff"] <= 0.01 * j[["amt_l", "amt_r"]].max(axis=1)) & nm & kind, "tier"] = 3
     j.loc[(j.tier == 0) & nm, "tier"] = 4
     j = j[j.tier > 0].sort_values(["tier", "diff"])
     used_l, used_r, out = set(), set(), []
@@ -233,8 +272,8 @@ def find_actions(live):
     pairs = []
     for l, r in [("rh", "cit"), ("rh", "mf"), ("cit", "mf"), ("citx", "mfx")]:
         free = ~H.tier.isin(CONFIRMED)
-        A = H[(H.src == l) & free][["ack_id", "amt", "tok"]]
-        B = H[(H.src == r) & free][["ack_id", "amt", "tok"]]
+        A = H[(H.src == l) & free][["ack_id", "amt", "tok", "name"]]
+        B = H[(H.src == r) & free][["ack_id", "amt", "tok", "name"]]
         A, B = A[A.ack_id.isin(set(B.ack_id))], B[B.ack_id.isin(set(A.ack_id))]
         mp = match_pairs(A, B)
         mp = mp[mp.tier.isin(CONFIRMED)]
@@ -358,6 +397,72 @@ def build_statements(live, acts, run_id, run_at):
     return stmts, del_keys, len(ins_rows)
 
 
+def sql_value(v, typ):
+    """A row_json value as an Athena literal of column type typ."""
+    if v is None or (isinstance(v, str) and v in ("<NA>", "NaT", "nan", "None")) or (isinstance(v, float) and math.isnan(v)):
+        return "NULL"
+    if typ.startswith("timestamp"):
+        return f"CAST({q(str(v).replace('T', ' '))} AS timestamp)"
+    if typ == "boolean":
+        return f"CAST({q(str(v).lower())} AS boolean)"
+    if typ == "varchar" or typ.startswith("varchar"):
+        return q(v)
+    return f"CAST({q(v)} AS {typ})"
+
+
+def undo(path, apply):
+    """Put deleted rows back from the log. path: CSV with run_id, ack_id, raw_entity_name, plan_investment_amt
+    of logged deletes. Each comes back exactly as logged (row_json), only if no live row has its key."""
+    want = pd.read_csv(path, dtype=str, keep_default_na=False)  # a fund literally named "N/A" stays "N/A"
+    want["k"] = [f"{r}|{name_key(a, n, x)}" for r, a, n, x in zip(want.run_id, want.ack_id, want.raw_entity_name, want.plan_investment_amt)]
+    runs = sorted(set(want.run_id))
+    lg = read(f"SELECT * FROM {DB}.{LOG_TABLE} WHERE action = 'delete' AND run_id IN ({','.join(q(r) for r in runs)})"
+              f"{ack_clause(sorted(set(want.ack_id)))}")
+    lg["k"] = [f"{r}|{name_key(a, n, x)}" for r, a, n, x in zip(lg.run_id, lg.ack_id, lg.raw_entity_name, lg.plan_investment_amt)]
+    lg = lg[lg.k.isin(set(want.k))].drop_duplicates("k")
+    missing = set(want.k) - set(lg.k)
+    if missing:
+        sys.exit(f"{len(missing)} rows not in the log, nothing done: {sorted(missing)[:5]}")
+    stmts, keys = [], {}
+    for tbl, g in lg.groupby("table_name"):
+        cols = read(f"SELECT column_name, data_type FROM information_schema.columns WHERE table_schema = '{DB}' "
+                    f"AND table_name = {q(tbl)} ORDER BY ordinal_position")
+        live = read(f"SELECT {NAME_KEY_SQL} AS k FROM {DB}.{tbl} WHERE true{ack_clause(sorted(set(g.ack_id)))}")
+        g = g.assign(nk=[name_key(a, n, x) for a, n, x in zip(g.ack_id, g.raw_entity_name, g.plan_investment_amt)])
+        back = g.nk.isin(set(live.k))
+        if back.any():
+            log(f"{tbl}: {int(back.sum())} rows already live again, left alone")
+        g = g[~back]
+        keys[tbl] = list(g.nk)
+        vals = []
+        for rj in g.row_json:
+            d = json.loads(rj)
+            vals.append("(" + ",".join(sql_value(d.get(c), t) for c, t in zip(cols.column_name, cols.data_type)) + ")")
+        log(f"{tbl}: restore {len(vals)} rows ${pd.to_numeric(g.plan_investment_amt).sum() / 1e6:,.2f}M")
+        for ch in chunked(vals):
+            stmts.append(f"INSERT INTO {DB}.{tbl} ({','.join(cols.column_name)}) VALUES\n" + ",\n".join(ch))
+    if not apply or not stmts:
+        return
+    run_id = uuid.uuid4().hex[:12]
+    run_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+    restored = lg[lg.apply(lambda r: name_key(r.ack_id, r.raw_entity_name, r.plan_investment_amt) in set(keys.get(r.table_name, [])), axis=1)]
+    log_rows = [f"({q(run_id)},TIMESTAMP {q(run_at)},'undo',{q(r.table_name)},{q(r.ack_id)},{q(r.row_order)},{q(r.raw_entity_name)},"
+                f"{repr(float(r.plan_investment_amt))},{q(r.pair)},{int(r.match_tier)},{q(r.sch_d_code)},{q(r.kept_table)},"
+                f"{q(r.kept_name)},{q(r.run_id)})" for r in restored.itertuples()]
+    for ch in chunked(log_rows):  # row_json of an 'undo' row = the run_id it reverses
+        execute(f"INSERT INTO {DB}.{LOG_TABLE} VALUES\n" + ",\n".join(ch))
+    log(f"undo run_id={run_id} run_at={run_at} UTC; {len(stmts)} insert statements")
+    for sql in stmts:
+        execute(sql)
+    for tbl, ks in keys.items():
+        live = read(f"SELECT {NAME_KEY_SQL} AS k FROM {DB}.{tbl} WHERE true{ack_clause(sorted({k.split('|')[0] for k in ks}))}")
+        n = int(pd.Series(ks).isin(set(live.k)).sum())
+        log(f"verify {tbl}: {n}/{len(ks)} restored rows live")
+        if n != len(ks):
+            sys.exit(f"UNDO VERIFY FAILED run_id={run_id}")
+    log(f"undo done run_id={run_id}")
+
+
 def summarize(live, acts):
     rows = []
     for x in acts:
@@ -392,7 +497,11 @@ def main():
     ap.add_argument("--ack-file", help="file with whitespace-separated ack_ids")
     ap.add_argument("--all", action="store_true", help="sweep every ack in the three tables")
     ap.add_argument("--apply", action="store_true", help="write changes (default is a dry run)")
+    ap.add_argument("--undo-file", help="CSV (run_id,ack_id,raw_entity_name,plan_investment_amt) of logged deletes to put back")
     args = ap.parse_args()
+    if args.undo_file:
+        log(f"undo from {args.undo_file}; mode: {'APPLY' if args.apply else 'dry run'}")
+        return undo(args.undo_file, args.apply)
 
     acks = load_acks(args)
     log(f"scope: {'ALL acks' if acks is None else f'{len(acks)} ack_ids'}; mode: {'APPLY' if args.apply else 'dry run'}")
