@@ -29,7 +29,11 @@ account, E=103-12 IE, M=master trust):
 Non-Alternatives CIT vs MF (2026-10-22, pair citx_mfx): a fund the filer lists on Schedule D Part I
 with code C (a bank collective trust) that MF extraction also wrote to plan_mf_history_v3 under an
 Equity/Fixed Income/Target Date class (Timken: "WESTERN ASSET CORE PLUS BOND R1" $31.6M in both).
-Same matching tiers; only code C acts (drop the MF copy), any other code is reported and left alone.
+Same matching tiers; code C acts (drop the MF copy), any other code is reported and left alone.
+2026-10-24: code P (insurer pooled separate account, "T. Rowe Price Retirement 2040 SA", "Prin LargeCap
+S&P 500 Index SA-Z") drops the MF copy too, but only for a filing where that brings its MF total closer
+to the certified Schedule H MF total (plan_asset_allocation.amt_mutual_funds): filers differ on whether
+they count a separate account as MF. No certified figure -> left alone.
 Rows under $100 are never matched ($1 placeholder lines pair up on amount alone).
 A CIT row with no Schedule D code is left alone, and so is any delete whose (ack, name, amount) key
 matches more live rows than it targets (twins we can't tell apart).
@@ -252,11 +256,22 @@ def fetch(acks):
     return live
 
 
+def certified_mf(acks):
+    """Schedule H certified mutual-fund total (plan_asset_allocation.amt_mutual_funds) per ack; NULL -> absent."""
+    chunks = [None] if acks is None else [acks[i:i + ACK_CHUNK] for i in range(0, len(acks), ACK_CHUNK)]
+    out = {}
+    for ch in chunks:
+        d = read(f"SELECT ack_id, max(TRY_CAST(nullif(trim(amt_mutual_funds), '') AS double)) cert "
+                 f"FROM {DB}.plan_asset_allocation WHERE true{ack_clause(ch)} GROUP BY 1")
+        out.update({str(a): float(c) for a, c in zip(d.ack_id, d.cert) if pd.notna(c)})
+    return out
+
+
 def cit_keys(cit):
     return [f"{a}|{r}" for a, r in zip(cit.ack_id, cit.row_order)]
 
 
-def find_actions(live):
+def find_actions(live, cert=None):
     mgr_col = {"rh": "matched_manager_name", "cit": "normalized_manager", "mf": "normalized_sponsor_name",
                "citx": "normalized_manager", "mfx": "normalized_sponsor_name"}
     frames = []
@@ -292,7 +307,7 @@ def find_actions(live):
             skipped.append((pair, a.ack_id, a["name"], "no Schedule D code on the CIT row"))
             continue
         if pair == "citx_mfx":
-            if code == "C":
+            if code in ("C", "P"):  # P (insurer separate account) added 2026-10-24: not a mutual fund either
                 acts.append(dict(base, op="delete", table="mfx", row=b.row, kept_table="citx", kept_name=a["name"]))
             else:
                 skipped.append((pair, a.ack_id, a["name"], f"Schedule D code {code}, not C"))
@@ -318,6 +333,33 @@ def find_actions(live):
                 acts.append(dict(base, op="delete", table="mf", row=b.row, kept_table="rh", kept_name=a["name"]))
             else:
                 acts.append(dict(base, op="delete", table="rh", row=a.row, kept_table="mf", kept_name=b["name"]))
+
+    # Code P is filer-dependent: some filers count an insurer separate account in their certified MF total,
+    # some don't (2026-10-24 dry run: dropping every P copy helped 397 filings and broke 557). So a filing's
+    # P copies go only when that brings its MF total closer to its certified MF total; no certified figure
+    # -> left alone.
+    if cert is not None:
+        mf_tot = pd.concat([live["mf"][["ack_id", "_amt"]], live["mfx"][["ack_id", "_amt"]]]).groupby("ack_id")._amt.sum()
+        c_rm, p_rm = {}, {}
+        for x in acts:
+            if x["pair"] == "citx_mfx":
+                tgt = p_rm if x["code"] == "P" else c_rm
+                a = live["mfx"].loc[x["row"], "ack_id"]
+                tgt[a] = tgt.get(a, 0.0) + float(live["mfx"].loc[x["row"], "_amt"])
+        drop = set()
+        for a, rm in p_rm.items():
+            v = float(mf_tot.get(a, 0.0)) - c_rm.get(a, 0.0)
+            if a not in cert:
+                why = "Schedule D code P, no certified MF total"
+            elif abs(v - rm - cert[a]) < abs(v - cert[a]):
+                continue
+            else:
+                why = f"Schedule D code P, filer counts it as MF (certified {cert[a]:,.0f}, MF {v:,.0f})"
+            drop.add(a)
+            skipped.append(("citx_mfx", a, None, why))
+        acts = [x for x in acts if not (x["pair"] == "citx_mfx" and x["code"] == "P" and live["mfx"].loc[x["row"], "ack_id"] in drop)]
+    else:
+        acts = [x for x in acts if not (x["pair"] == "citx_mfx" and x["code"] == "P")]
 
     # Twin guard: a name-keyed DELETE removes every live row with that key, so only allow it when
     # the number of live rows with the key equals the number of rows we mean to delete.
@@ -507,7 +549,7 @@ def main():
     log(f"scope: {'ALL acks' if acks is None else f'{len(acks)} ack_ids'}; mode: {'APPLY' if args.apply else 'dry run'}")
     live = fetch(acks)
     log("live rows: " + ", ".join(f"{TABLES[k]}={len(v)}" for k, v in live.items()))
-    acts, skipped = find_actions(live)
+    acts, skipped = find_actions(live, certified_mf(acks))
     log(f"actions: {len(acts)}{summarize(live, acts)}")
     for s in skipped[:50]:
         log(f"skipped {s[0]} ack={s[1]} name={s[2]!r}: {s[3]}")
