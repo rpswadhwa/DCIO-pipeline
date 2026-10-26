@@ -406,7 +406,8 @@ def name_actions(live, acts, cert, skipped):
     gone = {x["row"] for x in acts if x["table"] == "mfx"}
     out, soft = [], {}
     for i, n in mfx.raw_entity_name.items():
-        t = non_mf_override_type(n) if isinstance(n, str) and i not in gone else ""
+        # blank amount: nothing to fix, and the delete key can't match a NULL amount
+        t = non_mf_override_type(n) if isinstance(n, str) and i not in gone and pd.notna(mfx.loc[i, "_amt"]) else ""
         if not t:
             continue
         x = dict(op="delete", table="mfx", row=i, pair="mfx_name", tier=0, code=None, kept_table="stg", kept_name=t)

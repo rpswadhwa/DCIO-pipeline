@@ -155,3 +155,8 @@ def test_name_cit_kept_when_filer_counts_it_as_mf():
 def test_name_stable_value_left_for_router():
     ops, skipped = _ops(_live(mfx=[("A", "Galliard Stable Value Fund", 5e7, None)]), {"A": 0})
     assert ops == [] and "stable value router" in skipped[-1][3]
+
+
+def test_name_blank_amount_left_alone():
+    ops, _ = _ops(_live(mfx=[("A", "Note rates from 425 to 950", None, None)]), {})
+    assert ops == []
