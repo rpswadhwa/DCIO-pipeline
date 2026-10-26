@@ -129,3 +129,29 @@ def test_citx_code_p_kept_when_filer_counts_it_as_mf():
 def test_citx_code_p_kept_without_certified():
     ops, skipped = _ops(_p_live(), {})
     assert ops == [] and "no certified" in skipped[-1][3]
+
+
+# Non-MF names in MF (mfx_name, 2026-10-26).
+def _name_live():
+    return _live(mfx=[("A", "UNITED STATES TREAS BDS 2% 11-15-2041", 5e7, None),
+                      ("A", "ARROWSTREET GLOBAL EQUITY ACWI CIT CLASS D", 2e8, None),
+                      ("A", "Vanguard 500 Index Adm", 1e8, None)])
+
+
+def test_name_bond_always_dropped():
+    ops, _ = _ops(_name_live(), {})
+    assert ops == [("delete", "mfx")]
+
+
+def test_name_cit_dropped_when_closer_to_certified():
+    assert _ops(_name_live(), {"A": 1e8})[0] == [("delete", "mfx"), ("delete", "mfx")]
+
+
+def test_name_cit_kept_when_filer_counts_it_as_mf():
+    ops, skipped = _ops(_name_live(), {"A": 3e8})
+    assert ops == [("delete", "mfx")] and "counts it as MF" in skipped[-1][3]
+
+
+def test_name_stable_value_left_for_router():
+    ops, skipped = _ops(_live(mfx=[("A", "Galliard Stable Value Fund", 5e7, None)]), {"A": 0})
+    assert ops == [] and "stable value router" in skipped[-1][3]

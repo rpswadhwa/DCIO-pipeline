@@ -34,6 +34,20 @@ Same matching tiers; code C acts (drop the MF copy), any other code is reported 
 S&P 500 Index SA-Z") drops the MF copy too, but only for a filing where that brings its MF total closer
 to the certified Schedule H MF total (plan_asset_allocation.amt_mutual_funds): filers differ on whether
 they count a separate account as MF. No certified figure -> left alone.
+Non-MF names in plan_mf_history_v3 (2026-10-26, pair mfx_name): rows whose name says they can't be a
+mutual fund (asset_type_patterns.non_mf_override_type -- the pipeline's always-on pass since 9a93b016,
+so this catches rows written before it). Bond / participant loan / company stock -> dropped from MF.
+Collective trust / brokerage window -> dropped only for a filing where that brings its MF total closer
+to certified (filers often count both as MF on Schedule H); no certified figure -> left alone. Stable
+value is reported and left alone: the stable value router skips staging rows that already sit in MF, so
+dropping them here would take them out of the SV tables too. Nothing is inserted anywhere: a pipeline
+rerun likewise only keeps such rows out of MF (they stay in plan_holdings_staging; CITs reach
+plan_cit_history from Schedule D).
+TODO (2026-10-26, must do): the always-on pass in post_extract_validator still re-types collective
+trust / brokerage names with NO certified check, so rerunning a filing whose filer counts them as MF
+strips them anyway. Fix: limit that pass to bond / loan / company stock (keep the NL Ser / Non-Lending /
+JPMCB CIT tags always-on for plans with no certified row) and leave collective trust / brokerage to
+mf_reconcile's certified-aware CIT-by-name stage.
 Rows under $100 are never matched ($1 placeholder lines pair up on amount alone).
 A CIT row with no Schedule D code is left alone, and so is any delete whose (ack, name, amount) key
 matches more live rows than it targets (twins we can't tell apart).
@@ -60,6 +74,8 @@ from datetime import datetime, timezone
 
 import awswrangler as wr
 import pandas as pd
+
+from .asset_type_patterns import non_mf_override_type
 
 DB = "default"
 WORKGROUP = os.environ.get("ATHENA_WORKGROUP", "primary")
@@ -361,6 +377,8 @@ def find_actions(live, cert=None):
     else:
         acts = [x for x in acts if not (x["pair"] == "citx_mfx" and x["code"] == "P")]
 
+    acts += name_actions(live, acts, cert, skipped)
+
     # Twin guard: a name-keyed DELETE removes every live row with that key, so only allow it when
     # the number of live rows with the key equals the number of rows we mean to delete.
     for tbl in ("rh", "mf", "mfx"):
@@ -378,6 +396,47 @@ def find_actions(live, cert=None):
     return [x for x in acts if x["op"] != "skip" and x.get("group") not in bad_groups], skipped
 
 
+NAME_HARD = {"Bond", "Participant Loan", "Employer Stock"}
+NAME_SOFT = {"Common/Collective Trust Fund", "Self-Directed Brokerage Account"}
+
+
+def name_actions(live, acts, cert, skipped):
+    """mfx_name deletes for MF rows whose name says they aren't a mutual fund (see module doc)."""
+    mfx = live["mfx"]
+    gone = {x["row"] for x in acts if x["table"] == "mfx"}
+    out, soft = [], {}
+    for i, n in mfx.raw_entity_name.items():
+        t = non_mf_override_type(n) if isinstance(n, str) and i not in gone else ""
+        if not t:
+            continue
+        x = dict(op="delete", table="mfx", row=i, pair="mfx_name", tier=0, code=None, kept_table="stg", kept_name=t)
+        if t in NAME_HARD:
+            out.append(x)
+        elif t in NAME_SOFT:
+            soft.setdefault(mfx.loc[i, "ack_id"], []).append(x)
+        else:
+            skipped.append(("mfx_name", mfx.loc[i, "ack_id"], n, f"{t}: left for the stable value router"))
+    if not soft:
+        return out
+    # MF total per filing (Alternatives rows too) after every other MF delete in this run
+    v_now = pd.concat([live["mf"][["ack_id", "_amt"]], mfx[["ack_id", "_amt"]]]).groupby("ack_id")._amt.sum().to_dict()
+    for x in acts + out:
+        if x["op"] == "delete" and x["table"] in ("mf", "mfx"):
+            r = live[x["table"]].loc[x["row"]]
+            v_now[r.ack_id] = v_now.get(r.ack_id, 0.0) - (float(r._amt) if pd.notna(r._amt) else 0.0)
+    for a, xs in soft.items():
+        s = sum(float(mfx.loc[x["row"], "_amt"]) for x in xs if pd.notna(mfx.loc[x["row"], "_amt"]))
+        v = float(v_now.get(a, 0.0))
+        if cert is None or a not in cert:
+            skipped.append(("mfx_name", a, None, "collective trust/brokerage name, no certified MF total"))
+        elif abs(v - s - cert[a]) < abs(v - cert[a]):
+            out += xs
+        else:
+            skipped.append(("mfx_name", a, None, f"collective trust/brokerage name, filer counts it as MF "
+                                                  f"(certified {cert[a]:,.0f}, MF {v:,.0f})"))
+    return out
+
+
 def row_json(series):
     return json.dumps({k: (None if (isinstance(v, float) and math.isnan(v)) else
                            v.isoformat() if hasattr(v, "isoformat") else
@@ -386,7 +445,7 @@ def row_json(series):
 
 
 TABLES = {"rh": "plan_alternatives_history", "cit": "plan_cit_history", "mf": "plan_mf_history_v3",
-          "citx": "plan_cit_history", "mfx": "plan_mf_history_v3"}
+          "citx": "plan_cit_history", "mfx": "plan_mf_history_v3", "stg": "plan_holdings_staging"}
 
 
 def chunked(lst, n=STMT_CHUNK, max_chars=MAX_STMT_CHARS):
