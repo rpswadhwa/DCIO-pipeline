@@ -57,6 +57,10 @@ ls data/inputs/*.pdf 2>/dev/null | xargs -r -n1 basename | sed 's/\.pdf$//' > "$
 if [ -s "$DEDUP_ACKS" ]; then
   PYTHONPATH=. python3.11 -m src.dedup_alt_holdings --ack-file "$DEDUP_ACKS" --apply \
     || echo "!!! WARNING: dedup_alt_holdings failed -- duplicates for this batch are NOT removed; rerun it by hand"
+  # (2026-10-27) Today's parent firm (approved default.firm_acquisitions deals) into manager_parent_name.
+  echo "[FIRM PARENT] manager_parent_name for this batch..."
+  PYTHONPATH=. python3.11 -m src.apply_firm_parents --ack-file "$DEDUP_ACKS" \
+    || echo "!!! WARNING: apply_firm_parents failed -- manager_parent_name NOT filled for this batch; rerun it by hand"
 else
   echo "[DEDUP] no PDFs in data/inputs, skipping"
 fi

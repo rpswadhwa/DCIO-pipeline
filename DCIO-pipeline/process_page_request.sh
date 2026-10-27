@@ -78,4 +78,9 @@ echo "[STEP 4] Cross-table alternative holding de-duplication for ${ACK_ID}"
 PYTHONPATH=. python3.11 -m src.dedup_alt_holdings --ack-ids "$ACK_ID" --apply \
   || echo "!!! WARNING: dedup_alt_holdings failed for ${ACK_ID} -- duplicates NOT removed; rerun it by hand"
 
+# (2026-10-27) Today's parent firm (approved default.firm_acquisitions deals) into manager_parent_name.
+echo "[STEP 5] manager_parent_name for ${ACK_ID}"
+PYTHONPATH=. python3.11 -m src.apply_firm_parents --ack-ids "$ACK_ID" \
+  || echo "!!! WARNING: apply_firm_parents failed for ${ACK_ID} -- manager_parent_name NOT filled; rerun it by hand"
+
 echo "PROCESS_PAGE_REQUEST: SUCCESS ack_id=${ACK_ID}"
