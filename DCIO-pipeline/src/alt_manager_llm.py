@@ -16,7 +16,12 @@ is a deduction ("likely", "indicates", "prefix") or that Gemini itself did not
 rate HIGH is stored as REVIEW and never written to the alternatives table until
 someone flips it to ACCEPTED.
 
+Statuses: ACCEPTED / REVIEW / NO_MATCH (Gemini), NOT_DISCLOSED (reviewer: generic
+label, no external manager), SUPERSEDED (older row replaced by a reviewer decision).
+
 CLI (backfill):  python -m src.alt_manager_llm [--max N] [--ack-ids a,b,...]
+CLI (sweep):     python -m src.alt_manager_llm --apply-only
+CLI (review):    python -m src.alt_manager_llm --import-review decisions.csv [--dry-run]
 """
 import json
 import logging
@@ -233,6 +238,67 @@ def apply_lookup(glue_db: str, target_table: str, ack_ids: Optional[List[str]] =
             manager_match_method = l.method""", glue_db)
 
 
+REVIEW_METHOD = "human_review_v1"
+REVIEW_STATUS = {"ACCEPT": "ACCEPTED", "CHANGE": "ACCEPTED", "NO MANAGER": "NOT_DISCLOSED"}
+
+
+def import_review(glue_db: str, path: str, dry_run: bool = False) -> Counter:
+    """Record reviewer decisions for cached names (2026-10-27).
+
+    `path` is a CSV/XLSX with columns name_key, decision (ACCEPT | CHANGE |
+    NO MANAGER; anything else, e.g. HOLD, is skipped and the name stays REVIEW),
+    manager (required for CHANGE; ACCEPT keeps the cached answer unless one is
+    given), parent (optional) and note (optional, stored as evidence).
+
+    Each decided name gets a new human_review_v1 row; every older row for that
+    name is set to SUPERSEDED so both cache consumers (apply_lookup and the
+    router join, which take the latest ACCEPTED row) see only the decision.
+    NOT_DISCLOSED = the filing gives a generic label with no external manager;
+    nothing is written to the holdings table and the name is never re-asked."""
+    import pandas as pd
+    df = pd.read_excel(path) if path.lower().endswith((".xlsx", ".xls")) else pd.read_csv(path)
+    df = df.astype(object).where(df.notna(), None)
+    cur = _read(f"""
+        SELECT name_key, raw_entity_name, manager, parent FROM (
+            SELECT *, row_number() OVER (PARTITION BY name_key ORDER BY looked_up_at DESC) AS rn
+            FROM {glue_db}.{LOOKUP_TABLE}) WHERE rn = 1""", glue_db)
+    cur = cur.astype(object).where(cur.notna(), None).set_index("name_key").to_dict("index")
+    out, by = [], Counter()
+    for r in df.to_dict("records"):
+        dec = str(r.get("decision") or "").strip().upper()
+        k = str(r.get("name_key") or "").strip()
+        if dec not in REVIEW_STATUS:
+            by["skipped"] += 1
+            continue
+        if k not in cur:
+            raise ValueError(f"name_key not in cache: {k!r}")
+        c = cur[k]
+        mgr = (str(r.get("manager") or "").strip() or None) if dec != "NO MANAGER" else None
+        if dec == "ACCEPT":
+            mgr = mgr or c["manager"]
+        if dec != "NO MANAGER" and not mgr:
+            raise ValueError(f"{dec} without a manager: {k!r}")
+        parent = None if dec == "NO MANAGER" else (str(r.get("parent") or "").strip() or
+                                                    (c["parent"] if dec == "ACCEPT" else None))
+        out.append((k, c["raw_entity_name"], mgr, parent, REVIEW_STATUS[dec],
+                    str(r.get("note") or "").strip() or f"reviewer decision: {dec}"))
+        by[REVIEW_STATUS[dec]] += 1
+    logger.info("review import %s: %s", path, dict(by))
+    if dry_run or not out:
+        return by
+    for i in range(0, len(out), 100):
+        part = out[i:i + 100]
+        keys = ", ".join(_q(o[0]) for o in part)
+        _exec(f"UPDATE {glue_db}.{LOOKUP_TABLE} SET status = 'SUPERSEDED' WHERE name_key IN ({keys})", glue_db)
+        vals = ", ".join(f"({_q(o[0])}, {_q(o[1])}, {_q(o[2])}, {_q(o[3])}, {_q(o[4])}, {_q(o[5])})" for o in part)
+        _exec(f"""
+            INSERT INTO {glue_db}.{LOOKUP_TABLE}
+            SELECT name_key, raw_entity_name, manager, parent, 'HUMAN', 'HIGH', false, status, evidence, '[]',
+                   'human', '{REVIEW_METHOD}', CAST(current_timestamp AS timestamp(6))
+            FROM (VALUES {vals}) AS v(name_key, raw_entity_name, manager, parent, status, evidence)""", glue_db)
+    return by
+
+
 def fill_managers(glue_db: str, target_table: str, ack_ids: Optional[List[str]] = None,
                   max_names: Optional[int] = None) -> None:
     lookup_new_names(glue_db, target_table, ack_ids, max_names)
@@ -250,8 +316,14 @@ if __name__ == "__main__":
     ap.add_argument("--ack-ids", default="")
     ap.add_argument("--max", type=int, default=None)
     ap.add_argument("--apply-only", action="store_true")
+    ap.add_argument("--import-review", default="", help="CSV/XLSX of reviewer decisions (see import_review)")
+    ap.add_argument("--dry-run", action="store_true", help="with --import-review: count only, write nothing")
     a = ap.parse_args()
     ids = [x for x in a.ack_ids.split(",") if x] or None
-    if not a.apply_only:
+    if a.import_review:
+        import_review(a.glue_db, a.import_review, a.dry_run)
+        if a.dry_run:
+            raise SystemExit(0)
+    elif not a.apply_only:
         lookup_new_names(a.glue_db, a.table, ids, a.max)
     apply_lookup(a.glue_db, a.table, ids)

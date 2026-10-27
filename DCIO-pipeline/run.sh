@@ -57,10 +57,20 @@ ls data/inputs/*.pdf 2>/dev/null | xargs -r -n1 basename | sed 's/\.pdf$//' > "$
 if [ -s "$DEDUP_ACKS" ]; then
   PYTHONPATH=. python3.11 -m src.dedup_alt_holdings --ack-file "$DEDUP_ACKS" --apply \
     || echo "!!! WARNING: dedup_alt_holdings failed -- duplicates for this batch are NOT removed; rerun it by hand"
-  # (2026-10-27) Today's parent firm (approved default.firm_acquisitions deals) into manager_parent_name.
-  echo "[FIRM PARENT] manager_parent_name for this batch..."
-  PYTHONPATH=. python3.11 -m src.apply_firm_parents --ack-file "$DEDUP_ACKS" \
-    || echo "!!! WARNING: apply_firm_parents failed -- manager_parent_name NOT filled for this batch; rerun it by hand"
 else
   echo "[DEDUP] no PDFs in data/inputs, skipping"
 fi
+
+# (2026-10-27) Whole-table sweep of the ALT manager cache. The per-run fill only applies answers to
+# this batch's acks, so a name looked up here (or decided via --import-review) never reached the
+# same fund in older filings -- 151 lines/$1.6B were stuck that way on 2026-10-27. One MERGE, fills
+# blank managers only.
+echo "[ALT MANAGER SWEEP] cached manager answers -> all managerless alternatives rows..."
+PYTHONPATH=. python3.11 -m src.alt_manager_llm --apply-only \
+  || echo "!!! WARNING: alt_manager_llm --apply-only failed -- cached managers NOT applied table-wide; rerun it by hand"
+
+# (2026-10-27) Today's parent firm (approved default.firm_acquisitions deals) into manager_parent_name.
+# Whole table (not just this batch) so rows the sweep above filled in older filings get a parent too.
+echo "[FIRM PARENT] manager_parent_name, all filings..."
+PYTHONPATH=. python3.11 -m src.apply_firm_parents --all \
+  || echo "!!! WARNING: apply_firm_parents failed -- manager_parent_name NOT filled; rerun it by hand"
