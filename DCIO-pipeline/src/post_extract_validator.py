@@ -3513,6 +3513,10 @@ def _alt_brand_method_case_sql(column: str = "raw_entity_name", method_prefix: s
 #   3. term.title() -- last-resort naive casing
 # ---------------------------------------------------------------------------
 ALT_MANAGER_OVERRIDES: Dict[str, str] = {
+    # Changed 2026-10-27 (per user request): acquired firms keep their OWN name here
+    # (Oaktree, Landmark, AlpInvest, Black Creek, Tennenbaum/TCP, Alcentra, GoldPoint,
+    # Hancock). Today's parent is set in manager_parent_name from default.firm_acquisitions
+    # by src/apply_firm_parents.py; the older "roll up to the parent" comments below are superseded.
     "gso": "Blackstone Credit",
     # Renamed 2026-10-08 (facets_full_values_4.txt round 5 review, R706):
     # ALT_BRAND_TERM_OVERRIDES["onex"] above already restricts this bare term
@@ -3525,14 +3529,14 @@ ALT_MANAGER_OVERRIDES: Dict[str, str] = {
     # in 2021 -- rolled up to the parent, same convention as Oaktree ->
     # Brookfield. Orchard Landmark / Landmark Infrastructure are carved out
     # ahead of this term in ALT_BRAND_PATTERNS.
-    "landmark": "Ares Management",
+    "landmark": "Landmark Partners",
     "orchard landmark": "Orchard Global Asset Management",
     "landmark infrastructure": "Landmark Infrastructure Partners",
     # Added 2026-10-22 (per user request): AlpInvest Partners is owned by
     # Carlyle (since 2011); Black Creek Industrial REIT became Ares
     # Industrial Real Estate after Ares acquired Black Creek (2021).
-    "alpinvest": "Carlyle Group",
-    "black creek industrial": "Ares Management",
+    "alpinvest": "AlpInvest Partners",
+    "black creek industrial": "Black Creek Group",
     # 2026-10-22: ALT_PARENT_BRAND_PATTERNS strategy terms.
     "ares real estate": "Ares Management",
     "ares us real estate": "Ares Management",
@@ -3566,7 +3570,7 @@ ALT_MANAGER_OVERRIDES: Dict[str, str] = {
     "carlyle tactical": "Carlyle Group",
     "carlyle direct lending": "Carlyle Group",
     "carlyle energy mezzanine": "Carlyle Group",
-    "tennenbaum": "BlackRock",
+    "tennenbaum": "Tennenbaum Capital Partners",
     "owl rock": "Blue Owl Capital",
     "ipi data center": "IPI Partners",
     "spf securitized products": "SPF Investment Management",
@@ -3599,14 +3603,14 @@ ALT_MANAGER_OVERRIDES: Dict[str, str] = {
     # already corrected retroactively. These entries make new rows resolve to
     # the same canonical name directly, so the backfill doesn't have to be
     # re-run after every future load.
-    "alcentra": "Benefit Street Partners",
+    "alcentra": "Alcentra",
     "basalt": "Basalt Infrastructure Partners",
     "clearlake capital": "Clearlake Capital Group",
     "eagle point": "Eagle Point Credit Management",
     "frazier": "Frazier Healthcare Partners",
     "gcm grosvenor": "GCM Grosvenor",
-    "goldpoint partners": "Apogem Capital",
-    "hancock natural resource group": "Manulife Investment Management",
+    "goldpoint partners": "GoldPoint Partners",
+    "hancock natural resource group": "Hancock Natural Resource Group",
     "intercontinental": "Intercontinental Real Estate Corporation",
     # "kayne anderson" (Infrastructure Fund asset_type) targets Kayne Anderson
     # Capital Advisors' energy/infra funds -- a different firm from Kayne
@@ -3622,7 +3626,7 @@ ALT_MANAGER_OVERRIDES: Dict[str, str] = {
     # same convention already used for "tennenbaum" -> "BlackRock". Paired
     # with the new bare "oaktree" entry below so ALL Oaktree rows (not just
     # ones literally containing "capital") resolve to one consistent name.
-    "oaktree capital": "Brookfield Asset Management",
+    "oaktree capital": "Oaktree Capital Management",
     "ullico": "Ullico Investment Advisors",
     "windjammer capital": "Windjammer Capital Investors",
     "copperwood": "Copperwood Asset Management",
@@ -3798,7 +3802,7 @@ ALT_MANAGER_OVERRIDES: Dict[str, str] = {
     "neuberger": "Neuberger Berman",
     # Bare "oaktree" (see "oaktree capital" rename above for rationale) --
     # catches the many Oaktree fund variants that don't say "capital".
-    "oaktree": "Brookfield Asset Management",
+    "oaktree": "Oaktree Capital Management",
     # Verified against live data (scratchpad pimco_principal_check.sql):
     # every "pimco"/"principal" row is a genuine PIMCO / Principal Financial
     # Group / Principal Real Estate Investors fund -- no collisions found.
@@ -3823,7 +3827,7 @@ ALT_MANAGER_OVERRIDES: Dict[str, str] = {
     "teachers insurance": "Nuveen",
     "cref real estate": "Nuveen",
     "college retirement equities": "Nuveen",
-    "tcp direct lending": "BlackRock",
+    "tcp direct lending": "Tennenbaum Capital Partners",
     "vpc asset": "Victory Park Capital",
     "credit suisse real estate": "Credit Suisse",
     "bpea strategic healthcare": "Baring Private Equity Asia",
