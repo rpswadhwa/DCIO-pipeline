@@ -71,6 +71,8 @@ JUNK_EXACT = {
     "totalinvestmentsatcost", "totalheldforinvestment",
     "totalparticipantdirectedfunds", "subtotalforward",  # user-added 2026-07-07
     "totalparticipantdirected", "totalparticipantdirectedinvestments",
+    # (2026-10-26) Capital One: sum of the IGT funds listed above it, inside the stable value fund line
+    "wrappedholdings",
     # value-basis header lines
     "investmentsatfairvalue", "investmentsatcost", "investmentsatcontractvalue",
     "atfairvalue", "atcost", "atcontractvalue", "fairvalue",

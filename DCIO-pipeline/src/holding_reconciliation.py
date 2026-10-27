@@ -20,17 +20,24 @@ FIELDS = ('ack_id', 'raw_entity_name', 'raw_sponsor_name', 'plan_investment_amt'
           'asset_class', 'asset_sub_class', 'validation_status', 'asset_type')
 ABBREVIATIONS = {'stab': 'stable', 'stabl': 'stable', 'stbl': 'stable',
                  'val': 'value', 'cl': 'class', 'acct': 'account'}
-STABLE = re.compile(r'\bstable\s+value\b')
+# (2026-10-26) "\s*": MetLife prints "MetlifeGAC StableValueFund" with no spaces.
+STABLE = re.compile(r'\bstable\s*value')
 # (2026-10-17) Stable value products whose names never say "stable value". Each alias is a
 # product family seen in staging (Vanguard RST, Fidelity MIP, insurer guaranteed/fixed-interest
-# general-account funds, preservation funds). Bare "fixed interest", "guaranteed interest",
-# synthetic GIC/wrap components and TIAA Traditional stay out: they need review, not an alias.
+# general-account funds, preservation funds). Bare "fixed interest", "guaranteed interest"
+# and TIAA Traditional stay out: they need review, not an alias.
+# (2026-10-26) Synthetic GIC and wrap/wrapper contract lines added: on the filings checked
+# (Penske, Flex, 20251009102555) each is its own schedule line inside the stable value block,
+# not a restatement of it. Both need an issuer name: a bare "Synthetic GIC" / "Wrap Contracts"
+# line can be the block's heading or total. Principal's "Fixed Inc(ome) Guaranteed Acc(ount)" and bare
+# "Guaranteed Option" spellings added too. Subtotal lines ("Wrapped holdings") are junk, not here.
 SV_PRODUCT = re.compile(
     r'\b(retirement savings trust|managed income portfolio|(?:fid(?:elity)? )?mip(?: ii| iv)? class|fidelity mip|'
     r'guaranteed (?:income|interest|investment|long term) fund|guaranteed interest (?:account|option)|'
-    r'fixed income guaranteed option|principal guaranteed option|guaranteed portfolio fund|select guaranteed fund|'
-    r'fixed ?interest (?:option|fund|account)|capital preservation (?:fund|account|income fund)|'
-    r'principal preservation|interest income fund|stable (?:asset|return) fund)\b')
+    r'fixed inc(?:ome)? guaranteed (?:option|acc|account)|guaranteed option|guaranteed portfolio fund|'
+    r'select guaranteed fund|fixed ?interest (?:option|fund|account)|capital preservation (?:fund|account|income fund)|'
+    r'principal preservation|interest income fund|stable (?:asset|return) fund|'
+    r'synthetic gic [a-z]+|[a-z]+ wrap(?:per)? contracts?)\b')
 MANAGED = re.compile(r'\bseparately?\s+managed\s+account\b')
 SECURITY = re.compile(r'\b(common stock|preferred stock|convertible|cusip|ticker|shares of|collateral|continued)\b')
 CONFLICT = re.compile(r'\b(small cap|large cap|mid cap|equity|growth|target date|target retirement|yourpath|lifepath|freedom)\b')

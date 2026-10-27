@@ -112,6 +112,22 @@ class ReconciliationTests(unittest.TestCase):
     def test_target_date_stable_suffix_not_blindly_captured(self):
         self.assertEqual(classify(row(raw_entity_name='Yourpath 2045 Stable Value Fund'))[0], 'UNRESOLVED')
 
+    def test_sv_names_found_in_mf_on_2026_10_26_are_confirmed(self):
+        # Typed mutual fund by the old extraction, so the name alone has to carry it.
+        for name in ('MetlifeGAC StableValueFund', 'Principal Life Fixed Income Guaranteed Acc',
+                     'Principal Life Fixed Inc Guaranteed Option', 'Principal Life Guaranteed Option',
+                     'SYNTHETIC GIC PRUDENTIAL INS CO OF AMERICA CONTRACT',
+                     'Prudential Ins. Co. of America Wrapper Contract', 'Voya Financial Wrap Contract'):
+            with self.subTest(name=name):
+                d = classify(row(raw_entity_name=name, asset_type='mutual fund', asset_class=''))
+                self.assertEqual(d[3], 'confirmed_stable_value')
+
+    def test_similar_non_sv_names_not_captured(self):
+        for name in ('Lincoln Guaranteed Income Builder', 'Wrapped holdings', 'Vanguard Value Index'):
+            with self.subTest(name=name):
+                self.assertEqual(classify(row(raw_entity_name=name, asset_type='mutual fund', asset_class=''))[0],
+                                 'OUTSIDE_SCOPE')
+
     def test_pointer_excluded(self):
         self.assertEqual(classify(row(raw_entity_name='Stable Value Fund See Appendix'))[0], 'OUTSIDE_SCOPE')
 

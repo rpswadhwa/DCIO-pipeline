@@ -107,14 +107,16 @@ class ProductAliasTests(unittest.TestCase):
                      'MIP CL 2', 'FID MIP II, CL', 'Empower Guaranteed Income Fund', 'Key Guaranteed Portfolio Fund',
                      'Principal Fixed Income Guaranteed Option', 'Guaranteed Interest Account 680',
                      'VALIC FixedInterest Option', 'Federated Hermes Capital Preservation Fund R6P',
-                     'Aramark Interest Income Fund', 'Invesco Stable Asset Fund', 'Galliard Stable Return Fund C']:
+                     'Aramark Interest Income Fund', 'Invesco Stable Asset Fund', 'Galliard Stable Return Fund C',
+                     # (2026-10-26) issuer-named synthetic GIC / wrap contract lines
+                     'Voya wrap contract', 'SYNTHETIC GIC PRUDENTIAL INS CO CONTRACT']:
             ds = self.status(name)
             self.assertEqual(ds[0]['routing_status'], 'READY', name)
             self.assertIn('sv_product_alias', ds[0]['routing_reason'], name)
 
     def test_lookalikes_are_not_promoted(self):
         for name in ['PIMCO Stable Income Fund', 'Galliard Short Core Fund F', 'MM FIXED INTEREST',
-                     'Synthetic GIC', 'Voya wrap contract', 'Traditional Non Benefit Responsive',
+                     'Synthetic GIC', 'Wrap Contracts', 'Traditional Non Benefit Responsive',
                      'Capital Preservation Equity Fund']:
             ds = self.status(name)
             self.assertTrue(not ds or ds[0]['routing_status'] != 'READY', name)
