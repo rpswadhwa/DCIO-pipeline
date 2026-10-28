@@ -83,4 +83,9 @@ echo "[STEP 5] manager_parent_name for ${ACK_ID}"
 PYTHONPATH=. python3.11 -m src.apply_firm_parents --ack-ids "$ACK_ID" \
   || echo "!!! WARNING: apply_firm_parents failed for ${ACK_ID} -- manager_parent_name NOT filled; rerun it by hand"
 
+# (2026-10-28) Firm id (provider_master id) on this ack's holding lines; same SQL as the end of 5500-tables.
+echo "[STEP 6] manager_id for ${ACK_ID}"
+PYTHONPATH=. python3.11 -m src.apply_manager_ids --ack-ids "$ACK_ID" \
+  || echo "!!! WARNING: apply_manager_ids failed for ${ACK_ID} -- manager_id NOT filled; rerun it by hand"
+
 echo "PROCESS_PAGE_REQUEST: SUCCESS ack_id=${ACK_ID}"
