@@ -242,7 +242,8 @@ REVIEW_METHOD = "human_review_v1"
 REVIEW_STATUS = {"ACCEPT": "ACCEPTED", "CHANGE": "ACCEPTED", "NO MANAGER": "NOT_DISCLOSED"}
 
 
-def import_review(glue_db: str, path: str, dry_run: bool = False) -> Counter:
+def import_review(glue_db: str, path: str, dry_run: bool = False,
+                  target_table: str = "plan_alternatives_history") -> Counter:
     """Record reviewer decisions for cached names (2026-10-27).
 
     `path` is a CSV/XLSX with columns name_key, decision (ACCEPT | CHANGE |
@@ -296,6 +297,14 @@ def import_review(glue_db: str, path: str, dry_run: bool = False) -> Counter:
             SELECT name_key, raw_entity_name, manager, parent, 'HUMAN', 'HIGH', false, status, evidence, '[]',
                    'human', '{REVIEW_METHOD}', CAST(current_timestamp AS timestamp(6))
             FROM (VALUES {vals}) AS v(name_key, raw_entity_name, manager, parent, status, evidence)""", glue_db)
+        # A decision replaces an earlier cache answer already written to the holdings
+        # table: clear only cache-sourced managers so apply_lookup re-fills them.
+        _exec(f"""
+            UPDATE {glue_db}.{target_table}
+            SET matched_manager_name = NULL, manager_match_confidence = NULL, manager_match_method = NULL,
+                manager_parent_name = NULL
+            WHERE manager_match_method IN ('{METHOD}', '{REVIEW_METHOD}', 'llm_gemini_2.5_flash_v1')
+              AND lower(trim(raw_entity_name)) IN ({keys})""", glue_db)
     return by
 
 
@@ -321,7 +330,7 @@ if __name__ == "__main__":
     a = ap.parse_args()
     ids = [x for x in a.ack_ids.split(",") if x] or None
     if a.import_review:
-        import_review(a.glue_db, a.import_review, a.dry_run)
+        import_review(a.glue_db, a.import_review, a.dry_run, a.table)
         if a.dry_run:
             raise SystemExit(0)
     elif not a.apply_only:

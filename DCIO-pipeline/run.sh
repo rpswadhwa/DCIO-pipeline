@@ -68,6 +68,9 @@ fi
 echo "[ALT MANAGER SWEEP] cached manager answers -> all managerless alternatives rows..."
 PYTHONPATH=. python3.11 -m src.alt_manager_llm --apply-only \
   || echo "!!! WARNING: alt_manager_llm --apply-only failed -- cached managers NOT applied table-wide; rerun it by hand"
+# provider_id for every labelled row whose manager has an approved ALT: alt_family alias (fills blanks only)
+PYTHONPATH=. python3.11 -m src.alt_manager_fuzzy --stamp-ids-only \
+  || echo "!!! WARNING: alt_manager_fuzzy --stamp-ids-only failed -- provider_id NOT stamped table-wide; rerun it by hand"
 
 # (2026-10-27) Today's parent firm (approved default.firm_acquisitions deals) into manager_parent_name.
 # Whole table (not just this batch) so rows the sweep above filled in older filings get a parent too.

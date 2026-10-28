@@ -281,6 +281,8 @@ if __name__ == "__main__":
     ap.add_argument("--table", default="plan_alternatives_history")
     ap.add_argument("--ack-ids", default="")
     ap.add_argument("--dry-run", metavar="OUT_TSV")
+    ap.add_argument("--stamp-ids-only", action="store_true",
+                    help="only stamp_family_ids (provider_id for labelled rows); used by run.sh's table-wide sweep")
     ap.add_argument("--offline", nargs=4, metavar=("ROWS", "ALIASES", "LABELS", "OUT"),
                     help="TSVs: rows(n, amt), aliases(mapping_source, k, mgr, provider_id), labels(m, n)")
     a = ap.parse_args()
@@ -302,5 +304,7 @@ if __name__ == "__main__":
         ids = [x for x in a.ack_ids.split(",") if x] or None
         if a.dry_run:
             _write(match_table(a.glue_db, a.table, ids), a.dry_run)
+        elif a.stamp_ids_only:
+            stamp_family_ids(a.glue_db, a.table, ids)
         else:
             fill(a.glue_db, a.table, ids)
