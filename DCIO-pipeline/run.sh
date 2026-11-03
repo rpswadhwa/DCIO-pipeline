@@ -74,36 +74,14 @@ if [ "$CHUNK_MODE" = "1" ]; then
     PYTHONPATH=. python3.11 -m src.batch_chunks plan --batch-date "$BATCH_DATE" --out "$CHUNK_DIR" --chunk-size "$CHUNK_SIZE"
     touch "$CHUNK_DIR/.planned"
   fi
-  case "$CHUNK_TIER" in
-    priority) PATTERN="p[0-9]*.txt" ;;
-    rest)     PATTERN="r[0-9]*.txt" ;;
-    all)      PATTERN="[pr][0-9]*.txt" ;;
-    *) echo "unknown CHUNK_TIER=$CHUNK_TIER" >&2; exit 2 ;;
-  esac
+  # (2026-11-03) One run_pipeline per 500-filing chunk was OOM-killed (p0001, 2.5h lost): the runner
+  # splits each chunk into micro-batches (CHUNK_MICRO, 25) with memory/time caps, CHUNK_WORKERS (3) in
+  # parallel with serialized table writes, retries failures one filing at a time, and quarantines
+  # filings that still fail (data/chunks/<batch>/quarantine.tsv). Each run_pipeline gets its own
+  # INPUT_DIR/OUTPUT_DIR and SYNC_S3_INPUTS=0 (otherwise it re-syncs the whole batch and fills the disk).
   FAILED_CHUNKS=""
-  for MANIFEST in $(ls "$CHUNK_DIR"/$PATTERN 2>/dev/null | sort); do
-    CHUNK=$(basename "$MANIFEST" .txt)
-    if [ -f "$CHUNK_DIR/done/$CHUNK.ok" ]; then echo "[CHUNK $CHUNK] already done, skipping"; continue; fi
-    CHUNK_START=$(date +%s)
-    echo "[CHUNK $CHUNK] start $(date -u +%FT%TZ): $(wc -l < "$MANIFEST") filings"
-    if ! PYTHONPATH=. python3.11 -m src.batch_chunks fetch --batch-date "$BATCH_DATE" --manifest "$MANIFEST" --dest data/inputs; then
-      echo "!!! [CHUNK $CHUNK] fetch failed"; FAILED_CHUNKS="$FAILED_CHUNKS $CHUNK"; continue
-    fi
-    # SYNC_S3_INPUTS=0: run_pipeline otherwise re-syncs the whole batch folder (S3_INPUT_PATH) into
-    # data/inputs, which undoes the chunking and fills the disk (2026-11-03: every chunk failed this way).
-    if ! SYNC_S3_INPUTS=0 PYTHONPATH=. python3.11 -m src.run_pipeline; then
-      echo "!!! [CHUNK $CHUNK] run_pipeline failed -- chunk NOT marked done"; FAILED_CHUNKS="$FAILED_CHUNKS $CHUNK"; continue
-    fi
-    echo "[CLASSIFICATION] chunk $CHUNK only..."
-    CHUNK_ACKS=$(ls data/inputs/*.pdf 2>/dev/null | xargs -r -n1 basename | sed 's/\.pdf$//' | paste -sd, -)
-    ACK_IDS="$CHUNK_ACKS" PYTHONPATH=. python3.11 run_classification.py \
-      || echo "!!! WARNING: [CHUNK $CHUNK] classification failed -- rows may stay PENDING_AI; the end-of-run sweep retries"
-    dedup_inputs
-    touch "$CHUNK_DIR/done/$CHUNK.ok"
-    rm -rf data/inputs
-    mkdir -p data/inputs
-    echo "[CHUNK $CHUNK] done in $(( $(date +%s) - CHUNK_START ))s; $(ls "$CHUNK_DIR"/done | wc -l) chunks done in total"
-  done
+  PYTHONPATH=. python3.11 -m src.batch_chunks run --batch-date "$BATCH_DATE" --chunk-dir "$CHUNK_DIR" --tier "$CHUNK_TIER" \
+    || FAILED_CHUNKS=" (chunk runner exited non-zero; see the log above)"
   echo "[CLASSIFICATION] end-of-run whole-table sweep..."
   PYTHONPATH=. python3.11 run_classification.py
 else

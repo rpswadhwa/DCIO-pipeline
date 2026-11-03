@@ -833,6 +833,18 @@ def main():
     if llm_updates > 0:
         export_enhanced_csv(db_path, llm_csv_path, verbose=True)
 
+    # (2026-11-03) Parallel chunk workers (src/batch_chunks.py run) extract side by side but must
+    # not write the Iceberg tables at the same time (concurrent DELETE/INSERT commits on the same
+    # table conflict). With PIPELINE_WRITE_LOCK set, steps 9-13 wait for an exclusive lock on that
+    # file; it is held until this process exits. Unset (every other caller): no lock, no change.
+    write_lock_path = read_env("PIPELINE_WRITE_LOCK", "")
+    if write_lock_path:
+        import fcntl
+        print(f"\n[WRITE LOCK] waiting for {write_lock_path}", flush=True)
+        _write_lock = open(write_lock_path, "a")
+        fcntl.flock(_write_lock, fcntl.LOCK_EX)
+        print("[WRITE LOCK] acquired", flush=True)
+
     s3_bucket = read_env("S3_BUCKET_PATH", "")
     if s3_bucket:
         print("\n[STEP 9] Upload database to S3")
