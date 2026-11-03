@@ -30,6 +30,9 @@ import boto3
 import pandas as pd
 
 BUCKET = "retirementinsights-bronze"
+# The EC2 role cannot create Athena's default results bucket; same results location as apply_firm_parents.
+S3_OUTPUT = os.environ.get("ATHENA_RESULTS", "s3://retirementinsights-silver/athena-results/")
+WORKGROUP = os.environ.get("ATHENA_WORKGROUP", "primary")
 PRIORITY_PLAN_TYPES = {"401(k)", "403(b)", "Other DC Plan", "Other Defined Contribution",
                        "Hybrid (DB/DC)", "Defined Benefit"}
 
@@ -57,7 +60,7 @@ def plan(batch_date, out_dir, chunk_size, min_assets, exclude_types):
     info = wr.athena.read_sql_query(
         "SELECT CAST(ack_id AS varchar) ack_id, plan_type, TRY_CAST(assets AS double) assets "
         "FROM default.plan_master WHERE ack_id IS NOT NULL",
-        database="default", ctas_approach=False,
+        database="default", ctas_approach=False, s3_output=S3_OUTPUT, workgroup=WORKGROUP,
     ).drop_duplicates("ack_id").set_index("ack_id")
     rows, excluded = [], 0
     for ack in acks:
