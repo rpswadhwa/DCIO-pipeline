@@ -5,6 +5,7 @@ from typing import Dict, List, Tuple, Optional
 
 import camelot
 import pdfplumber
+from . import pdf_lowmem
 from .llm_provider import call_llm_json
 from rapidfuzz import process, fuzz
 
@@ -13,6 +14,8 @@ import pandas as pd
 from .asset_type_patterns import ASSET_TYPE_PATTERNS, detect_asset_type, detect_asset_type_strict, detect_asset_type_row
 from .data_cleaner import handle_split_rows, parse_investment_row
 from .utils import load_yaml, normalize_whitespace
+
+pdf_lowmem.install()
 
 # Strips leading total/subtotal words, or trailing total/subtotal/(Continued) words,
 # before section-heading pattern matching -- e.g. "MUTUAL FUNDS (Continued)" on a

@@ -524,10 +524,13 @@ from collections import Counter
 from typing import Dict, List, Optional, Set
 
 import pdfplumber
+from . import pdf_lowmem
 from pdfminer.pdfinterp import PDFResourceManager
 from pdfminer.pdftypes import resolve1
 
 from .asset_type_patterns import detect_asset_type
+
+pdf_lowmem.install()
 
 
 def _section_type(section_types, heading):

@@ -21,6 +21,7 @@ import logging
 import os
 import sqlite3
 from collections import defaultdict
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from typing import Dict, List, Optional, Tuple
 
@@ -1701,6 +1702,7 @@ def _alt_manager_lookup_map(glue_db: str, staging_table: str, ids: str, column: 
     keeps each lookup query's row count small (a validation run covers one
     batch of filings, not a full-table backfill)."""
     import awswrangler as wr
+    import boto3
     pairs_sql = (
         f"SELECT DISTINCT raw_entity_name, raw_sponsor_name FROM {glue_db}.{staging_table} "
         f"WHERE ack_id IN ({ids}) AND {column} IS NOT NULL AND trim({column}) <> ''"
@@ -1721,8 +1723,8 @@ def _alt_manager_lookup_map(glue_db: str, staging_table: str, ids: str, column: 
     manager_case = _alt_manager_case_sql(column)
     result: Dict[Tuple[str, str], str] = {}
     chunk_size = 200
-    for i in range(0, len(pairs), chunk_size):
-        chunk = pairs[i:i + chunk_size]
+
+    def _lookup_chunk(chunk):
         values_list = ", ".join(
             "('" + en.replace("'", "''") + "', '" + sp.replace("'", "''") + "')"
             for en, sp in chunk
@@ -1731,7 +1733,20 @@ def _alt_manager_lookup_map(glue_db: str, staging_table: str, ids: str, column: 
             f"SELECT t.raw_entity_name AS _ekey, t.raw_sponsor_name AS _skey, {manager_case} AS _mgr "
             f"FROM (VALUES {values_list}) AS t(raw_entity_name, raw_sponsor_name)"
         )
-        lookup_df = wr.athena.read_sql_query(sql=lookup_sql, database=glue_db, workgroup=wg, s3_output=s3)
+        # boto3 sessions aren't thread-safe, so each worker gets its own.
+        return wr.athena.read_sql_query(sql=lookup_sql, database=glue_db, workgroup=wg, s3_output=s3,
+                                        boto3_session=boto3.Session())
+
+    # Chunks run concurrently (2026-11-03): master-trust batches carry tens of
+    # thousands of distinct security names, and ~14s per serial 200-row query
+    # held the chunk runner's write lock for over an hour. Same queries, same
+    # chunk size (the CASE is only proven safe to ~209 VALUES rows), and the
+    # pairs are distinct, so the merged result is identical to the serial loop.
+    chunks = [pairs[i:i + chunk_size] for i in range(0, len(pairs), chunk_size)]
+    workers = max(1, min(int(os.getenv("ALT_MGR_LOOKUP_WORKERS", "8")), len(chunks)))
+    with ThreadPoolExecutor(max_workers=workers) as pool:
+        lookup_dfs = list(pool.map(_lookup_chunk, chunks))
+    for lookup_df in lookup_dfs:
         for _, row in lookup_df.iterrows():
             # NULL _mgr (no match) comes back from awswrangler as float NaN, not None --
             # `is not None` doesn't catch it, which would otherwise store the literal
@@ -2074,6 +2089,34 @@ def _alt_asset_type_pass_sql(glue_db: str, source: str, routed_sql: str, vehicle
             FROM atr_final f
             WHERE f.final_rule IN ('R04', 'R08', 'R09', 'R10')
         )"""
+
+
+def _alt_route_spill_lookups(glue_db: str, insert_sql: str, lookups: list) -> Tuple[str, list]:
+    """Swap each non-empty inline lookup (`VALUES <rows>` from
+    _alt_manager_lookup_values_sql) in insert_sql for a SELECT from a
+    temporary Glue table holding the same (_ekey, _skey, _mgr) rows.
+    Returns the rewritten SQL and the (table, s3_path) pairs to drop after."""
+    import awswrangler as wr
+    import uuid
+    s3 = os.getenv("ATHENA_STAGING_S3", "").rstrip("/")
+    spilled = []
+    for mapping, values_sql in lookups:
+        needle = f"VALUES {values_sql}"
+        if not mapping or insert_sql.count(needle) != 1:
+            continue
+        table = f"tmp_alt_mgr_lookup_{uuid.uuid4().hex[:16]}"
+        path = f"{s3}/tmp_alt_mgr_lookup/{table}/"
+        df = pd.DataFrame(
+            [(en, sp, mgr) for (en, sp), mgr in mapping.items()],
+            columns=["_ekey", "_skey", "_mgr"],
+        ).astype("string")
+        wr.s3.to_parquet(df=df, path=path, dataset=True, mode="overwrite",
+                         database=glue_db, table=table)
+        spilled.append((table, path))
+        insert_sql = insert_sql.replace(
+            needle, f"SELECT _ekey, _skey, _mgr FROM {glue_db}.{table}")
+        logger.info("Alt route lookup of %d rows moved to %s.%s", len(mapping), glue_db, table)
+    return insert_sql, spilled
 
 
 def _route_alternatives_chunk(glue_db: str, staging_table: str, target_table: str, ack_ids: list) -> None:
@@ -2504,19 +2547,37 @@ def _route_alternatives_chunk(glue_db: str, staging_table: str, target_table: st
     # A fixed chunk size can't bound the lookup VALUES size: alt-heavy acks
     # (hundreds of distinct holdings each) push 25 acks past Athena's 262144-char
     # query limit. Halve and retry before anything runs, so no chunk half-applies.
-    if len(insert_sql) > _ALT_ROUTE_MAX_SQL_CHARS and len(ack_ids) > 1:
-        mid = len(ack_ids) // 2
-        logger.info("Alt route SQL %d chars for %d acks; splitting", len(insert_sql), len(ack_ids))
-        _route_alternatives_chunk(glue_db, staging_table, target_table, ack_ids[:mid])
-        _route_alternatives_chunk(glue_db, staging_table, target_table, ack_ids[mid:])
-        return
-    stmts = [
-        _alt_route_delete_sql(glue_db, staging_table, target_table, ids),
-        insert_sql,
-    ]
-    for sql in stmts:
-        qid = wr.athena.start_query_execution(sql=sql, database=glue_db, workgroup=wg, s3_output=s3)
-        wr.athena.wait_query(query_execution_id=qid)
+    # The lookup VALUES are the part that grows (2026-11-03): one master-trust
+    # filing alone can carry thousands of matched holdings, which no split can
+    # shrink, and every split level re-ran both lookups under the write lock.
+    # So before splitting, move the oversized lookups into short-lived Glue
+    # tables holding the exact same rows -- the JOINs read them identically.
+    spilled = []
+    if len(insert_sql) > _ALT_ROUTE_MAX_SQL_CHARS:
+        insert_sql, spilled = _alt_route_spill_lookups(
+            glue_db, insert_sql,
+            [(entity_mgr_map, entity_mgr_values), (sponsor_mgr_map, sponsor_mgr_values)])
+    try:
+        if len(insert_sql) > _ALT_ROUTE_MAX_SQL_CHARS and len(ack_ids) > 1:
+            mid = len(ack_ids) // 2
+            logger.info("Alt route SQL %d chars for %d acks; splitting", len(insert_sql), len(ack_ids))
+            _route_alternatives_chunk(glue_db, staging_table, target_table, ack_ids[:mid])
+            _route_alternatives_chunk(glue_db, staging_table, target_table, ack_ids[mid:])
+            return
+        stmts = [
+            _alt_route_delete_sql(glue_db, staging_table, target_table, ids),
+            insert_sql,
+        ]
+        for sql in stmts:
+            qid = wr.athena.start_query_execution(sql=sql, database=glue_db, workgroup=wg, s3_output=s3)
+            wr.athena.wait_query(query_execution_id=qid)
+    finally:
+        for table, path in spilled:
+            try:
+                wr.catalog.delete_table_if_exists(database=glue_db, table=table)
+                wr.s3.delete_objects(path)
+            except Exception as exc:
+                logger.warning("Could not drop alt lookup table %s.%s: %s", glue_db, table, exc)
     logger.info("Routed alternatives rows %s -> %s for %d acks", staging_table, target_table, len(ack_ids))
 
 

@@ -213,8 +213,23 @@ def _quarantined(chunk_dir):
     return {line.split("\t")[0] for line in _read_lines(os.path.join(chunk_dir, "quarantine.tsv"))}
 
 
-def _pipeline_attempt(batch_date, acks, work_dir, log_path, mem_bytes, timeout_s, write_lock):
-    """Fetch acks into work_dir/inputs and run run_pipeline on just them."""
+def _drop_non_pdfs(inputs):
+    """Remove fetched files that aren't PDFs (e.g. an EFAST HTML error page saved as .pdf);
+    return their acks. One of these crashed run_pipeline and failed its whole batch."""
+    bad = []
+    for fname in sorted(os.listdir(inputs)):
+        path = os.path.join(inputs, fname)
+        with open(path, "rb") as fh:
+            head = fh.read(1024)
+        if b"%PDF-" not in head:
+            os.remove(path)
+            bad.append(fname.rsplit(".", 1)[0])
+    return bad
+
+
+def _pipeline_attempt(batch_date, acks, work_dir, log_path, mem_bytes, timeout_s, write_lock, not_pdf):
+    """Fetch acks into work_dir/inputs and run run_pipeline on just them. Acks whose file isn't a
+    PDF are left out of the run and appended to not_pdf for the caller to quarantine."""
     inputs = os.path.join(work_dir, "inputs")
     outputs = os.path.join(work_dir, "outputs")
     manifest = os.path.join(work_dir, "acks.txt")
@@ -224,6 +239,10 @@ def _pipeline_attempt(batch_date, acks, work_dir, log_path, mem_bytes, timeout_s
         fh.write("\n".join(acks) + "\n")
     if fetch(batch_date, manifest, inputs) != 0:
         return "fetch_failed", "no PDFs fetched"
+    not_pdf.extend(_drop_non_pdfs(inputs))
+    if not os.listdir(inputs):
+        shutil.rmtree(inputs, ignore_errors=True)
+        return "ok", "no readable PDFs left"
     env = {**os.environ, "INPUT_DIR": inputs, "OUTPUT_DIR": outputs, "SYNC_S3_INPUTS": "0",
            "PIPELINE_WRITE_LOCK": write_lock, "PYTHONUNBUFFERED": "1"}
     cmd = os.environ.get("BATCH_CHUNKS_PIPELINE_CMD", f"{sys.executable} -m src.run_pipeline").split()
@@ -246,6 +265,15 @@ def _post_chunk(chunk, acks, chunk_dir):
     rc = subprocess.run([sys.executable, "-m", "src.dedup_alt_holdings", "--ack-file", ack_file, "--apply"]).returncode
     if rc != 0:
         _log(f"!!! WARNING: [CHUNK {chunk}] dedup_alt_holdings failed (exit {rc}) -- rerun it by hand for {ack_file}")
+
+
+def _quarantine_not_pdf(chunk, acks, not_pdf, quarantine_path):
+    """Quarantine acks whose fetched file wasn't a PDF; return the rest of acks."""
+    for ack in not_pdf:
+        _append_lines(quarantine_path, [f"{ack}\t{chunk}\tnot_a_pdf\tfetched file is not a PDF -- re-download it"
+                                        f"\t{datetime.now(timezone.utc):%FT%TZ}"])
+        _log(f"!!! [CHUNK {chunk}] {ack} is not a PDF -- QUARANTINED (see {quarantine_path})")
+    return [a for a in acks if a not in not_pdf]
 
 
 def run_tier(batch_date, chunk_dir, tier, workers, micro, priority_micro, retry_micro, mem_gb, solo_mem_gb,
@@ -286,8 +314,10 @@ def run_tier(batch_date, chunk_dir, tier, workers, micro, priority_micro, retry_
                 slot = threading.current_thread().name.rsplit("_", 1)[-1]
                 work_dir = os.path.join(work_root, f"w{slot}")
                 log_path = os.path.join(log_dir, f"{chunk}_{tag}{idx:03d}.log")
+                not_pdf = []
                 status, detail = _pipeline_attempt(batch_date, acks, work_dir, log_path,
-                                                   mem_gb * gib, timeout_min * 60, write_lock)
+                                                   mem_gb * gib, timeout_min * 60, write_lock, not_pdf)
+                acks = _quarantine_not_pdf(chunk, acks, not_pdf, quarantine_path)
                 if status == "ok":
                     _append_lines(done_path, acks)
                     _log(f"[CHUNK {chunk}] {tag}{idx:03d} ok: {len(acks)} filings, {detail}")
@@ -309,8 +339,11 @@ def run_tier(batch_date, chunk_dir, tier, workers, micro, priority_micro, retry_
 
         for ack in retry:
             log_path = os.path.join(log_dir, f"{chunk}_solo_{ack}.log")
+            not_pdf = []
             status, detail = _pipeline_attempt(batch_date, [ack], os.path.join(work_root, "solo"), log_path,
-                                               solo_mem_gb * gib, solo_timeout_min * 60, write_lock)
+                                               solo_mem_gb * gib, solo_timeout_min * 60, write_lock, not_pdf)
+            if not _quarantine_not_pdf(chunk, [ack], not_pdf, quarantine_path):
+                continue
             if status == "ok":
                 _append_lines(done_path, [ack])
                 _log(f"[CHUNK {chunk}] solo {ack} ok: {detail}")
