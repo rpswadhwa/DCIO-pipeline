@@ -36,29 +36,88 @@ BATCH_DATE="${BATCH_DATE:-$(date +%F)}"
 RUN_YEAR="${BATCH_DATE:0:4}"
 S3_INPUT_PATH="s3://retirementinsights-bronze/filings_5500_pdf/year=${RUN_YEAR}/batch_date=${BATCH_DATE}/"
 
-echo "[STEP 0] Syncing PDFs from S3: $S3_INPUT_PATH"
-# --delete makes data/inputs/ an exact mirror of this batch's S3 folder. Without it,
-# PDFs from every previous batch ever synced on this box accumulate forever and get
-# reprocessed on every run (this silently turned 10-plan runs into 130+-plan runs).
-aws s3 sync "$S3_INPUT_PATH" data/inputs/ --exclude "*" --include "*.pdf" --delete
-echo "Sync complete: $(ls data/inputs/*.pdf 2>/dev/null | wc -l) PDFs"
+# (2026-10-21) Last step of each extraction: one holding lives in one table (MF / CIT / alternatives).
+# Runs after classification because classification is what tags MF rows Alternatives. Scoped to the
+# filings in data/inputs (PDF stems); every change is logged to default.alt_holding_dedup_log first.
+dedup_inputs() {
+  echo "[DEDUP] Cross-table alternative holding de-duplication for this batch..."
+  DEDUP_ACKS=data/dedup_acks.txt
+  ls data/inputs/*.pdf 2>/dev/null | xargs -r -n1 basename | sed 's/\.pdf$//' > "$DEDUP_ACKS" || true
+  if [ -s "$DEDUP_ACKS" ]; then
+    PYTHONPATH=. python3.11 -m src.dedup_alt_holdings --ack-file "$DEDUP_ACKS" --apply \
+      || echo "!!! WARNING: dedup_alt_holdings failed -- duplicates for this batch are NOT removed; rerun it by hand"
+  else
+    echo "[DEDUP] no PDFs in data/inputs, skipping"
+  fi
+}
 
-PYTHONPATH=. python3.11 -m src.run_pipeline
+# (2026-11-02) Chunk mode. A full DOL release (2026-11-02: 60,658 PDFs, ~79 GB) cannot go through one
+# sync + one run_pipeline: the disk has ~7 GB free, run_pipeline writes nothing until every PDF is done,
+# and SSM kills the job at 48h. Chunk mode plans ordered chunks (src/batch_chunks.py: Health & Welfare
+# dropped; DC/DB >= $100M first, largest first), then per chunk fetches only its PDFs, extracts, writes,
+# classifies + dedups that chunk, and deletes the PDFs. Finished chunks are marked done, so rerunning
+# the same command resumes. CHUNK_TIER picks which chunks run: priority (default) | rest | all.
+#   CHUNK_MODE=auto (default: chunk when the batch has more than CHUNK_SIZE PDFs) | 1 | 0
+CHUNK_SIZE="${CHUNK_SIZE:-1000}"
+CHUNK_MODE="${CHUNK_MODE:-auto}"
+CHUNK_TIER="${CHUNK_TIER:-priority}"
+PDF_COUNT=$( (aws s3 ls "$S3_INPUT_PATH" || true) | grep -c '\.pdf$' || true)
+if [ "$CHUNK_MODE" = "auto" ]; then
+  if [ "$PDF_COUNT" -gt "$CHUNK_SIZE" ]; then CHUNK_MODE=1; else CHUNK_MODE=0; fi
+fi
+echo "[STEP 0] $PDF_COUNT PDFs in $S3_INPUT_PATH (chunk mode=$CHUNK_MODE, size=$CHUNK_SIZE, tier=$CHUNK_TIER)"
 
-echo "[CLASSIFICATION] Running asset class classification pipeline..."
-PYTHONPATH=. python3.11 run_classification.py
-
-# (2026-10-21) Last step: one holding lives in one table (MF / CIT / alternatives). Runs after
-# classification because classification is what tags MF rows Alternatives. Scoped to this batch's
-# filings (PDF stems); every change is logged to default.alt_holding_dedup_log first.
-echo "[DEDUP] Cross-table alternative holding de-duplication for this batch..."
-DEDUP_ACKS=data/dedup_acks.txt
-ls data/inputs/*.pdf 2>/dev/null | xargs -r -n1 basename | sed 's/\.pdf$//' > "$DEDUP_ACKS" || true
-if [ -s "$DEDUP_ACKS" ]; then
-  PYTHONPATH=. python3.11 -m src.dedup_alt_holdings --ack-file "$DEDUP_ACKS" --apply \
-    || echo "!!! WARNING: dedup_alt_holdings failed -- duplicates for this batch are NOT removed; rerun it by hand"
+if [ "$CHUNK_MODE" = "1" ]; then
+  CHUNK_DIR="data/chunks/${BATCH_DATE}"
+  mkdir -p "$CHUNK_DIR/done"
+  if [ ! -f "$CHUNK_DIR/.planned" ]; then
+    PYTHONPATH=. python3.11 -m src.batch_chunks plan --batch-date "$BATCH_DATE" --out "$CHUNK_DIR" --chunk-size "$CHUNK_SIZE"
+    touch "$CHUNK_DIR/.planned"
+  fi
+  case "$CHUNK_TIER" in
+    priority) PATTERN="p[0-9]*.txt" ;;
+    rest)     PATTERN="r[0-9]*.txt" ;;
+    all)      PATTERN="[pr][0-9]*.txt" ;;
+    *) echo "unknown CHUNK_TIER=$CHUNK_TIER" >&2; exit 2 ;;
+  esac
+  FAILED_CHUNKS=""
+  for MANIFEST in $(ls "$CHUNK_DIR"/$PATTERN 2>/dev/null | sort); do
+    CHUNK=$(basename "$MANIFEST" .txt)
+    if [ -f "$CHUNK_DIR/done/$CHUNK.ok" ]; then echo "[CHUNK $CHUNK] already done, skipping"; continue; fi
+    CHUNK_START=$(date +%s)
+    echo "[CHUNK $CHUNK] start $(date -u +%FT%TZ): $(wc -l < "$MANIFEST") filings"
+    if ! PYTHONPATH=. python3.11 -m src.batch_chunks fetch --batch-date "$BATCH_DATE" --manifest "$MANIFEST" --dest data/inputs; then
+      echo "!!! [CHUNK $CHUNK] fetch failed"; FAILED_CHUNKS="$FAILED_CHUNKS $CHUNK"; continue
+    fi
+    if ! PYTHONPATH=. python3.11 -m src.run_pipeline; then
+      echo "!!! [CHUNK $CHUNK] run_pipeline failed -- chunk NOT marked done"; FAILED_CHUNKS="$FAILED_CHUNKS $CHUNK"; continue
+    fi
+    echo "[CLASSIFICATION] chunk $CHUNK only..."
+    CHUNK_ACKS=$(ls data/inputs/*.pdf 2>/dev/null | xargs -r -n1 basename | sed 's/\.pdf$//' | paste -sd, -)
+    ACK_IDS="$CHUNK_ACKS" PYTHONPATH=. python3.11 run_classification.py \
+      || echo "!!! WARNING: [CHUNK $CHUNK] classification failed -- rows may stay PENDING_AI; the end-of-run sweep retries"
+    dedup_inputs
+    touch "$CHUNK_DIR/done/$CHUNK.ok"
+    rm -rf data/inputs
+    mkdir -p data/inputs
+    echo "[CHUNK $CHUNK] done in $(( $(date +%s) - CHUNK_START ))s; $(ls "$CHUNK_DIR"/done | wc -l) chunks done in total"
+  done
+  echo "[CLASSIFICATION] end-of-run whole-table sweep..."
+  PYTHONPATH=. python3.11 run_classification.py
 else
-  echo "[DEDUP] no PDFs in data/inputs, skipping"
+  echo "[STEP 0] Syncing PDFs from S3: $S3_INPUT_PATH"
+  # --delete makes data/inputs/ an exact mirror of this batch's S3 folder. Without it,
+  # PDFs from every previous batch ever synced on this box accumulate forever and get
+  # reprocessed on every run (this silently turned 10-plan runs into 130+-plan runs).
+  aws s3 sync "$S3_INPUT_PATH" data/inputs/ --exclude "*" --include "*.pdf" --delete
+  echo "Sync complete: $(ls data/inputs/*.pdf 2>/dev/null | wc -l) PDFs"
+
+  PYTHONPATH=. python3.11 -m src.run_pipeline
+
+  echo "[CLASSIFICATION] Running asset class classification pipeline..."
+  PYTHONPATH=. python3.11 run_classification.py
+
+  dedup_inputs
 fi
 
 # (2026-10-27) Whole-table sweep of the ALT manager cache. The per-run fill only applies answers to
@@ -77,3 +136,10 @@ PYTHONPATH=. python3.11 -m src.alt_manager_fuzzy --stamp-ids-only \
 echo "[FIRM PARENT] manager_parent_name, all filings..."
 PYTHONPATH=. python3.11 -m src.apply_firm_parents --all \
   || echo "!!! WARNING: apply_firm_parents failed -- manager_parent_name NOT filled; rerun it by hand"
+
+# (2026-11-02) Chunk mode keeps going past a failed chunk; fail the run at the end so the Step Function
+# alerts. Rerunning the same command retries only the chunks without a done marker.
+if [ -n "${FAILED_CHUNKS:-}" ]; then
+  echo "!!! FAILED CHUNKS:$FAILED_CHUNKS -- rerun BATCH_DATE=$BATCH_DATE CHUNK_TIER=$CHUNK_TIER bash run.sh to retry them"
+  exit 1
+fi
