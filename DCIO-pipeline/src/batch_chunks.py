@@ -119,7 +119,7 @@ def main():
     p = sub.add_parser("plan")
     p.add_argument("--batch-date", required=True)
     p.add_argument("--out", required=True)
-    p.add_argument("--chunk-size", type=int, default=int(os.getenv("CHUNK_SIZE", "1000")))
+    p.add_argument("--chunk-size", type=int, default=int(os.getenv("CHUNK_SIZE", "500")))
     p.add_argument("--min-assets", type=float, default=float(os.getenv("CHUNK_PRIORITY_MIN_ASSETS", "100000000")))
     p.add_argument("--exclude-types", default=os.getenv("CHUNK_EXCLUDE_PLAN_TYPES", "Health & Welfare"))
     f = sub.add_parser("fetch")

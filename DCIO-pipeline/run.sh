@@ -58,7 +58,7 @@ dedup_inputs() {
 # classifies + dedups that chunk, and deletes the PDFs. Finished chunks are marked done, so rerunning
 # the same command resumes. CHUNK_TIER picks which chunks run: priority (default) | rest | all.
 #   CHUNK_MODE=auto (default: chunk when the batch has more than CHUNK_SIZE PDFs) | 1 | 0
-CHUNK_SIZE="${CHUNK_SIZE:-1000}"
+CHUNK_SIZE="${CHUNK_SIZE:-500}"
 CHUNK_MODE="${CHUNK_MODE:-auto}"
 CHUNK_TIER="${CHUNK_TIER:-priority}"
 PDF_COUNT=$( (aws s3 ls "$S3_INPUT_PATH" || true) | grep -c '\.pdf$' || true)
@@ -89,7 +89,9 @@ if [ "$CHUNK_MODE" = "1" ]; then
     if ! PYTHONPATH=. python3.11 -m src.batch_chunks fetch --batch-date "$BATCH_DATE" --manifest "$MANIFEST" --dest data/inputs; then
       echo "!!! [CHUNK $CHUNK] fetch failed"; FAILED_CHUNKS="$FAILED_CHUNKS $CHUNK"; continue
     fi
-    if ! PYTHONPATH=. python3.11 -m src.run_pipeline; then
+    # SYNC_S3_INPUTS=0: run_pipeline otherwise re-syncs the whole batch folder (S3_INPUT_PATH) into
+    # data/inputs, which undoes the chunking and fills the disk (2026-11-03: every chunk failed this way).
+    if ! SYNC_S3_INPUTS=0 PYTHONPATH=. python3.11 -m src.run_pipeline; then
       echo "!!! [CHUNK $CHUNK] run_pipeline failed -- chunk NOT marked done"; FAILED_CHUNKS="$FAILED_CHUNKS $CHUNK"; continue
     fi
     echo "[CLASSIFICATION] chunk $CHUNK only..."
