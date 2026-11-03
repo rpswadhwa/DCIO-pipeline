@@ -248,7 +248,8 @@ def _post_chunk(chunk, acks, chunk_dir):
         _log(f"!!! WARNING: [CHUNK {chunk}] dedup_alt_holdings failed (exit {rc}) -- rerun it by hand for {ack_file}")
 
 
-def run_tier(batch_date, chunk_dir, tier, workers, micro, mem_gb, solo_mem_gb, timeout_min, solo_timeout_min):
+def run_tier(batch_date, chunk_dir, tier, workers, micro, priority_micro, retry_micro, mem_gb, solo_mem_gb,
+             timeout_min, solo_timeout_min):
     pattern = {"priority": "p", "rest": "r", "all": "pr"}[tier]
     manifests = sorted(f for f in os.listdir(chunk_dir)
                        if f.endswith(".txt") and f[0] in pattern and f[1:5].isdigit())
@@ -273,25 +274,38 @@ def run_tier(batch_date, chunk_dir, tier, workers, micro, mem_gb, solo_mem_gb, t
         todo = [a for a in all_acks if a not in finished and a not in held]
         _log(f"[CHUNK {chunk}] start: {len(all_acks)} filings ({len(finished)} already done, "
              f"{len(held & set(all_acks))} quarantined, {len(todo)} to run)")
-        batches = [todo[i:i + micro] for i in range(0, len(todo), micro)]
+        # (2026-11-03) run_pipeline holds every filing's pages until it writes, so memory grows with the
+        # batch: on the largest-plan chunk 3 of the first 4 batches of 25 hit the cap and all 75 filings
+        # went to the serial one-by-one lane. A failed batch is now split into batches of retry_micro and
+        # run again in parallel at the same cap; only filings failing there go one by one.
         retry = []
 
-        def run_batch(job):
-            idx, acks = job
-            slot = threading.current_thread().name.rsplit("_", 1)[-1]
-            work_dir = os.path.join(work_root, f"w{slot}")
-            log_path = os.path.join(log_dir, f"{chunk}_m{idx:03d}.log")
-            status, detail = _pipeline_attempt(batch_date, acks, work_dir, log_path,
-                                               mem_gb * gib, timeout_min * 60, write_lock)
-            if status == "ok":
-                _append_lines(done_path, acks)
-                _log(f"[CHUNK {chunk}] m{idx:03d} ok: {len(acks)} filings, {detail}")
-            else:
-                retry.extend(acks)
-                _log(f"!!! [CHUNK {chunk}] m{idx:03d} {status}: {detail} -- {len(acks)} filings retried one by one")
+        def run_pass(batches, tag, fallback):
+            def run_batch(job):
+                idx, acks = job
+                slot = threading.current_thread().name.rsplit("_", 1)[-1]
+                work_dir = os.path.join(work_root, f"w{slot}")
+                log_path = os.path.join(log_dir, f"{chunk}_{tag}{idx:03d}.log")
+                status, detail = _pipeline_attempt(batch_date, acks, work_dir, log_path,
+                                                   mem_gb * gib, timeout_min * 60, write_lock)
+                if status == "ok":
+                    _append_lines(done_path, acks)
+                    _log(f"[CHUNK {chunk}] {tag}{idx:03d} ok: {len(acks)} filings, {detail}")
+                else:
+                    smaller = tag == "m" and len(acks) > retry_micro > 1
+                    (fallback if smaller else retry).extend(acks)
+                    _log(f"!!! [CHUNK {chunk}] {tag}{idx:03d} {status}: {detail} -- {len(acks)} filings retried "
+                         + ("in smaller batches" if smaller else "one by one"))
 
-        with ThreadPoolExecutor(max_workers=workers) as pool:
-            list(pool.map(run_batch, list(enumerate(batches, 1))))
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                list(pool.map(run_batch, list(enumerate(batches, 1))))
+
+        # priority chunks hold the largest plans (master trusts, hundreds of pages each), so smaller batches
+        size = priority_micro if chunk.startswith("p") else micro
+        split = []
+        run_pass([todo[i:i + size] for i in range(0, len(todo), size)], "m", split)
+        if split:
+            run_pass([split[i:i + retry_micro] for i in range(0, len(split), retry_micro)], "s", retry)
 
         for ack in retry:
             log_path = os.path.join(log_dir, f"{chunk}_solo_{ack}.log")
@@ -334,6 +348,8 @@ def main():
     r.add_argument("--tier", choices=["priority", "rest", "all"], default="priority")
     r.add_argument("--workers", type=int, default=int(os.getenv("CHUNK_WORKERS", "3")))
     r.add_argument("--micro", type=int, default=int(os.getenv("CHUNK_MICRO", "25")))
+    r.add_argument("--priority-micro", type=int, default=int(os.getenv("CHUNK_PRIORITY_MICRO", "10")))
+    r.add_argument("--retry-micro", type=int, default=int(os.getenv("CHUNK_RETRY_MICRO", "5")))
     r.add_argument("--mem-gb", type=float, default=float(os.getenv("CHUNK_MEM_GB", "8")))
     r.add_argument("--solo-mem-gb", type=float, default=float(os.getenv("CHUNK_SOLO_MEM_GB", "24")))
     r.add_argument("--timeout-min", type=float, default=float(os.getenv("CHUNK_TIMEOUT_MIN", "120")))
@@ -343,8 +359,8 @@ def main():
         excl = {t.strip() for t in a.exclude_types.split(",") if t.strip()}
         return plan(a.batch_date, a.out, a.chunk_size, a.min_assets, excl)
     if a.cmd == "run":
-        return run_tier(a.batch_date, a.chunk_dir, a.tier, a.workers, a.micro, a.mem_gb,
-                        a.solo_mem_gb, a.timeout_min, a.solo_timeout_min)
+        return run_tier(a.batch_date, a.chunk_dir, a.tier, a.workers, a.micro, a.priority_micro, a.retry_micro,
+                        a.mem_gb, a.solo_mem_gb, a.timeout_min, a.solo_timeout_min)
     return fetch(a.batch_date, a.manifest, a.dest)
 
 
