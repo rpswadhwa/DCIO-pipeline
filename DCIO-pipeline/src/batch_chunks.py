@@ -167,20 +167,43 @@ def _group_rss_bytes(pgid):
     return total
 
 
+def _write_phase_started(log_path, offset):
+    """True once this attempt's run_pipeline has logged that it is waiting for (or holds) the write lock."""
+    try:
+        with open(log_path, "rb") as fh:
+            fh.seek(offset)
+            return b"[WRITE LOCK] waiting" in fh.read()
+    except OSError:
+        return False
+
+
 def _run_capped(cmd, env, log_path, mem_bytes, timeout_s):
     """Run cmd in its own process group; kill the group past mem_bytes or timeout_s.
-    Returns (status, detail): status is ok | failed | oom | timeout."""
+    Returns (status, detail): status is ok | failed | oom | timeout.
+
+    timeout_s covers extraction only (2026-11-04). Once run_pipeline reaches the write lock, the
+    time it spends queued behind other batches and writing the tables no longer counts: with 3
+    workers sharing one lock, batches that had finished extracting were killed for waiting, and
+    one was killed mid-way through its STEP 10 table writes. Past that point only a much longer
+    write-phase limit (CHUNK_WRITE_TIMEOUT_MIN, a hang guard) applies."""
     start = time.time()
     peak = 0
+    log_offset = os.path.getsize(log_path) if os.path.exists(log_path) else 0  # logs are appended across reruns
+    write_timeout_s = float(os.getenv("CHUNK_WRITE_TIMEOUT_MIN", "360")) * 60
+    write_start = None
     with open(log_path, "ab") as log:
         proc = subprocess.Popen(cmd, env=env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
         status = None
         while proc.poll() is None:
             rss = _group_rss_bytes(proc.pid)
             peak = max(peak, rss)
+            if write_start is None and _write_phase_started(log_path, log_offset):
+                write_start = time.time()
             if rss > mem_bytes:
                 status = "oom"
-            elif time.time() - start > timeout_s:
+            elif write_start is None and time.time() - start > timeout_s:
+                status = "timeout"
+            elif write_start is not None and time.time() - write_start > write_timeout_s:
                 status = "timeout"
             if status:
                 try:
