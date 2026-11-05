@@ -22,6 +22,7 @@ deleted on its own, and a rerun resumes after the last finished chunk.
   python3.11 -m src.batch_chunks run   --batch-date 2026-11-02 --chunk-dir data/chunks/2026-11-02 --tier priority
 """
 import argparse
+import contextlib
 import os
 import shutil
 import signal
@@ -167,6 +168,22 @@ def _group_rss_bytes(pgid):
     return total
 
 
+@contextlib.contextmanager
+def _write_locked(write_lock):
+    """Hold the same exclusive lock run_pipeline takes for its table writes (steps 9-13), so chunk-end
+    steps running alongside the next chunk's batches never write a table at the same time as one."""
+    if not write_lock:
+        yield
+        return
+    import fcntl
+    with open(write_lock, "a") as fh:
+        fcntl.flock(fh, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(fh, fcntl.LOCK_UN)
+
+
 def _write_phase_started(log_path, offset):
     """True once this attempt's run_pipeline has logged that it is waiting for (or holds) the write lock."""
     try:
@@ -294,53 +311,72 @@ def _alt_defer_path(chunk_dir, chunk):
     return os.path.abspath(os.path.join(chunk_dir, "alt_pending", f"{chunk}.txt"))
 
 
-def _route_chunk_alternatives(chunk, chunk_dir):
+def _route_chunk_alternatives(chunk, chunk_dir, write_lock=None):
     """Alternatives routing the chunk's batches deferred (ALT_ROUTE_DEFER_FILE): exactly the filings
     each batch's validation would have routed itself, all at once.
 
     The router query takes ~4 min to plan however few filings it covers (2026-11-05: 45 runs at
     10 filings each, 185-245s planning of ~300s), so it runs here CHUNK_ALT_ROUTE_GROUP filings per
-    query instead of once per batch under the write lock. A failed pass is retried at the router's
-    old size of 25; filings still failing go to alt_route_failed.txt for a manual
-    `python -m src.route_alternatives_acks --ack-file ...`."""
+    query instead of once per batch under the write lock. Each group is its own router run holding
+    the write lock (2026-11-05), so the next chunk's batches can write between groups. A failed group
+    is retried at the router's old size of 25; filings still failing go to alt_route_failed.txt for a
+    manual `python -m src.route_alternatives_acks --ack-file ...`."""
     ack_file = _alt_defer_path(chunk_dir, chunk)
     acks = list(dict.fromkeys(_read_lines(ack_file))) if ack_file and os.path.exists(ack_file) else []
     if not acks:
         return
-    for group in (os.getenv("CHUNK_ALT_ROUTE_GROUP", "50"), "25"):
-        start = time.time()
-        _log(f"[CHUNK {chunk}] alternatives routing ({len(acks)} filings, {group} per query)")
-        rc = subprocess.run([sys.executable, "-m", "src.route_alternatives_acks", "--ack-file", ack_file],
-                            env={**os.environ, "ALT_ROUTE_CHUNK_SIZE": group}).returncode
-        if rc == 0:
-            _log(f"[CHUNK {chunk}] alternatives routing ok in {int(time.time() - start)}s")
-            return
-        _log(f"!!! WARNING: [CHUNK {chunk}] alternatives routing failed (exit {rc}, {group} per query)")
+    group = int(os.getenv("CHUNK_ALT_ROUTE_GROUP", "50"))
+    start = time.time()
+    _log(f"[CHUNK {chunk}] alternatives routing ({len(acks)} filings, {group} per query)")
+    failed = []
+    for gi in range(0, len(acks), group):
+        part = acks[gi:gi + group]
+        part_file = f"{ack_file[:-4]}.g{gi // group + 1:03d}.txt"
+        with open(part_file, "w") as fh:
+            fh.write("".join(f"{a}" + chr(10) for a in part))
+        for size in (str(group), "25"):
+            with _write_locked(write_lock):
+                rc = subprocess.run([sys.executable, "-m", "src.route_alternatives_acks", "--ack-file", part_file],
+                                    env={**os.environ, "ALT_ROUTE_CHUNK_SIZE": size}).returncode
+            if rc == 0:
+                break
+            _log(f"!!! WARNING: [CHUNK {chunk}] alternatives routing failed for {part_file} "
+                 f"(exit {rc}, {size} per query)")
+        else:
+            failed.extend(part)
+    if not failed:
+        _log(f"[CHUNK {chunk}] alternatives routing ok in {int(time.time() - start)}s")
+        return
     failed_path = os.path.join(chunk_dir, "alt_route_failed.txt")
-    _append_lines(failed_path, acks)
-    _log(f"!!! [CHUNK {chunk}] alternatives NOT routed for {len(acks)} filings -- listed in {failed_path}; "
-         f"rerun: python -m src.route_alternatives_acks --ack-file {ack_file}")
+    _append_lines(failed_path, failed)
+    _log(f"!!! [CHUNK {chunk}] alternatives NOT routed for {len(failed)} filings -- listed in {failed_path}; "
+         f"rerun: python -m src.route_alternatives_acks --ack-file <file of those acks>")
 
 
-def _post_chunk(chunk, acks, chunk_dir):
+def _post_chunk(chunk, acks, chunk_dir, write_lock=None):
     """Deferred alternatives routing, whole-table MF class pass, classification + cross-table dedup,
-    scoped to the chunk's finished filings."""
-    _route_chunk_alternatives(chunk, chunk_dir)
+    scoped to the chunk's finished filings. Each step holds the write lock (see run_tier)."""
+    _route_chunk_alternatives(chunk, chunk_dir, write_lock)
     if not acks:
         return
     if os.getenv("CHUNK_BATCH_SCOPED", "1") != "0" and os.getenv("ENRICH_MF_ENABLED", "1") != "0":
         _log(f"[CHUNK {chunk}] MF class copy + mapping backfill (whole table)")
-        rc = subprocess.run([sys.executable, "-m", "src.mf_mapping_enrichment"]).returncode
+        with _write_locked(write_lock):
+            rc = subprocess.run([sys.executable, "-m", "src.mf_mapping_enrichment"]).returncode
         if rc != 0:
             _log(f"!!! WARNING: [CHUNK {chunk}] MF whole-table pass failed (exit {rc}) -- "
                  f"rerun: python -m src.mf_mapping_enrichment")
     ack_file = os.path.join(chunk_dir, "done", "acks", f"{chunk}.txt")
     _log(f"[CHUNK {chunk}] classification ({len(acks)} filings)")
-    rc = subprocess.run([sys.executable, "run_classification.py"], env={**os.environ, "ACK_IDS": ",".join(acks)}).returncode
+    with _write_locked(write_lock):
+        rc = subprocess.run([sys.executable, "run_classification.py"],
+                            env={**os.environ, "ACK_IDS": ",".join(acks)}).returncode
     if rc != 0:
         _log(f"!!! WARNING: [CHUNK {chunk}] classification failed (exit {rc}) -- the end-of-run sweep retries")
     _log(f"[CHUNK {chunk}] cross-table dedup")
-    rc = subprocess.run([sys.executable, "-m", "src.dedup_alt_holdings", "--ack-file", ack_file, "--apply"]).returncode
+    with _write_locked(write_lock):
+        rc = subprocess.run([sys.executable, "-m", "src.dedup_alt_holdings", "--ack-file", ack_file,
+                             "--apply"]).returncode
     if rc != 0:
         _log(f"!!! WARNING: [CHUNK {chunk}] dedup_alt_holdings failed (exit {rc}) -- rerun it by hand for {ack_file}")
 
@@ -366,6 +402,28 @@ def run_tier(batch_date, chunk_dir, tier, workers, micro, priority_micro, retry_
     work_root = os.path.abspath(os.path.join("data", "work"))
     quarantine_path = os.path.join(chunk_dir, "quarantine.tsv")
     gib = 2**30
+    # (2026-11-05) A chunk's end steps (_post_chunk, ~1h20m on a priority chunk) run on a background
+    # thread while the next chunk's batches extract; every end step holds the write lock, so table
+    # writes stay one at a time. One chunk end at a time; CHUNK_OVERLAP_POST=0 runs them inline.
+    overlap = os.getenv("CHUNK_OVERLAP_POST", "1") != "0"
+    post = {"thread": None}
+
+    def finish_chunk(chunk, all_acks, finished, chunk_start):
+        try:
+            _post_chunk(chunk, [a for a in all_acks if a in finished], chunk_dir, write_lock)
+        except Exception as exc:  # noqa: BLE001 - no .ok, so a rerun repeats the chunk end
+            _log(f"!!! [CHUNK {chunk}] chunk-end steps crashed: {exc!r} -- no .ok written; a rerun repeats them")
+            return
+        open(os.path.join(chunk_dir, "done", f"{chunk}.ok"), "w").close()
+        n_done = len([f for f in os.listdir(os.path.join(chunk_dir, "done")) if f.endswith(".ok")])
+        n_held = len(_quarantined(chunk_dir) & set(all_acks))
+        _log(f"[CHUNK {chunk}] done in {int(time.time() - chunk_start)}s: {len(finished & set(all_acks))} ok, "
+             f"{n_held} quarantined; {n_done} chunks done in total")
+
+    def wait_post():
+        if post["thread"]:
+            post["thread"].join()
+            post["thread"] = None
 
     for name in manifests:
         chunk = name[:-4]
@@ -432,12 +490,14 @@ def run_tier(batch_date, chunk_dir, tier, workers, micro, priority_micro, retry_
                 _log(f"!!! [CHUNK {chunk}] solo {ack} {status}: {detail} -- QUARANTINED (see {quarantine_path})")
 
         finished = set(_read_lines(done_path))
-        _post_chunk(chunk, [a for a in all_acks if a in finished], chunk_dir)
-        open(os.path.join(chunk_dir, "done", f"{chunk}.ok"), "w").close()
-        n_done = len([f for f in os.listdir(os.path.join(chunk_dir, "done")) if f.endswith(".ok")])
-        n_held = len(_quarantined(chunk_dir) & set(all_acks))
-        _log(f"[CHUNK {chunk}] done in {int(time.time() - chunk_start)}s: {len(finished & set(all_acks))} ok, "
-             f"{n_held} quarantined; {n_done} chunks done in total")
+        wait_post()
+        _log(f"[CHUNK {chunk}] extraction finished; chunk-end steps start" + (" in the background" if overlap else ""))
+        post["thread"] = threading.Thread(target=finish_chunk, args=(chunk, all_acks, finished, chunk_start),
+                                          name=f"post-{chunk}")
+        post["thread"].start()
+        if not overlap:
+            wait_post()
+    wait_post()
     shutil.rmtree(work_root, ignore_errors=True)
     return 0
 
