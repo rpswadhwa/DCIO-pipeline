@@ -206,21 +206,31 @@ def parse_currency_value(raw: Optional[str]) -> Optional[float]:
 # ---------------------------------------------------------------------------
 
 def load_reference(glue_db: str, table: str, workgroup: str,
-                   s3_staging: str) -> Dict[str, Dict[str, object]]:
+                   s3_staging: str, ack_ids: Optional[List[str]] = None) -> Dict[str, Dict[str, object]]:
     """Query Athena for ack_id -> reference metadata.
 
     Returns only rows where amt_mutual_funds is a positive number.
     Rows with null or zero values are excluded (treated as SKIP at call time).
+    ack_ids limits the read to those filings (None = whole table); a batch only ever looks up
+    its own filings, and the unfiltered read cost ~90s per batch (2026-11-05).
     """
     import awswrangler as wr
 
+    if ack_ids is not None:
+        ack_ids = sorted({str(a).strip() for a in ack_ids if str(a).strip()})
+        if not ack_ids:
+            return {}
+        where = " WHERE ack_id IN (" + ", ".join("'" + a.replace("'", "''") + "'" for a in ack_ids) + ")"
+    else:
+        where = ""
+
     # amt_cit is used by the MF reconciliation (stage 4); tolerate tables that lack it.
     try:
-        sql = f"SELECT ack_id, plan_id, amt_mutual_funds, amt_cit FROM {glue_db}.{table}"
+        sql = f"SELECT ack_id, plan_id, amt_mutual_funds, amt_cit FROM {glue_db}.{table}{where}"
         df = wr.athena.read_sql_query(sql=sql, database=glue_db, workgroup=workgroup, s3_output=s3_staging)
         _has_cit = True
     except Exception:
-        sql = f"SELECT ack_id, plan_id, amt_mutual_funds FROM {glue_db}.{table}"
+        sql = f"SELECT ack_id, plan_id, amt_mutual_funds FROM {glue_db}.{table}{where}"
         df = wr.athena.read_sql_query(sql=sql, database=glue_db, workgroup=workgroup, s3_output=s3_staging)
         _has_cit = False
 
@@ -902,13 +912,16 @@ def write_iceberg_via_athena(df: pd.DataFrame, glue_db: str, table: str,
     # batch-wide INSERT loop left every already-deleted-but-not-yet-reinserted ack_id with
     # zero rows if the process died partway through the INSERT batches.
     # Only works for Iceberg/transactional tables; skips silently for plain Hive tables.
+    # WRITE_BATCH_DELETE=1 (set by the chunk runner, 2026-11-05): one DELETE for every ack_id
+    # up front instead of one per ack_id (each Iceberg DELETE is its own ~10s commit). The
+    # chunk runner retries a killed batch and only marks a filing done once its batch exits
+    # cleanly, so a filing left empty by a kill is rewritten rather than lost.
     batch_size = 500
     total = 0
-    for ack_id, group in df.groupby("ack_id", sort=False):
-        if pd.isna(ack_id) or not str(ack_id).strip():
-            continue
-        id_sql = "'" + str(ack_id).replace("'", "''") + "'"
-        delete_sql = f"DELETE FROM {glue_db}.{table} WHERE ack_id IN ({id_sql})"
+    batch_delete = os.getenv("WRITE_BATCH_DELETE", "0") == "1"
+
+    def _delete(id_list):
+        delete_sql = f"DELETE FROM {glue_db}.{table} WHERE ack_id IN ({id_list})"
         try:
             delete_qid = wr.athena.start_query_execution(
                 sql=delete_sql,
@@ -918,7 +931,18 @@ def write_iceberg_via_athena(df: pd.DataFrame, glue_db: str, table: str,
             )
             wr.athena.wait_query(query_execution_id=delete_qid)
         except Exception as e:
-            logger.warning("DELETE skipped for %s.%s ack_id=%s (not a transactional table?): %s", glue_db, table, ack_id, e)
+            logger.warning("DELETE skipped for %s.%s ack_id IN (%s) (not a transactional table?): %s",
+                           glue_db, table, id_list[:200], e)
+
+    if batch_delete:
+        _all = [str(a) for a in df["ack_id"].dropna().unique() if str(a).strip()]
+        if _all:
+            _delete(", ".join("'" + a.replace("'", "''") + "'" for a in _all))
+    for ack_id, group in df.groupby("ack_id", sort=False):
+        if pd.isna(ack_id) or not str(ack_id).strip():
+            continue
+        if not batch_delete:
+            _delete("'" + str(ack_id).replace("'", "''") + "'")
 
         group_total = len(group)
         for start in range(0, group_total, batch_size):
@@ -1884,7 +1908,7 @@ def _route_alternatives_from_staging(glue_db: str, staging_table: str, target_ta
     small regardless of how many ack_ids the caller passes in one call."""
     if not ack_ids:
         return
-    chunk_size = _ALT_ROUTE_CHUNK_SIZE
+    chunk_size = int(os.getenv("ALT_ROUTE_CHUNK_SIZE", "") or _ALT_ROUTE_CHUNK_SIZE)
     for i in range(0, len(ack_ids), chunk_size):
         _route_alternatives_chunk(glue_db, staging_table, target_table, ack_ids[i:i + chunk_size])
 
@@ -5691,7 +5715,8 @@ def run_post_extract_validation(
         logger.info("junk filter removed %d row(s) across %d plan(s)", len(_drops), len(_by_stem))
         _write_junk_drop_log(_drops)
 
-    reference = load_reference(glue_db, ref_table, workgroup, s3_staging)
+    reference = load_reference(glue_db, ref_table, workgroup, s3_staging,
+                               ack_ids=[str(r.get("pdf_stem", "") or "") for r in rows])
     extracted_totals = compute_extracted_mf_totals(rows)
 
     # Group all rows by pdf_stem for efficient dispatch
@@ -5867,18 +5892,18 @@ def run_post_extract_validation(
             alt_table = _os.getenv("ALTERNATIVES_TABLE", "").strip()
             if alt_table:
                 alt_ack_ids = combined["ack_id"].dropna().unique().tolist()
-                _route_alternatives_from_staging(validated_glue_db, staging_table, alt_table, alt_ack_ids)
-                if _os.getenv("ALT_MANAGER_LLM", "1") != "0":
-                    try:
-                        from .alt_manager_llm import fill_managers
-                        fill_managers(validated_glue_db, alt_table, alt_ack_ids)
-                    except Exception:  # manager fill is best-effort; routing already succeeded
-                        logger.exception("alt manager LLM fill failed for %d acks", len(alt_ack_ids))
-                try:  # spelling-variant / brand-name managers the exact alias join missed
-                    from .alt_manager_fuzzy import fill as fill_fuzzy_managers
-                    fill_fuzzy_managers(validated_glue_db, alt_table, alt_ack_ids)
-                except Exception:  # labelling only; routing already succeeded
-                    logger.exception("alt fuzzy manager fill failed for %d acks", len(alt_ack_ids))
+                defer_file = _os.getenv("ALT_ROUTE_DEFER_FILE", "").strip()
+                if defer_file:
+                    # Chunk runner (src/batch_chunks.py) routes the whole chunk's filings at chunk
+                    # end instead: the router query takes ~4 min to plan no matter how few filings
+                    # it covers, and every batch paid that under the shared write lock (2026-11-05).
+                    # Written under that lock, so parallel batches never interleave lines.
+                    with open(defer_file, "a") as fh:
+                        fh.write("".join(f"{a}\n" for a in alt_ack_ids))
+                    logger.info("[ALT DEFERRED] %d filings queued in %s for chunk-end routing",
+                                len(alt_ack_ids), defer_file)
+                else:
+                    route_alternatives_with_managers(validated_glue_db, staging_table, alt_table, alt_ack_ids)
         else:
             write_iceberg_via_athena(combined, validated_glue_db, validated_table)
 
@@ -5886,6 +5911,23 @@ def run_post_extract_validation(
                 counts["passed"], counts["failed"], counts["skipped"])
     return counts
 
+
+
+def route_alternatives_with_managers(glue_db: str, staging_table: str, alt_table: str, ack_ids: list) -> None:
+    """Route ack_ids' staging rows into the alternatives table, then fill managers (LLM cache + fuzzy)."""
+    import os as _os
+    _route_alternatives_from_staging(glue_db, staging_table, alt_table, ack_ids)
+    if _os.getenv("ALT_MANAGER_LLM", "1") != "0":
+        try:
+            from .alt_manager_llm import fill_managers
+            fill_managers(glue_db, alt_table, ack_ids)
+        except Exception:  # manager fill is best-effort; routing already succeeded
+            logger.exception("alt manager LLM fill failed for %d acks", len(ack_ids))
+    try:  # spelling-variant / brand-name managers the exact alias join missed
+        from .alt_manager_fuzzy import fill as fill_fuzzy_managers
+        fill_fuzzy_managers(glue_db, alt_table, ack_ids)
+    except Exception:  # labelling only; routing already succeeded
+        logger.exception("alt fuzzy manager fill failed for %d acks", len(ack_ids))
 
 
 def load_final_rows(db_path: str):

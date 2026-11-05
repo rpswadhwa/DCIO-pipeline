@@ -250,9 +250,12 @@ def _drop_non_pdfs(inputs):
     return bad
 
 
-def _pipeline_attempt(batch_date, acks, work_dir, log_path, mem_bytes, timeout_s, write_lock, not_pdf):
+def _pipeline_attempt(batch_date, acks, work_dir, log_path, mem_bytes, timeout_s, write_lock, not_pdf,
+                      alt_defer_file=None):
     """Fetch acks into work_dir/inputs and run run_pipeline on just them. Acks whose file isn't a
-    PDF are left out of the run and appended to not_pdf for the caller to quarantine."""
+    PDF are left out of the run and appended to not_pdf for the caller to quarantine.
+    alt_defer_file: the batch queues its filings there instead of routing alternatives itself
+    (ALT_ROUTE_DEFER_FILE; _post_chunk routes them)."""
     inputs = os.path.join(work_dir, "inputs")
     outputs = os.path.join(work_dir, "outputs")
     manifest = os.path.join(work_dir, "acks.txt")
@@ -268,6 +271,14 @@ def _pipeline_attempt(batch_date, acks, work_dir, log_path, mem_bytes, timeout_s
         return "ok", "no readable PDFs left"
     env = {**os.environ, "INPUT_DIR": inputs, "OUTPUT_DIR": outputs, "SYNC_S3_INPUTS": "0",
            "PIPELINE_WRITE_LOCK": write_lock, "PYTHONUNBUFFERED": "1"}
+    if alt_defer_file:
+        env["ALT_ROUTE_DEFER_FILE"] = alt_defer_file
+    # Batch-scoped writes (2026-11-05): one staging/MF DELETE per batch instead of per filing,
+    # and the MF class copy + mapping backfill limited to the batch's own filings --
+    # _post_chunk runs the whole-table pass once. CHUNK_BATCH_SCOPED=0 restores both.
+    if os.getenv("CHUNK_BATCH_SCOPED", "1") != "0":
+        env["WRITE_BATCH_DELETE"] = "1"
+        env["ENRICH_MF_BATCH_SCOPED"] = "1"
     cmd = os.environ.get("BATCH_CHUNKS_PIPELINE_CMD", f"{sys.executable} -m src.run_pipeline").split()
     try:
         return _run_capped(cmd, env, log_path, mem_bytes, timeout_s)
@@ -275,10 +286,54 @@ def _pipeline_attempt(batch_date, acks, work_dir, log_path, mem_bytes, timeout_s
         shutil.rmtree(inputs, ignore_errors=True)
 
 
-def _post_chunk(chunk, acks, chunk_dir):
-    """Classification + cross-table dedup, scoped to the chunk's finished filings."""
+def _alt_defer_path(chunk_dir, chunk):
+    """Filings a chunk's batches queued for alternatives routing (None when CHUNK_DEFER_ALT=0)."""
+    if os.getenv("CHUNK_DEFER_ALT", "1") == "0":
+        return None
+    os.makedirs(os.path.join(chunk_dir, "alt_pending"), exist_ok=True)
+    return os.path.abspath(os.path.join(chunk_dir, "alt_pending", f"{chunk}.txt"))
+
+
+def _route_chunk_alternatives(chunk, chunk_dir):
+    """Alternatives routing the chunk's batches deferred (ALT_ROUTE_DEFER_FILE): exactly the filings
+    each batch's validation would have routed itself, all at once.
+
+    The router query takes ~4 min to plan however few filings it covers (2026-11-05: 45 runs at
+    10 filings each, 185-245s planning of ~300s), so it runs here CHUNK_ALT_ROUTE_GROUP filings per
+    query instead of once per batch under the write lock. A failed pass is retried at the router's
+    old size of 25; filings still failing go to alt_route_failed.txt for a manual
+    `python -m src.route_alternatives_acks --ack-file ...`."""
+    ack_file = _alt_defer_path(chunk_dir, chunk)
+    acks = list(dict.fromkeys(_read_lines(ack_file))) if ack_file and os.path.exists(ack_file) else []
     if not acks:
         return
+    for group in (os.getenv("CHUNK_ALT_ROUTE_GROUP", "50"), "25"):
+        start = time.time()
+        _log(f"[CHUNK {chunk}] alternatives routing ({len(acks)} filings, {group} per query)")
+        rc = subprocess.run([sys.executable, "-m", "src.route_alternatives_acks", "--ack-file", ack_file],
+                            env={**os.environ, "ALT_ROUTE_CHUNK_SIZE": group}).returncode
+        if rc == 0:
+            _log(f"[CHUNK {chunk}] alternatives routing ok in {int(time.time() - start)}s")
+            return
+        _log(f"!!! WARNING: [CHUNK {chunk}] alternatives routing failed (exit {rc}, {group} per query)")
+    failed_path = os.path.join(chunk_dir, "alt_route_failed.txt")
+    _append_lines(failed_path, acks)
+    _log(f"!!! [CHUNK {chunk}] alternatives NOT routed for {len(acks)} filings -- listed in {failed_path}; "
+         f"rerun: python -m src.route_alternatives_acks --ack-file {ack_file}")
+
+
+def _post_chunk(chunk, acks, chunk_dir):
+    """Deferred alternatives routing, whole-table MF class pass, classification + cross-table dedup,
+    scoped to the chunk's finished filings."""
+    _route_chunk_alternatives(chunk, chunk_dir)
+    if not acks:
+        return
+    if os.getenv("CHUNK_BATCH_SCOPED", "1") != "0" and os.getenv("ENRICH_MF_ENABLED", "1") != "0":
+        _log(f"[CHUNK {chunk}] MF class copy + mapping backfill (whole table)")
+        rc = subprocess.run([sys.executable, "-m", "src.mf_mapping_enrichment"]).returncode
+        if rc != 0:
+            _log(f"!!! WARNING: [CHUNK {chunk}] MF whole-table pass failed (exit {rc}) -- "
+                 f"rerun: python -m src.mf_mapping_enrichment")
     ack_file = os.path.join(chunk_dir, "done", "acks", f"{chunk}.txt")
     _log(f"[CHUNK {chunk}] classification ({len(acks)} filings)")
     rc = subprocess.run([sys.executable, "run_classification.py"], env={**os.environ, "ACK_IDS": ",".join(acks)}).returncode
@@ -339,7 +394,8 @@ def run_tier(batch_date, chunk_dir, tier, workers, micro, priority_micro, retry_
                 log_path = os.path.join(log_dir, f"{chunk}_{tag}{idx:03d}.log")
                 not_pdf = []
                 status, detail = _pipeline_attempt(batch_date, acks, work_dir, log_path,
-                                                   mem_gb * gib, timeout_min * 60, write_lock, not_pdf)
+                                                   mem_gb * gib, timeout_min * 60, write_lock, not_pdf,
+                                                   _alt_defer_path(chunk_dir, chunk))
                 acks = _quarantine_not_pdf(chunk, acks, not_pdf, quarantine_path)
                 if status == "ok":
                     _append_lines(done_path, acks)
@@ -364,7 +420,8 @@ def run_tier(batch_date, chunk_dir, tier, workers, micro, priority_micro, retry_
             log_path = os.path.join(log_dir, f"{chunk}_solo_{ack}.log")
             not_pdf = []
             status, detail = _pipeline_attempt(batch_date, [ack], os.path.join(work_root, "solo"), log_path,
-                                               solo_mem_gb * gib, solo_timeout_min * 60, write_lock, not_pdf)
+                                               solo_mem_gb * gib, solo_timeout_min * 60, write_lock, not_pdf,
+                                               _alt_defer_path(chunk_dir, chunk))
             if not _quarantine_not_pdf(chunk, [ack], not_pdf, quarantine_path):
                 continue
             if status == "ok":

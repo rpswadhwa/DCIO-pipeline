@@ -918,7 +918,9 @@ def main():
                 mapping_table = read_env("FUND_MAPPING_TABLE", "fund_intelligence_mapping_mf")
                 overwrite = read_env("ENRICH_MF_OVERWRITE", "0") == "1"
 
-                to_update, to_backfill = enrich_mf_classes(
+                # Chunk runner: this batch's filings only; it runs a whole-table pass per chunk.
+                scoped = read_env("ENRICH_MF_BATCH_SCOPED", "0") == "1"
+                enrich_mf_classes(
                     mf_db=mf_db,
                     mf_table=mf_table,
                     mapping_db=mapping_db,
@@ -926,9 +928,10 @@ def main():
                     workgroup=read_env("ATHENA_WORKGROUP", "primary"),
                     s3_staging=read_env("ATHENA_STAGING_S3", ""),
                     overwrite_existing=overwrite,
+                    ack_ids=list(current_batch_acks) if scoped else None,
                 )
-                print(f"  ✓ Estimated rows eligible for update: {to_update}")
-                print(f"  ✓ Unmapped names backfilled to mapping: {to_backfill}")
+                print(f"  ✓ MF classes copied + unmapped names backfilled"
+                      f" ({len(current_batch_acks)} filings)" if scoped else "  ✓ MF classes copied + unmapped names backfilled")
             except Exception as exc:
                 print(f"  ⚠ MF enrichment step failed: {exc}")
                 downstream_errors.append(f"MF enrichment failed: {exc}")
