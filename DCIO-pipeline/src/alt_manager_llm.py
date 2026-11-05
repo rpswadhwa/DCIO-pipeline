@@ -27,6 +27,7 @@ import json
 import logging
 import os
 import re
+import threading
 import time
 from collections import Counter, defaultdict
 from concurrent.futures import ThreadPoolExecutor
@@ -41,6 +42,9 @@ METHOD = "llm_lookup_v1"
 MATCH_CONFIDENCE = "MEDIUM"
 MODEL = os.getenv("ALT_MANAGER_LLM_MODEL", "gemini-2.5-flash")
 URL = f"https://generativelanguage.googleapis.com/v1beta/models/{MODEL}:generateContent"
+# Set on HTTP 402 (prepaid credits used up): every other name fails the same way, so the
+# rest of the batch is skipped instead of each name burning 4 retries. (2026-11-05)
+_BILLING_DOWN = threading.Event()
 
 PROMPT = """You identify the investment manager (the asset management firm that sponsors/manages the fund) of a holding listed on a US retirement plan's Form 5500 Schedule H line 4i schedule of assets.
 
@@ -107,8 +111,13 @@ def _ask(key: str, name: str, section: str, plan: str) -> dict:
     }
     err = ""
     for attempt in range(4):
+        if _BILLING_DOWN.is_set():
+            return {"error": "skipped: Gemini credits depleted (HTTP 402)"}
         try:
             r = requests.post(URL, params={"key": key}, json=body, timeout=120)
+            if r.status_code == 402:
+                _BILLING_DOWN.set()
+                return {"error": f"HTTP 402: {r.text[:150]}"}
             if r.status_code in (429, 500, 503):
                 time.sleep(5 * (attempt + 1))
                 continue
@@ -168,11 +177,15 @@ def lookup_new_names(glue_db: str, target_table: str, ack_ids: Optional[List[str
         logger.info("alt manager LLM lookup: no new names")
         return 0
     rows = df.to_dict("records")
+    _BILLING_DOWN.clear()
     workers = int(os.getenv("ALT_MANAGER_LLM_WORKERS", "4"))
     t0 = time.time()
     with ThreadPoolExecutor(max_workers=workers) as ex:
         answers = list(ex.map(lambda r: _ask(key, r["name"], r["section"], r["plan"]), rows))
 
+    if _BILLING_DOWN.is_set():
+        logger.warning("alt manager LLM lookup: Gemini credits depleted (HTTP 402) -- %d names skipped, "
+                       "retried next run once credits are topped up", len(rows))
     vk = _vocab(glue_db, target_table)
     out = []
     for r, a in zip(rows, answers):
