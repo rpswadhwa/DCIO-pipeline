@@ -5652,6 +5652,20 @@ def run_post_extract_validation(
     if _n_dup:
         logger.info("Deduped %d exact scrape-duplicate row(s) before validation/load", _n_dup)
 
+    # Per-plan notes (src/plan_notes.py): rows an admin's note typed keep that type through every
+    # re-typing step below (marked `_note_type`, put back after each). Reports come from this run.
+    from .plan_notes import note_types_from_reports, reassert_note_types
+    _note_types = {}
+    try:
+        _note_types = note_types_from_reports(
+            os.path.join(os.path.dirname(db_path), "plan_notes"),
+            [str(r.get("pdf_stem", "") or "").strip() for r in rows])
+    except Exception as _nexc:
+        logger.warning("plan notes: reports not read, note types not protected: %s", _nexc)
+    if _note_types:
+        logger.info("plan notes: %d note-typed filing(s), %d row(s) re-asserted after cleanup",
+                    len(_note_types), reassert_note_types(rows, _note_types))
+
     # Trailing-subtotal typing (FALLBACK): reverse-propagate asset type from a "Total ..." /
     # bare-type-label subtotal line to the still-untyped rows above it. Only fills rows still
     # BLANK after the section-heading + per-row-type methods. Per plan, in reading order, and
@@ -5691,7 +5705,9 @@ def run_post_extract_validation(
         # _mf_excluded keeps mf_reconcile's blank-row recovery from re-typing those as MFs.
         _junk, _restored = [], []
         for _r, _reason in _res["removed_junk"]:
-            if _junk_restorable(_r, _reason):
+            if _r.get("_note_type"):
+                _restored.append(_r)   # an admin's note typed it: a holding, not junk
+            elif _junk_restorable(_r, _reason):
                 if not _is_file_typed_non_mf(_r):
                     _r["_mf_excluded"] = True
                 _restored.append(_r)
@@ -5699,7 +5715,7 @@ def run_post_extract_validation(
                 _junk.append((_r, _reason))
         _near = []
         for _r in _res.get("near_dup_removed", []):
-            (_restored if _is_file_typed_non_mf(_r) else _near).append(_r)
+            (_restored if _is_file_typed_non_mf(_r) or _r.get("_note_type") else _near).append(_r)
         for _r in _res["keep"] + _restored:
             _r.pop("fund_name", None)
             _r.pop("plan_investment_amt", None)
@@ -5737,7 +5753,7 @@ def run_post_extract_validation(
     _retyped: Dict[str, int] = defaultdict(int)
     for _r in rows:
         _t = str(_r.get("asset_type") or "").strip().lower()
-        if _t and _t not in MF_ASSET_TYPES:
+        if (_t and _t not in MF_ASSET_TYPES) or _r.get("_note_type"):
             continue
         _new = _non_mf_type(f"{_r.get('issuer_name') or ''} {_r.get('investment_description') or ''}".strip())
         if _new:
@@ -5777,8 +5793,32 @@ def run_post_extract_validation(
         if _remed:
             logger.info("MF reconciliation re-typed %d row(s) across over/under-capture plans", _remed)
             extracted_totals = compute_extracted_mf_totals(rows)   # recompute with corrected types
+    if _note_types and reassert_note_types(rows, _note_types):
+        extracted_totals = compute_extracted_mf_totals(rows)   # reconciliation touched a note-typed row
+    if _note_types:
+        # Stable value rows a note typed, in staging's own name/amount form, so the stable value
+        # router (src/stable_value_expanded.py) knows which staged rows are the note's.
+        _sv_rows = []
+        for _r in rows:
+            if _r.get("_note_type") != "Stable Value Fund":
+                continue
+            _v = parse_currency_value(_r.get("current_value"))
+            _sv_rows.append({
+                "ack_id": str(_r.get("pdf_stem", "") or "").strip(),
+                "raw_entity_name": _strip_trailing_value_tokens(_normalize_mf_name(
+                    pick_fund_name(_r.get("issuer_name"), _r.get("investment_description")))),
+                "raw_sponsor_name": str(_r.get("issuer_name", "") or "").strip(),
+                "plan_investment_amt": None if _v is None or _v >= 2e10 else _v,
+                "note": str(_r.get("pdf_stem", "") or "").strip(),   # the filing's report names the note
+            })
+        if _sv_rows:
+            import json as _json
+            with open(os.path.join(os.path.dirname(db_path), "plan_notes", "sv_note_rows.json"), "w") as _fh:
+                _json.dump(_sv_rows, _fh)
+            logger.info("plan notes: %d stable value row(s) typed by a note", len(_sv_rows))
     for _r in rows:
         _r.pop("_mf_excluded", None)
+        _r.pop("_note_type", None)
 
     for pdf_stem in sorted(rows_by_stem):
         stem_rows = rows_by_stem[pdf_stem]

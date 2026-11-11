@@ -299,6 +299,22 @@ def main():
     if read_env("SYNC_S3_INPUTS", "1") != "0":
         sync_s3_inputs(s3_input_path, input_dir)
 
+    # Per-plan notes (src/plan_notes.py): admin-written, plan-scoped instructions from the
+    # Undercapture Desk. A noted filing finds its pages from the note's headings (unless pages
+    # were picked by hand), always goes through the LLM row extractor with the note's advice,
+    # then gets the note's rules applied in code. No notes file -> no change to the run.
+    plan_notes_by_ack = {}
+    try:
+        from .plan_notes import load_notes, notes_for_acks
+        _notes = load_notes()
+        if _notes:
+            _acks = [f.rsplit(".", 1)[0] for f in os.listdir(input_dir) if f.lower().endswith(".pdf")]
+            plan_notes_by_ack = notes_for_acks(
+                _notes, _acks, read_env("ATHENA_WORKGROUP", "primary"), read_env("ATHENA_STAGING_S3", ""))
+            print(f"  Plan notes: {len(_notes)} plan(s) noted, {len(plan_notes_by_ack)} filing(s) in this run")
+    except Exception as exc:
+        print(f"  [plan_notes] lookup failed, notes not applied this run: {exc}")
+
     if use_ocr:
         print("\n[STEP 1] OCR extraction")
         # classify_pages.py's per-page keyword scan stays on tesseract (fast, already
@@ -423,10 +439,27 @@ def main():
             classified = classify_pages_text(pdf_path, keywords_yml)
             pages.extend(classified)
 
+            note = plan_notes_by_ack.get(pdf_stem)
+            note_pages = []
+            if note is not None and pdf_stem not in page_overrides and note.start_heading:
+                try:
+                    from .plan_notes import find_note_pages
+                    note_pages = find_note_pages(pdf_path, note)
+                    if note_pages and not note.end_heading:
+                        note_pages = expand_continuation_pages(pdf_path, note_pages)
+                except Exception as exc:
+                    print(f"    [plan_notes] page search failed: {exc}")
+                print(f"    [plan_notes] {note.tag}: pages from note headings {note_pages or 'NOT FOUND'}")
+
             if pdf_stem in page_overrides:
                 supp_nums = page_overrides[pdf_stem]
+                note_page_source = "manual"
                 print(f"    Manual page override active, skipping auto-detection: {supp_nums}")
+            elif note_pages:
+                supp_nums = note_pages
+                note_page_source = "note"
             else:
+                note_page_source = "auto"
                 supp_nums = [p["page_number"] for p in classified if p.get("is_supplemental") == 1]
                 expanded_supp_nums = expand_continuation_pages(pdf_path, supp_nums)
                 if expanded_supp_nums != supp_nums:
@@ -461,16 +494,23 @@ def main():
             if sch4i_result is not None:
                 plan_info = {}
                 page_data = sch4i_result["pages"]
-            elif llm_full_extract and supp_nums and llm_full_extract_count < llm_full_extract_limit:
-                llm_full_extract_count += 1
-                print(f"    [LLM_FULL_EXTRACT {llm_full_extract_count}/{llm_full_extract_limit}] "
-                      f"extracting rows via {llm_full_extract_provider}/{llm_full_extract_model}")
+            elif supp_nums and (note is not None or (
+                    llm_full_extract and llm_full_extract_count < llm_full_extract_limit)):
+                plan_instructions = note.prompt_addendum() if note is not None else ""
+                if note is None:
+                    llm_full_extract_count += 1
+                    print(f"    [LLM_FULL_EXTRACT {llm_full_extract_count}/{llm_full_extract_limit}] "
+                          f"extracting rows via {llm_full_extract_provider}/{llm_full_extract_model}")
+                else:
+                    print(f"    [plan_notes] {note.tag}: extracting rows via "
+                          f"{llm_full_extract_provider}/{llm_full_extract_model} with the plan's note")
                 from .llm_row_extract import extract_investments_via_llm
                 plan_info = {}
                 page_data = extract_investments_via_llm(
                     pdf_path, supp_nums,
                     provider=llm_full_extract_provider,
                     model=llm_full_extract_model,
+                    plan_instructions=plan_instructions,
                 )
                 # Manual page overrides often target scanned (no-text-layer) pages,
                 # which the text-based path above can't read at all (pdfplumber
@@ -479,7 +519,7 @@ def main():
                 # whole-document structural/simple fallbacks below, which would
                 # otherwise silently grab an unrelated page instead of the one
                 # actually requested.
-                if pdf_stem in page_overrides and not _has_useful_extracted_rows(page_data):
+                if (pdf_stem in page_overrides or note is not None) and not _has_useful_extracted_rows(page_data):
                     print(f"    [LLM_FULL_EXTRACT] no usable rows from text layer, "
                           f"retrying pages {supp_nums} via vision")
                     from .llm_vision_extract import extract_investments_via_llm_vision
@@ -487,6 +527,7 @@ def main():
                         pdf_path, supp_nums,
                         provider=llm_full_extract_provider,
                         model=llm_full_extract_model,
+                        plan_instructions=plan_instructions,
                     )
                     if _has_useful_extracted_rows(vision_data):
                         page_data = vision_data
@@ -502,7 +543,7 @@ def main():
             if plan_info:
                 plan_info_map[pdf_stem] = plan_info
 
-            if not _has_useful_extracted_rows(page_data):
+            if note is None and not _has_useful_extracted_rows(page_data):
                 structural_nums = find_structural_investment_pages(pdf_path)
                 structural_nums = [p for p in structural_nums if p not in supp_nums]
                 if structural_nums:
@@ -526,7 +567,7 @@ def main():
             # fallback above have BOTH already found zero usable rows for this PDF. Catches
             # simplified 2-column Schedule-of-Assets formats without loosening the primary
             # detection logic used on every filing.
-            if not _has_useful_extracted_rows(page_data):
+            if note is None and not _has_useful_extracted_rows(page_data):
                 simple_nums = find_simple_investment_pages(pdf_path)
                 simple_nums = [p for p in simple_nums if p not in supp_nums]
                 if simple_nums:
@@ -605,6 +646,19 @@ def main():
                         print(f"    Section-typing: {_st_stats}")
                 except Exception as _st_exc:
                     print(f"    [section-typing] stage skipped: {_st_exc}")
+
+            # The note's rules run last so nothing above re-types or re-scales after them.
+            if note is not None and sch4i_result is None:
+                try:
+                    from .plan_notes import apply_rules, write_report
+                    note_report = apply_rules(page_data, note)
+                    write_report(pdf_stem, note, supp_nums, note_page_source, note_report, output_dir)
+                    acts = {}
+                    for e in note_report:
+                        acts[e["action"]] = acts.get(e["action"], 0) + 1
+                    print(f"    [plan_notes] {note.tag}: {len(note_report)} row(s) read {acts}")
+                except Exception as exc:
+                    print(f"    [plan_notes] rules not applied: {exc}")
 
             supplemental_pages.extend(page_data)
 
@@ -860,6 +914,9 @@ def main():
     counts = dict(passed=0, failed=0, skipped=0)
 
     def route_current_batch():
+        sv_note_rows = os.path.join(output_dir, "plan_notes", "sv_note_rows.json")
+        if os.path.exists(sv_note_rows):
+            os.environ["PLAN_NOTES_SV_ROWS"] = sv_note_rows   # read by the router subprocess
         return run_stable_value_pipeline_step(
             ack_ids=current_batch_acks, staging_completed=staging_completed,
             output_dir=output_dir,

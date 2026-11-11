@@ -153,13 +153,22 @@ def load_product_rules(path):
     return result
 
 
+# (2026-11-10) A per-plan note (src/plan_notes.py) typing this exact row Stable Value Fund is an
+# admin's reading of that plan's filing: it settles a missing-evidence hold, but no other check.
+NOTE_SETTLES = {'stable_value_product_evidence_required', 'insurance_wrapper_without_stable_value_mandate',
+                'conflicting_stable_value_evidence'}
+
+
 def decide(row, indexes, pair_identities, duplicate_of='', alternative_patterns=(), label_conflict=False,
-           staging_amount_names=None, approved_rules=None):
+           staging_amount_names=None, approved_rules=None, note_ids=None):
     status, destination, reason, rule = classify(row, alternative_patterns)
     approval = (approved_rules or {}).get(approval_key(row))
     if approval and reason in {'stable_value_product_evidence_required', 'account_structure_or_menu_evidence_required',
                               'alternative_keyword_requires_review', 'insurance_wrapper_without_stable_value_mandate'}:
         status, destination, reason, rule = 'INSERT', approval['destination_table'], 'approved_product_rule', approval['rule_id']
+    note_tag = (note_ids or {}).get(identity(row))
+    if note_tag and status == 'UNRESOLVED' and reason in NOTE_SETTLES:
+        status, destination, reason, rule = 'INSERT', choose_vehicle(row)[0], 'plan_note', 'plan_note:' + note_tag
     result = dict(row, candidate_id=identity(row), outcome=status,
                   destination_table=destination, reason=reason, rule=rule,
                   matched_history_tables='', matched_history_names='',

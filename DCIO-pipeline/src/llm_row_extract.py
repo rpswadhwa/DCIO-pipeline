@@ -172,7 +172,8 @@ def _apply_scale(row: dict, scale_multiplier: float) -> None:
     row["current_value"] = str(int(scaled)) if scaled.is_integer() else str(scaled)
 
 
-def _process_page(pdf_path: str, pdf_stem: str, page_num: int, provider: str, model: str) -> dict:
+def _process_page(pdf_path: str, pdf_stem: str, page_num: int, provider: str, model: str,
+                  plan_instructions: str = "") -> dict:
     empty = {
         "pdf": pdf_path, "pdf_stem": pdf_stem, "page_number": page_num,
         "mapped_rows": [], "ocr_cells": [], "normalized_path": pdf_path,
@@ -182,7 +183,8 @@ def _process_page(pdf_path: str, pdf_stem: str, page_num: int, provider: str, mo
     if not page_text.strip():
         return empty
 
-    prompt = {"instructions": _PROMPT_INSTRUCTIONS, "page_text": page_text}
+    instructions = f"{_PROMPT_INSTRUCTIONS} {plan_instructions}" if plan_instructions else _PROMPT_INSTRUCTIONS
+    prompt = {"instructions": instructions, "page_text": page_text}
     raw = None
     last_exc = None
     for attempt in range(_MAX_ATTEMPTS):
@@ -203,6 +205,7 @@ def _process_page(pdf_path: str, pdf_stem: str, page_num: int, provider: str, mo
 
     scale_multiplier, llm_rows = _parse_llm_response(raw)
     mapped_rows = []
+    row_headings = {}
     for row_idx, llm_row in enumerate(llm_rows, start=1):
         row = {f: "" for f in _SCHEMA_FIELDS}
         for field in _SCHEMA_FIELDS:
@@ -238,6 +241,7 @@ def _process_page(pdf_path: str, pdf_stem: str, page_num: int, provider: str, mo
             row["asset_type_source"] = "inferred" if row["asset_type"] else "none"
         row["page_number"] = page_num
         row["row_id"] = row_idx
+        row_headings[row_idx] = str(llm_row.get("section_heading") or "").strip()
         mapped_rows.append(row)
 
     scale_note = f", scale_multiplier={scale_multiplier:g}" if scale_multiplier != 1 else ""
@@ -245,6 +249,9 @@ def _process_page(pdf_path: str, pdf_stem: str, page_num: int, provider: str, mo
     return {
         "pdf": pdf_path, "pdf_stem": pdf_stem, "page_number": page_num,
         "mapped_rows": mapped_rows, "ocr_cells": [], "normalized_path": pdf_path,
+        # Page-level, so they never reach row-level writers: the heading each row sat under and
+        # the scale the page was read at, for per-plan note rules (src/plan_notes.py).
+        "row_headings": row_headings, "scale_multiplier": scale_multiplier,
     }
 
 
@@ -253,8 +260,11 @@ def extract_investments_via_llm(
     page_nums: list,
     provider: str = "gemini",
     model: str = "gemini-2.5-flash",
+    plan_instructions: str = "",
 ) -> list:
     """Returns a page_data list matching extract_tables_and_map()'s contract.
+
+    plan_instructions: a per-plan note's advice (src/plan_notes.py), appended to the prompt.
 
     Pages are sent to the LLM concurrently (each page is an independent prompt/
     response, no shared state) since a page-by-page sequential loop made even a
@@ -264,11 +274,11 @@ def extract_investments_via_llm(
     pdf_stem = pdf_path.split("/")[-1].rsplit(".", 1)[0].replace("\\", "/").split("/")[-1]
 
     if len(page_nums) <= 1:
-        return [_process_page(pdf_path, pdf_stem, p, provider, model) for p in page_nums]
+        return [_process_page(pdf_path, pdf_stem, p, provider, model, plan_instructions) for p in page_nums]
 
     with ThreadPoolExecutor(max_workers=min(_MAX_WORKERS, len(page_nums))) as pool:
         futures = {
-            pool.submit(_process_page, pdf_path, pdf_stem, p, provider, model): p
+            pool.submit(_process_page, pdf_path, pdf_stem, p, provider, model, plan_instructions): p
             for p in page_nums
         }
         by_page = {futures[fut]: fut.result() for fut in futures}
