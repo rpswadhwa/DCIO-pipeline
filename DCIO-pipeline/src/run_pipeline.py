@@ -469,23 +469,37 @@ def main():
                 print(f"    Supplemental pages: {supp_nums}")
 
             sch4i_result = None
-            if pdf_stem in sch4i_ack_ids:
+            # An unregistered plan whose pages are a print the parser knows on
+            # sight (Northern Trust's held schedule, 2026-11-13) takes the same
+            # path, but only when its printed grand total ties as well.
+            sch4i_auto = None
+            if pdf_stem not in sch4i_ack_ids and supp_nums:
+                try:
+                    from .schedule_4i_text_parser import detect_unregistered_layout
+                    sch4i_auto = detect_unregistered_layout(pdf_path, supp_nums)
+                except Exception as exc:
+                    print(f"    [sch4i_text_parser] layout detection failed: {exc}")
+                if sch4i_auto:
+                    print(f"    [sch4i_text_parser] unregistered plan, recognized layout {sch4i_auto['layout']}")
+            if pdf_stem in sch4i_ack_ids or sch4i_auto:
                 from .schedule_4i_text_parser import (
                     PLAN_PARSERS, find_schedule_4i_pages, is_trustworthy,
                     parse_schedule_4i_pages, print_parse_report,
                 )
-                plan_id = sch4i_ack_ids[pdf_stem]
-                sch4i_layout = PLAN_PARSERS[plan_id].get("layout", "default")
+                plan_id = sch4i_ack_ids.get(pdf_stem)
+                sch4i_opts = PLAN_PARSERS[plan_id] if plan_id else sch4i_auto
+                sch4i_layout = sch4i_opts.get("layout", "default")
                 sch4i_pages = find_schedule_4i_pages(
-                    pdf_path, PLAN_PARSERS[plan_id]["start_heading"], sch4i_layout)
-                print(f"    [sch4i_text_parser] plan_id {plan_id}: schedule pages {sch4i_pages}")
+                    pdf_path, sch4i_opts["start_heading"], sch4i_layout)
+                print(f"    [sch4i_text_parser] plan_id {plan_id or 'unregistered'}: schedule pages {sch4i_pages}")
                 if sch4i_pages:
                     sch4i_result = parse_schedule_4i_pages(pdf_path, sch4i_pages, sch4i_layout, plan_id)
                 if sch4i_result is None:
                     print("    [sch4i_text_parser] WARNING: schedule not found/recognized, falling through")
                 else:
                     print_parse_report(sch4i_result)
-                    if not is_trustworthy(sch4i_result):
+                    if not is_trustworthy(sch4i_result) or (
+                            sch4i_auto and sch4i_result["grand_reconciled"] is not True):
                         print("    [sch4i_text_parser] WARNING: totals do not reconcile, falling through")
                         sch4i_result = None
                     else:
