@@ -1910,9 +1910,10 @@ _IC_SKIP_RE = re.compile(r"^Fidelity\s+Internal\s+Information$|^#$")
 # "u", 2026-10-17).
 _NHR_HEADER_RE = re.compile(r"^(?:Schedule\s+of\s+Assets\s+Held|u?Assets\s+held)\s+for\s+Investment\s+Purposes$", re.M)
 # Column header, the last line of every page's title block.
-# CenturyLink's prints "Cost" alone (2026-10-17).
+# CenturyLink's prints "Cost" alone (2026-10-17). ORNL's breaks the word with a
+# stray space, "Historica l" / "Historic al" (2026-11-16).
 _NHR_COLUMNS_RE = re.compile(r"^Security\s+Description\s+/\s+Asset\s+ID\s+Shares/Par\s+Value\s+"
-                             r"(?:Historical\s+)?Cost\s+Current\s+Value$", re.M)
+                             r"(?:H ?i ?s ?t ?o ?r ?i ?c ?a ?l\s+)?Cost\s+Current\s+Value$", re.M)
 # The unnamed grand total; category and sub-group totals carry a name.
 _NHR_GRAND_RE = re.compile(r"^Total\s+\(?-?[\d,]+\.\d{2}\)?\s+\(?-?[\d,]+\.\d{2}\)?$", re.M)
 # Securities-lending legend and Northern Trust's page footer.
@@ -2708,7 +2709,25 @@ def _stream_runs_text(page, tol: float = 2.0) -> str:
                      for _, rs in lines)
 
 
+def _nhr_join_split_amounts(text: str) -> str:
+    """Re-join amounts the text layer breaks with a stray space, as ORNL's
+    (2026-11-16): "-1,062, 225.08", "1,882,758 ,978.28", and "-545,684 836.96",
+    whose comma is lost. Every NT amount carries decimals, so a comma-grouped
+    integer just before "ddd.dd" is the front of the same amount."""
+    text = re.sub(r"(\d,) +(?=\d{3}(?:[.,]\d|\s|$))", r"\1", text, flags=re.M)
+    text = re.sub(r"(\d) +(?=,\d{3}[.,]\d)", r"\1", text)
+    # Split inside a group, "8,291,4 80.28": rejoin when the two pieces make three digits.
+    text = re.sub(r"(?<![\d.,])(-?\d{1,3}(?:,\d{3})*,)(\d{1,2}) (\d{1,2})(?=\.\d{2}(?:\s|$))",
+                  lambda g: g.group(1) + g.group(2) + g.group(3) if len(g.group(2) + g.group(3)) == 3
+                  else g.group(0), text)
+    return re.sub(r"(?<![\d.,])(-?\d{1,3}(?:,\d{3})+) (\d{3}\.\d{2})(?=\s|$)", r"\1,\2", text, flags=re.M)
+
+
 def _nhr_text(page) -> str:
+    return _nhr_join_split_amounts(_nhr_text_raw(page))
+
+
+def _nhr_text_raw(page) -> str:
     """_upright_text for nt_held_regions. Some filings set the words so close
     that the default tolerance glues them ("SecurityDescription/AssetID", BJC);
     when the column header is lost that way, read again with a tighter one,
@@ -4772,7 +4791,9 @@ def _parse_nt_held_regions(pdf_path: str, page_nums: List[int],
                 if not name:
                     grand_total = t2[1]
                     break
-                if current and current["heading"].startswith(name):
+                # Case-blind: CenturyLink DC heads "Value of Interest In Common/Collective
+                # Trusts" and totals "... in ..." (2026-11-16).
+                if current and current["heading"].lower().startswith(name.lower()):
                     current["subtotal"] = t2[1]
                     current, group, expect = None, None, "category"
                 else:
