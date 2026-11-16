@@ -1274,6 +1274,12 @@ def _route_mf_from_staging(glue_db: str, staging_table: str, target_table: str, 
 # (comma-separated) lets named filings through when a drop is intended.
 # Held only below 70% of what is stored (2026-10-21).
 _REGRESSION_DROP = 0.30
+# A typed-dollar drop holds only when the dollars that lost their type are
+# material to the filing: over 1% of its larger total, new or stored. Halliburton's
+# stable value master trust (2026-11-16) was held because its one stored row, a
+# CUSIP misread as $935,908, was typed and the correct rerun's $402.6M sits in
+# "Value of Interest in Master Trusts", which carries no type.
+_REGRESSION_TYPED_MATERIAL = 0.01
 
 
 def _regression_holds(glue_db: str, staging_table: str, target_table: str,
@@ -1324,7 +1330,8 @@ def _regression_holds(glue_db: str, staging_table: str, target_table: str,
                 holds[ack] = f"staging rows {s.n} -> {n}"
             elif (s.v or 0) > 0 and v < s.v * keep:
                 holds[ack] = f"staging ${s.v:,.0f} -> ${v:,.0f}"
-            elif (s.typed or 0) > 0 and typed < s.typed * keep:
+            elif ((s.typed or 0) > 0 and typed < s.typed * keep
+                  and s.typed - typed > _REGRESSION_TYPED_MATERIAL * max(v, s.v or 0)):
                 holds[ack] = f"typed staging ${s.typed:,.0f} -> ${typed:,.0f}"
             if ack in holds:
                 continue
