@@ -20,6 +20,8 @@ deleted on its own, and a rerun resumes after the last finished chunk.
   python3.11 -m src.batch_chunks plan  --batch-date 2026-11-02 --out data/chunks/2026-11-02
   python3.11 -m src.batch_chunks fetch --batch-date 2026-11-02 --manifest .../p0001.txt --dest data/inputs
   python3.11 -m src.batch_chunks run   --batch-date 2026-11-02 --chunk-dir data/chunks/2026-11-02 --tier priority
+  python3.11 -m src.batch_chunks plan-gap --out data/chunks/gap --skip-from data/chunks/2026-11-02   (2026-11-16)
+  python3.11 -m src.batch_chunks run   --chunk-dir data/chunks/gap --tier gap
 """
 import argparse
 import contextlib
@@ -99,17 +101,130 @@ def plan(batch_date, out_dir, chunk_size, min_assets, exclude_types):
     return 0
 
 
-def fetch(batch_date, manifest, dest):
+# ---------------------------------------------------------------------------------------------
+# plan-gap (2026-11-16)
+#
+# Orders filings by how many certified dollars we have NOT captured, across every release folder,
+# instead of by plan size within one folder. Gap per filing (latest filing per plan = plan_master):
+#   certified mutual funds (amt_mutual_funds) + certified alternatives (amt_joint_venture +
+#   amt_real_estate)  minus  plan_mf_history_v3 sum  minus  plan_alternatives_history sum.
+# Total assets minus staging is NOT the gap: it counts company stock and CITs (CITs come from Sch D).
+#
+#   --scope never-run : filings with no rows in plan_holdings_staging (default)
+#           short     : filings that have staging rows but are still short -- rerun these only after
+#                       the parser fix that applies to them is deployed; the regression guard keeps
+#                       stored rows if a rerun comes out worse
+#           all       : both
+#   --skip-from DIR   : leave out filings an earlier chunk run already attempted (DIR/done/acks/*.txt
+#                       and DIR/quarantine.tsv), e.g. priority filings that ran but landed nothing.
+#
+# Writes g####.txt manifests (largest gap first) plus keys.tsv (ack -> S3 key), so `run --tier gap`
+# fetches each PDF from whichever batch_date folder holds it. gap_plan.tsv lists the full queue.
+# ---------------------------------------------------------------------------------------------
+
+GAP_SQL = """
+WITH pm AS (SELECT CAST(ack_id AS varchar) ack_id, max(plan_type) plan_type FROM default.plan_master
+            WHERE ack_id IS NOT NULL GROUP BY 1),
+p AS (SELECT CAST(a.ack_id AS varchar) ack_id,
+             max(coalesce(try_cast(amt_mutual_funds AS double), 0)) mfc,
+             max(coalesce(try_cast(amt_joint_venture AS double), 0) + coalesce(try_cast(amt_real_estate AS double), 0)) altc
+      FROM default.plan_asset_allocation a JOIN pm ON pm.ack_id = CAST(a.ack_id AS varchar) GROUP BY 1),
+m AS (SELECT CAST(ack_id AS varchar) ack_id, sum(try_cast(plan_investment_amt AS double)) v
+      FROM default.plan_mf_history_v3 GROUP BY 1),
+l AS (SELECT CAST(ack_id AS varchar) ack_id, sum(try_cast(plan_investment_amt AS double)) v
+      FROM default.plan_alternatives_history GROUP BY 1),
+s AS (SELECT DISTINCT CAST(ack_id AS varchar) ack_id FROM default.plan_holdings_staging)
+SELECT p.ack_id, pm.plan_type,
+       greatest(p.mfc - coalesce(m.v, 0), 0) + greatest(p.altc - coalesce(l.v, 0), 0) gap,
+       s.ack_id IS NOT NULL staged
+FROM p JOIN pm ON pm.ack_id = p.ack_id
+LEFT JOIN m ON m.ack_id = p.ack_id LEFT JOIN l ON l.ack_id = p.ack_id LEFT JOIN s ON s.ack_id = p.ack_id
+WHERE greatest(p.mfc - coalesce(m.v, 0), 0) + greatest(p.altc - coalesce(l.v, 0), 0) >= {min_gap}
+"""
+
+
+def list_all_pdf_keys():
+    """ack -> S3 key for every filing PDF in every batch_date folder (latest folder wins on repeats)."""
+    s3 = boto3.client("s3")
+    keys = {}
+    for page in s3.get_paginator("list_objects_v2").paginate(Bucket=BUCKET, Prefix="filings_5500_pdf/"):
+        for obj in page.get("Contents", []):
+            key = obj["Key"]
+            name = key.rsplit("/", 1)[-1]
+            if name.lower().endswith(".pdf") and "batch_date=" in key:
+                ack = name[:-4]
+                if ack not in keys or key > keys[ack]:
+                    keys[ack] = key
+    return keys
+
+
+def _attempted(chunk_dirs):
+    seen = set()
+    for d in chunk_dirs:
+        acks_dir = os.path.join(d, "done", "acks")
+        if os.path.isdir(acks_dir):
+            for f in os.listdir(acks_dir):
+                seen.update(_read_lines(os.path.join(acks_dir, f)))
+        seen.update(_quarantined(d))
+    return seen
+
+
+def plan_gap(out_dir, chunk_size, min_gap, scope, exclude_types, skip_from):
+    df = wr.athena.read_sql_query(GAP_SQL.format(min_gap=float(min_gap)), database="default", ctas_approach=False,
+                                  s3_output=S3_OUTPUT, workgroup=WORKGROUP)
+    print(f"[gap] {len(df)} filings with gap >= {min_gap:,.0f}")
+    df = df[~df["plan_type"].isin(exclude_types)]
+    if scope == "never-run":
+        df = df[~df["staged"].astype(bool)]
+    elif scope == "short":
+        df = df[df["staged"].astype(bool)]
+    skip = _attempted(skip_from)
+    n_skip = int(df["ack_id"].isin(skip).sum())
+    df = df[~df["ack_id"].isin(skip)]
+    keys = list_all_pdf_keys()
+    has_pdf = df["ack_id"].isin(keys.keys())
+    no_pdf = df[~has_pdf]
+    df = df[has_pdf].sort_values("gap", ascending=False)
+    print(f"[gap] scope={scope}: {len(df)} to queue (${df['gap'].sum() / 1e9:,.1f}B); skipped {n_skip} already "
+          f"attempted; {len(no_pdf)} with no PDF in S3 (${no_pdf['gap'].sum() / 1e9:,.1f}B)")
+
+    os.makedirs(out_dir, exist_ok=True)
+    for old in os.listdir(out_dir):
+        if old.endswith(".txt") and old[0] == "g" and old[1:5].isdigit():
+            os.remove(os.path.join(out_dir, old))
+    acks = df["ack_id"].tolist()
+    for i in range(0, len(acks), chunk_size):
+        with open(os.path.join(out_dir, f"g{i // chunk_size + 1:04d}.txt"), "w") as fh:
+            fh.write("\n".join(acks[i:i + chunk_size]) + "\n")
+    with open(os.path.join(out_dir, "keys.tsv"), "w") as fh:
+        fh.writelines(f"{a}\t{keys[a]}\n" for a in acks)
+    with open(os.path.join(out_dir, "gap_plan.tsv"), "w") as fh:
+        fh.write("ack_id\tplan_type\tgap\tbatch_folder\n")
+        for r in df.itertuples():
+            folder = keys[r.ack_id].split("batch_date=")[1].split("/")[0]
+            fh.write(f"{r.ack_id}\t{r.plan_type}\t{r.gap:.0f}\t{folder}\n")
+    print(f"[gap] {(len(acks) + chunk_size - 1) // chunk_size} chunks of {chunk_size} -> {out_dir}")
+    return 0
+
+
+def _load_keys(chunk_dir):
+    path = os.path.join(chunk_dir, "keys.tsv")
+    return dict(line.split("\t", 1) for line in _read_lines(path)) if os.path.exists(path) else None
+
+
+def fetch(batch_date, manifest, dest, keys=None):
+    """keys: ack -> S3 key (plan-gap queues span batch_date folders); else batch_date's folder."""
     with open(manifest) as fh:
         acks = [line.strip() for line in fh if line.strip()]
     shutil.rmtree(dest, ignore_errors=True)
     os.makedirs(dest, exist_ok=True)
     s3 = boto3.client("s3")
-    prefix = batch_prefix(batch_date)
+    prefix = batch_prefix(batch_date) if batch_date else None
 
     def get(ack):
         try:
-            s3.download_file(BUCKET, f"{prefix}{ack}.pdf", os.path.join(dest, f"{ack}.pdf"))
+            key = keys[ack] if keys and ack in keys else f"{prefix}{ack}.pdf"
+            s3.download_file(BUCKET, key, os.path.join(dest, f"{ack}.pdf"))
             return True
         except Exception as exc:
             print(f"[chunks] fetch failed {ack}: {exc}", file=sys.stderr)
@@ -268,7 +383,7 @@ def _drop_non_pdfs(inputs):
 
 
 def _pipeline_attempt(batch_date, acks, work_dir, log_path, mem_bytes, timeout_s, write_lock, not_pdf,
-                      alt_defer_file=None):
+                      alt_defer_file=None, keys=None):
     """Fetch acks into work_dir/inputs and run run_pipeline on just them. Acks whose file isn't a
     PDF are left out of the run and appended to not_pdf for the caller to quarantine.
     alt_defer_file: the batch queues its filings there instead of routing alternatives itself
@@ -280,7 +395,7 @@ def _pipeline_attempt(batch_date, acks, work_dir, log_path, mem_bytes, timeout_s
     os.makedirs(outputs, exist_ok=True)
     with open(manifest, "w") as fh:
         fh.write("\n".join(acks) + "\n")
-    if fetch(batch_date, manifest, inputs) != 0:
+    if fetch(batch_date, manifest, inputs, keys) != 0:
         return "fetch_failed", "no PDFs fetched"
     not_pdf.extend(_drop_non_pdfs(inputs))
     if not os.listdir(inputs):
@@ -392,7 +507,10 @@ def _quarantine_not_pdf(chunk, acks, not_pdf, quarantine_path):
 
 def run_tier(batch_date, chunk_dir, tier, workers, micro, priority_micro, retry_micro, mem_gb, solo_mem_gb,
              timeout_min, solo_timeout_min):
-    pattern = {"priority": "p", "rest": "r", "all": "pr"}[tier]
+    pattern = {"priority": "p", "rest": "r", "all": "pr", "gap": "g"}[tier]
+    keys = _load_keys(chunk_dir)  # plan-gap: per-filing S3 key across batch_date folders
+    if tier == "gap" and not keys:
+        raise SystemExit(f"--tier gap needs {chunk_dir}/keys.tsv -- run plan-gap first")
     manifests = sorted(f for f in os.listdir(chunk_dir)
                        if f.endswith(".txt") and f[0] in pattern and f[1:5].isdigit())
     os.makedirs(os.path.join(chunk_dir, "done", "acks"), exist_ok=True)
@@ -453,7 +571,7 @@ def run_tier(batch_date, chunk_dir, tier, workers, micro, priority_micro, retry_
                 not_pdf = []
                 status, detail = _pipeline_attempt(batch_date, acks, work_dir, log_path,
                                                    mem_gb * gib, timeout_min * 60, write_lock, not_pdf,
-                                                   _alt_defer_path(chunk_dir, chunk))
+                                                   _alt_defer_path(chunk_dir, chunk), keys)
                 acks = _quarantine_not_pdf(chunk, acks, not_pdf, quarantine_path)
                 if status == "ok":
                     _append_lines(done_path, acks)
@@ -468,7 +586,8 @@ def run_tier(batch_date, chunk_dir, tier, workers, micro, priority_micro, retry_
                 list(pool.map(run_batch, list(enumerate(batches, 1))))
 
         # priority chunks hold the largest plans (master trusts, hundreds of pages each), so smaller batches
-        size = priority_micro if chunk.startswith("p") else micro
+        # gap chunks lead with the largest under-captured filings (big trusts), so they get the small size too
+        size = priority_micro if chunk[0] in "pg" else micro
         split = []
         run_pass([todo[i:i + size] for i in range(0, len(todo), size)], "m", split)
         if split:
@@ -479,7 +598,7 @@ def run_tier(batch_date, chunk_dir, tier, workers, micro, priority_micro, retry_
             not_pdf = []
             status, detail = _pipeline_attempt(batch_date, [ack], os.path.join(work_root, "solo"), log_path,
                                                solo_mem_gb * gib, solo_timeout_min * 60, write_lock, not_pdf,
-                                               _alt_defer_path(chunk_dir, chunk))
+                                               _alt_defer_path(chunk_dir, chunk), keys)
             if not _quarantine_not_pdf(chunk, [ack], not_pdf, quarantine_path):
                 continue
             if status == "ok":
@@ -511,14 +630,21 @@ def main():
     p.add_argument("--chunk-size", type=int, default=int(os.getenv("CHUNK_SIZE", "500")))
     p.add_argument("--min-assets", type=float, default=float(os.getenv("CHUNK_PRIORITY_MIN_ASSETS", "100000000")))
     p.add_argument("--exclude-types", default=os.getenv("CHUNK_EXCLUDE_PLAN_TYPES", "Health & Welfare"))
+    g = sub.add_parser("plan-gap")
+    g.add_argument("--out", required=True)
+    g.add_argument("--chunk-size", type=int, default=int(os.getenv("CHUNK_SIZE", "500")))
+    g.add_argument("--min-gap", type=float, default=float(os.getenv("CHUNK_MIN_GAP", "50000000")))
+    g.add_argument("--scope", choices=["never-run", "short", "all"], default="never-run")
+    g.add_argument("--exclude-types", default=os.getenv("CHUNK_EXCLUDE_PLAN_TYPES", "Health & Welfare"))
+    g.add_argument("--skip-from", action="append", default=[], help="chunk dir whose attempted filings to leave out")
     f = sub.add_parser("fetch")
     f.add_argument("--batch-date", required=True)
     f.add_argument("--manifest", required=True)
     f.add_argument("--dest", required=True)
     r = sub.add_parser("run")
-    r.add_argument("--batch-date", required=True)
+    r.add_argument("--batch-date", default=None, help="not needed for --tier gap (keys.tsv has each S3 key)")
     r.add_argument("--chunk-dir", required=True)
-    r.add_argument("--tier", choices=["priority", "rest", "all"], default="priority")
+    r.add_argument("--tier", choices=["priority", "rest", "all", "gap"], default="priority")
     r.add_argument("--workers", type=int, default=int(os.getenv("CHUNK_WORKERS", "3")))
     r.add_argument("--micro", type=int, default=int(os.getenv("CHUNK_MICRO", "25")))
     r.add_argument("--priority-micro", type=int, default=int(os.getenv("CHUNK_PRIORITY_MICRO", "10")))
@@ -531,7 +657,12 @@ def main():
     if a.cmd == "plan":
         excl = {t.strip() for t in a.exclude_types.split(",") if t.strip()}
         return plan(a.batch_date, a.out, a.chunk_size, a.min_assets, excl)
+    if a.cmd == "plan-gap":
+        excl = {t.strip() for t in a.exclude_types.split(",") if t.strip()}
+        return plan_gap(a.out, a.chunk_size, a.min_gap, a.scope, excl, a.skip_from)
     if a.cmd == "run":
+        if a.tier != "gap" and not a.batch_date:
+            ap.error("--batch-date is required unless --tier gap")
         return run_tier(a.batch_date, a.chunk_dir, a.tier, a.workers, a.micro, a.priority_micro, a.retry_micro,
                         a.mem_gb, a.solo_mem_gb, a.timeout_min, a.solo_timeout_min)
     return fetch(a.batch_date, a.manifest, a.dest)

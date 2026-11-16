@@ -62,6 +62,11 @@ CHUNK_SIZE="${CHUNK_SIZE:-500}"
 CHUNK_MODE="${CHUNK_MODE:-auto}"
 CHUNK_TIER="${CHUNK_TIER:-priority}"
 PDF_COUNT=$( (aws s3 ls "$S3_INPUT_PATH" || true) | grep -c '\.pdf$' || true)
+# (2026-11-16) CHUNK_TIER=gap: work the largest under-captured filings first, across every batch_date
+# folder (src/batch_chunks.py plan-gap). Queue = filings never extracted with gap >= CHUNK_MIN_GAP
+# (certified MF+alt minus captured), minus anything an earlier chunk run already attempted. Planned
+# once into data/chunks/gap-<GAP_RUN>/ (GAP_RUN defaults to BATCH_DATE); rerun the same command to resume.
+if [ "$CHUNK_TIER" = "gap" ]; then CHUNK_MODE=1; fi
 if [ "$CHUNK_MODE" = "auto" ]; then
   if [ "$PDF_COUNT" -gt "$CHUNK_SIZE" ]; then CHUNK_MODE=1; else CHUNK_MODE=0; fi
 fi
@@ -69,9 +74,20 @@ echo "[STEP 0] $PDF_COUNT PDFs in $S3_INPUT_PATH (chunk mode=$CHUNK_MODE, size=$
 
 if [ "$CHUNK_MODE" = "1" ]; then
   CHUNK_DIR="data/chunks/${BATCH_DATE}"
+  if [ "$CHUNK_TIER" = "gap" ]; then CHUNK_DIR="data/chunks/gap-${GAP_RUN:-$BATCH_DATE}"; fi
   mkdir -p "$CHUNK_DIR/done"
   if [ ! -f "$CHUNK_DIR/.planned" ]; then
-    PYTHONPATH=. python3.11 -m src.batch_chunks plan --batch-date "$BATCH_DATE" --out "$CHUNK_DIR" --chunk-size "$CHUNK_SIZE"
+    if [ "$CHUNK_TIER" = "gap" ]; then
+      SKIP_ARGS=""
+      for d in data/chunks/*/; do
+        d="${d%/}"
+        if [ "$d" != "$CHUNK_DIR" ]; then SKIP_ARGS="$SKIP_ARGS --skip-from $d"; fi
+      done
+      PYTHONPATH=. python3.11 -m src.batch_chunks plan-gap --out "$CHUNK_DIR" --chunk-size "$CHUNK_SIZE" \
+        --min-gap "${CHUNK_MIN_GAP:-50000000}" --scope "${CHUNK_GAP_SCOPE:-never-run}" $SKIP_ARGS
+    else
+      PYTHONPATH=. python3.11 -m src.batch_chunks plan --batch-date "$BATCH_DATE" --out "$CHUNK_DIR" --chunk-size "$CHUNK_SIZE"
+    fi
     touch "$CHUNK_DIR/.planned"
   fi
   # (2026-11-03) One run_pipeline per 500-filing chunk was OOM-killed (p0001, 2.5h lost): the runner
@@ -120,6 +136,6 @@ PYTHONPATH=. python3.11 -m src.apply_firm_parents --all \
 # (2026-11-02) Chunk mode keeps going past a failed chunk; fail the run at the end so the Step Function
 # alerts. Rerunning the same command retries only the chunks without a done marker.
 if [ -n "${FAILED_CHUNKS:-}" ]; then
-  echo "!!! FAILED CHUNKS:$FAILED_CHUNKS -- rerun BATCH_DATE=$BATCH_DATE CHUNK_TIER=$CHUNK_TIER bash run.sh to retry them"
+  echo "!!! FAILED CHUNKS:$FAILED_CHUNKS -- rerun BATCH_DATE=$BATCH_DATE GAP_RUN=${GAP_RUN:-} CHUNK_TIER=$CHUNK_TIER bash run.sh to retry them"
   exit 1
 fi
