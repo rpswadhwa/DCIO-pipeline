@@ -39,24 +39,27 @@ from .llm_row_extract import (
 _MAX_WORKERS = 4
 
 
-def _render_page_image_b64(pdf_path: str, page_num: int, dpi: int = 300) -> str:
+def _render_page_image_b64(pdf_path: str, page_num: int, dpi: int = 300, rotation: int = 0) -> str:
     images = convert_from_path(pdf_path, dpi=dpi, first_page=page_num, last_page=page_num)
     if not images:
         return ""
+    img = images[0]
+    if rotation:  # (2026-11-16) sideways scans, detected by src/unreadable_fallback.py
+        img = img.rotate(-rotation, expand=True)
     buf = BytesIO()
-    images[0].save(buf, format="PNG")
+    img.save(buf, format="PNG")
     return base64.b64encode(buf.getvalue()).decode("ascii")
 
 
 def _process_page_vision(pdf_path: str, pdf_stem: str, page_num: int, provider: str, model: str,
-                         plan_instructions: str = "") -> dict:
+                         plan_instructions: str = "", rotation: int = 0) -> dict:
     empty = {
         "pdf": pdf_path, "pdf_stem": pdf_stem, "page_number": page_num,
         "mapped_rows": [], "ocr_cells": [], "normalized_path": pdf_path,
     }
 
     try:
-        image_b64 = _render_page_image_b64(pdf_path, page_num)
+        image_b64 = _render_page_image_b64(pdf_path, page_num, rotation=rotation)
     except Exception as exc:
         print(f"    [llm_vision_extract] page {page_num}: render failed: {exc}")
         return empty
@@ -130,6 +133,7 @@ def extract_investments_via_llm_vision(
     provider: str = "gemini",
     model: str = "gemini-2.5-flash",
     plan_instructions: str = "",
+    rotations: dict = None,
 ) -> list:
     """Vision-based twin of extract_investments_via_llm() -- same output shape,
     same concurrency pattern, but sends a rasterized page image instead of the
@@ -138,13 +142,16 @@ def extract_investments_via_llm_vision(
     PaddleOCR chain in _ocr_pdf_worker entirely.
     """
     pdf_stem = pdf_path.split("/")[-1].rsplit(".", 1)[0].replace("\\", "/").split("/")[-1]
+    rotations = rotations or {}
 
     if len(page_nums) <= 1:
-        return [_process_page_vision(pdf_path, pdf_stem, p, provider, model, plan_instructions) for p in page_nums]
+        return [_process_page_vision(pdf_path, pdf_stem, p, provider, model, plan_instructions,
+                                     rotations.get(p, 0)) for p in page_nums]
 
     with ThreadPoolExecutor(max_workers=min(_MAX_WORKERS, len(page_nums))) as pool:
         futures = {
-            pool.submit(_process_page_vision, pdf_path, pdf_stem, p, provider, model, plan_instructions): p
+            pool.submit(_process_page_vision, pdf_path, pdf_stem, p, provider, model, plan_instructions,
+                        rotations.get(p, 0)): p
             for p in page_nums
         }
         by_page = {futures[fut]: fut.result() for fut in futures}

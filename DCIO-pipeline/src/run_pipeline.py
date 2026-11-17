@@ -609,6 +609,36 @@ def main():
                         page_data = fallback_data
                         supp_nums = simple_nums
 
+            # (2026-11-16) Fourth tier, unreadable pages (src/unreadable_fallback.py): image-only
+            # scans and scrambled text layers (font with no character map: Vanguard, CIBC, Cisco)
+            # give the three text-based finders nothing to match, so the filing lands 0 rows. OCR
+            # only the unreadable pages to find the Schedule of Assets, then read those pages by
+            # vision. Runs only when everything above produced no usable rows. UNREADABLE_FALLBACK=0
+            # disables it.
+            if (note is None and pdf_stem not in page_overrides
+                    and read_env("UNREADABLE_FALLBACK", "1") == "1"
+                    and not _has_useful_extracted_rows(page_data)):
+                try:
+                    from .unreadable_fallback import find_schedule
+                    unread_nums, unread_rot = find_schedule(pdf_path)
+                    if unread_nums:
+                        from .llm_vision_extract import extract_investments_via_llm_vision
+                        vision_data = extract_investments_via_llm_vision(
+                            pdf_path, unread_nums,
+                            provider=llm_full_extract_provider,
+                            model=llm_full_extract_model,
+                            rotations=unread_rot,
+                        )
+                        if _has_useful_extracted_rows(vision_data):
+                            n_rows = sum(len(p.get("mapped_rows", [])) for p in vision_data)
+                            print(f"    [unreadable] vision read {n_rows} row(s) from pages {unread_nums}")
+                            page_data = vision_data
+                            supp_nums = unread_nums
+                        else:
+                            print(f"    [unreadable] vision found no usable rows on pages {unread_nums}")
+                except Exception as exc:
+                    print(f"    [unreadable] fallback skipped: {exc}")
+
             # Attachment page handling: if any row says "see attachment",
             # scan pages after the last supplemental page for the actual data
             if supp_nums and _has_see_attachment(page_data):

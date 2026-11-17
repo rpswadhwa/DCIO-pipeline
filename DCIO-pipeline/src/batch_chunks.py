@@ -111,6 +111,8 @@ def plan(batch_date, out_dir, chunk_size, min_assets, exclude_types):
 # Total assets minus staging is NOT the gap: it counts company stock and CITs (CITs come from Sch D).
 #
 #   --scope never-run : filings with no rows in plan_holdings_staging (default)
+#           retry-unstaged : filings an earlier chunk run (--skip-from dirs) finished that still have
+#                       no staging rows -- rerun after a fix for filings that landed nothing
 #           short     : filings that have staging rows but are still short -- rerun these only after
 #                       the parser fix that applies to them is deployed; the regression guard keeps
 #                       stored rows if a rerun comes out worse
@@ -178,6 +180,18 @@ def plan_gap(out_dir, chunk_size, min_gap, scope, exclude_types, skip_from):
         df = df[~df["staged"].astype(bool)]
     elif scope == "short":
         df = df[df["staged"].astype(bool)]
+    if scope == "retry-unstaged":
+        # (2026-11-16) After a parser fix for filings that landed nothing (unreadable-page fallback):
+        # requeue filings an earlier chunk run finished (done/acks, quarantined left out) that still
+        # have no staging rows. The --skip-from dirs are the pool to retry, not a skip list.
+        done = set()
+        for d in skip_from:
+            acks_dir = os.path.join(d, "done", "acks")
+            if os.path.isdir(acks_dir):
+                for f in os.listdir(acks_dir):
+                    done.update(_read_lines(os.path.join(acks_dir, f)))
+        df = df[~df["staged"].astype(bool) & df["ack_id"].isin(done)]
+        skip_from = []
     skip = _attempted(skip_from)
     n_skip = int(df["ack_id"].isin(skip).sum())
     df = df[~df["ack_id"].isin(skip)]
@@ -634,7 +648,7 @@ def main():
     g.add_argument("--out", required=True)
     g.add_argument("--chunk-size", type=int, default=int(os.getenv("CHUNK_SIZE", "500")))
     g.add_argument("--min-gap", type=float, default=float(os.getenv("CHUNK_MIN_GAP", "50000000")))
-    g.add_argument("--scope", choices=["never-run", "short", "all"], default="never-run")
+    g.add_argument("--scope", choices=["never-run", "short", "all", "retry-unstaged"], default="never-run")
     g.add_argument("--exclude-types", default=os.getenv("CHUNK_EXCLUDE_PLAN_TYPES", "Health & Welfare"))
     g.add_argument("--skip-from", action="append", default=[], help="chunk dir whose attempted filings to leave out")
     f = sub.add_parser("fetch")
