@@ -1851,7 +1851,18 @@ def _extract_mm_net_trust_assets_for_pdf(pdf_path: str) -> List[Dict]:
     return all_rows
 
 
-def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile: str = "", inherited_asset_type: str = "") -> List[Dict]:
+# Participant-loan rows in the text-fallback path ("Participant loans",
+# "Participants' Loans", "Participating Loans", "Loans to participants",
+# "Notes receivable from participants"). Explicit loan wording only -- a bare
+# "interest rate" also appears on GIC/bond rows and must not match.
+_TEXT_LOAN_ROW_RE = re.compile(
+    r"\bparticipa\w*?'?\s*loans?\b|\bloans?\s+(?:to|receivable\s+from)\s+participants?\b"
+    r"|\bnotes?\s+receivable\s+from\s+participants?\b",
+    re.IGNORECASE,
+)
+
+
+def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile: str = "", inherited_asset_type: str = "", section_state: Optional[Dict] = None) -> List[Dict]:
     """
     Extract investment data from text-based format (non-table).
     Used as fallback when camelot can't detect tables.
@@ -2067,6 +2078,17 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
             re.IGNORECASE,
         )
         current_section_type = inherited_asset_type or ''
+        # The section type still "open" at the end of this page, set ONLY by a
+        # real heading line (bare category heading or category-label subtotal
+        # line) or inherited from the previous page, and cleared by any trailing
+        # "Total ..." line (section closed). Never set from a per-row keyword or
+        # trailing label (see the FedEx/Janus note at the page pre-filter).
+        # Reported back via `section_state['open_heading_type']` so the caller
+        # can hand it to the NEXT consecutive text-extracted page, whose rows
+        # otherwise land with a blank asset_type (GitLab 2026: p15 has the
+        # "Mutual Funds" heading, p16 continues it with no heading of its own).
+        open_heading_type = inherited_asset_type or ''
+        _heading_seen_on_page = False
         # Rows appended to `investments` with no asset_type resolved yet (no
         # leading heading seen, no keyword match). Some layouts (e.g. American
         # Cancer Society's 403(b) plan) never announce a section with a leading
@@ -2224,6 +2246,7 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
                                       f"'{line.strip()}' (text-based, value on next line, page {page_num})")
                             pending_untyped_rows.clear()
                             pending_issuer_name = ""
+                            open_heading_type = ''
                         else:
                             for key, val in SECTION_HEADING_MAP.items():
                                 if key not in line_lower_full:
@@ -2241,6 +2264,8 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
                                     # Bare category heading (e.g. "Mutual Funds:") --
                                     # unchanged existing behavior.
                                     current_section_type = val
+                                    open_heading_type = val
+                                    _heading_seen_on_page = True
                                     pending_untyped_rows.clear()
                                     pending_issuer_name = ""
                                 else:
@@ -2254,6 +2279,51 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
                                     pending_issuer_name = line[:_idx].strip(' *')
                                     current_section_type = val
                                 break
+                            else:
+                                # No-space text layers (font with no word gaps,
+                                # e.g. Rincon Research 2026: "Mutualfunds:",
+                                # "Self-directedbrokerageaccounts:") never contain
+                                # the spaced key. Accept only when the WHOLE line
+                                # is the heading (key + plural/colon), so a glued
+                                # fund-name line can never match.
+                                _nospace = re.sub(r'[\s*]+', '', line_lower_full)
+                                for key, val in SECTION_HEADING_MAP.items():
+                                    _k = re.sub(r'\s+', '', key)
+                                    if re.fullmatch(
+                                        re.escape(_k) + r'(?:[a-z]{0,3}|accounts?|funds?|trusts?|contracts?):?',
+                                        _nospace,
+                                    ):
+                                        current_section_type = val
+                                        open_heading_type = val
+                                        _heading_seen_on_page = True
+                                        pending_untyped_rows.clear()
+                                        pending_issuer_name = ""
+                                        break
+                                else:
+                                    # A participant-loan line whose value wraps
+                                    # to a later line ("* Participantloans
+                                    # Participantloans,interestat..." / "account
+                                    # balances. $ 0 $ 832,699") opens a loan
+                                    # block, so the wrapped tail is not typed
+                                    # as the previous fund section.
+                                    if _TEXT_LOAN_ROW_RE.search(line):
+                                        current_section_type = 'Participant Loan'
+                                        open_heading_type = ''
+                                    # An unrecognized heading ("Investments valued
+                                    # at NAV:") closes a type CARRIED IN from the
+                                    # previous page -- that page's section is over
+                                    # and the new one's type is unknown. Only the
+                                    # carried type: a heading seen on this page
+                                    # keeps the existing in-page behavior.
+                                    if (
+                                        current_section_type
+                                        and current_section_type == (inherited_asset_type or '')
+                                        and not _heading_seen_on_page
+                                        and line.strip().endswith(':')
+                                        and len(line.strip()) <= 60
+                                    ):
+                                        current_section_type = ''
+                                        open_heading_type = ''
                         continue
                     current_value = value_match.group(1).replace(',', '')
                     issuer_description = line[:value_match.start()].strip()
@@ -2317,6 +2387,7 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
                           f"{len(pending_untyped_rows)} row(s) from trailing total "
                           f"'{issuer_description}' (text-based, page {page_num})")
                 pending_untyped_rows.clear()
+                open_heading_type = ''
                 continue
 
             # Skip section-label subtotal rows: lines whose pre-value text is
@@ -2332,6 +2403,8 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
                     # allow up to 1 char before and 3 after (handles plural endings like 'ie' from 'ies')
                     if len(_before) <= 1 and len(_after) <= 3:
                         current_section_type = _val
+                        open_heading_type = _val
+                        _heading_seen_on_page = True
                         _is_section_label = True
                         pending_untyped_rows.clear()
                         break
@@ -2340,6 +2413,13 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
 
             # Determine asset type from section heading or embedded keyword
             asset_type = current_section_type
+            # A participant-loan line is never part of the fund section it
+            # follows (often the last block of the schedule, right after the
+            # funds, with no heading of its own -- GitLab 2026 p17
+            # "Participating Loans Interest rate range: 8.25%-9.50%"). Type it
+            # as a loan instead of letting it inherit the open section type.
+            if _TEXT_LOAN_ROW_RE.search(issuer_description):
+                asset_type = 'Participant Loan'
             asset_type_patterns = {
                 'COMMON/COLLECTIVE TRUST FUND': 'Common/Collective Trust Fund',
                 'COMMON COLLECTIVE TRUST FUND': 'Common/Collective Trust Fund',
@@ -2458,6 +2538,9 @@ def extract_text_based_investments(pdf_path: str, page_num: int, parser_profile:
         # Fallback: GM composite plan format (fund-code column A, values on next line)
         if not investments:
             investments = _extract_gm_column_format(text, page_num)
+
+        if section_state is not None:
+            section_state['open_heading_type'] = open_heading_type
 
     return investments
 
@@ -3843,15 +3926,37 @@ def extract_tables_and_map(
             del mapped_pages[page_num]
     
     # RETRY with text-based extraction for pages that had no tables or poor table extraction
+    # A section heading seen on one text-extracted page stays open onto the NEXT
+    # page when that page is the immediately following page and was also
+    # text-extracted (a headerless continuation of the same block). Only a real
+    # heading line feeds this (see open_heading_type in
+    # extract_text_based_investments); any trailing "Total ..." line closes it,
+    # and a page's own heading still overrides it. A type already resolved by
+    # the table-area pre-filter (continuation_asset_types) always wins.
+    _prev_text_page = None
+    _prev_open_heading_type = ''
     for page_num in supplemental_pages:
         if page_num not in pages_with_tables or page_num in pages_to_retry:
             print(f"    No tables found on page {page_num}, trying text-based extraction...")
+            _inherited = continuation_asset_types.get(page_num, "")
+            if (
+                not _inherited
+                and _prev_open_heading_type
+                and _prev_text_page is not None
+                and page_num == _prev_text_page + 1
+            ):
+                _inherited = _prev_open_heading_type
+                print(f"      carrying section type '{_inherited}' from page {_prev_text_page}")
+            _section_state: Dict = {}
             text_investments = extract_text_based_investments(
                 pdf_path,
                 page_num,
                 parser_profile=continuation_parser_profiles.get(page_num, ""),
-                inherited_asset_type=continuation_asset_types.get(page_num, ""),
+                inherited_asset_type=_inherited,
+                section_state=_section_state,
             )
+            _prev_text_page = page_num
+            _prev_open_heading_type = _section_state.get('open_heading_type', '') if text_investments else ''
             if text_investments:
                 print(f"      [OK] Extracted {len(text_investments)} investments from text")
                 # Store separately - these are already properly formatted
