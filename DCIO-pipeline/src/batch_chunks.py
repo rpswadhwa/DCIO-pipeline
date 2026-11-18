@@ -188,6 +188,7 @@ def plan_gap(out_dir, chunk_size, min_gap, scope, exclude_types, skip_from):
         # (2026-11-18) Short filings whose staged rows carry >= $5M with a blank asset_type -- the
         # rows the section-heading carry in text_extract (ffb723a7) types. Rerun after that fix.
         df = df[df["staged"].astype(bool) & (df["blank_amt"].astype(float) >= 5_000_000)]
+        skip_from = []  # every one of these was attempted before the fix; that is why they are queued
     if scope == "retry-unstaged":
         # (2026-11-16) After a parser fix for filings that landed nothing (unreadable-page fallback):
         # requeue filings an earlier chunk run finished (done/acks, quarantined left out) that still
