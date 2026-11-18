@@ -220,3 +220,43 @@ def find_schedule(pdf_path: str, log=print):
     log(f"    [unreadable] {len(bad)} unreadable page(s); schedule pages by OCR: {picked or 'none'}"
         + (f" (rotated: {rotated})" if rotated else ""))
     return picked, rotated
+
+
+def _row_value(r) -> float:
+    s = re.sub(r"[^0-9.\-]", "", str(r.get("current_value") or ""))
+    try:
+        return round(float(s))
+    except ValueError:
+        return 0.0
+
+
+def drop_repeated_vision_pages(vision_data: list, log=print) -> list:
+    """(2026-11-18) Second duplicate-copy check, on the rows vision returned.
+
+    find_schedule() drops copies by comparing OCR amounts, but OCR noise lets some through
+    (Rockford Construction Industry: p24 = p21; Milwaukee Drivers: p41 = p25). Reading both
+    copies doubles every holding. Here the comparison uses the clean extracted values: a page
+    whose values mostly (>= 60%) match another page's is a copy, and only one is kept. Which
+    one: the copy with fewer values repeated inside itself -- a repeat means the model slid
+    values down a row (Rockford p24 gave Vanguard WCM's value and WCM the $483M subtotal) --
+    then the earlier page."""
+    pages = []
+    for i, p in enumerate(vision_data):
+        vals = [v for v in (_row_value(r) for r in p.get("mapped_rows", [])) if v >= 1000]
+        pages.append((i, set(vals), len(vals) - len(set(vals))))
+    drop = set()
+    for a in range(len(pages)):
+        for b in range(a + 1, len(pages)):
+            ia, sa, ra = pages[a]
+            ib, sb, rb = pages[b]
+            if ia in drop or ib in drop or len(sa) < 3 or len(sb) < 3:
+                continue
+            if len(sa & sb) / len(sa | sb) < 0.6:
+                continue
+            pa = vision_data[ia].get("page_number") or 0
+            pb = vision_data[ib].get("page_number") or 0
+            keep, lose = (ia, ib) if (ra, pa) <= (rb, pb) else (ib, ia)
+            drop.add(lose)
+            log(f"    [unreadable] vision page {vision_data[lose].get('page_number')} repeats page "
+                f"{vision_data[keep].get('page_number')}; dropped")
+    return [p for i, p in enumerate(vision_data) if i not in drop]

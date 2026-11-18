@@ -629,6 +629,8 @@ def main():
                             model=llm_full_extract_model,
                             rotations=unread_rot,
                         )
+                        from .unreadable_fallback import drop_repeated_vision_pages
+                        vision_data = drop_repeated_vision_pages(vision_data)
                         if _has_useful_extracted_rows(vision_data):
                             n_rows = sum(len(p.get("mapped_rows", [])) for p in vision_data)
                             print(f"    [unreadable] vision read {n_rows} row(s) from pages {unread_nums}")
