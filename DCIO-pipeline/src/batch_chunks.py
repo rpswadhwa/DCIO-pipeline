@@ -113,6 +113,7 @@ def plan(batch_date, out_dir, chunk_size, min_assets, exclude_types):
 #   --scope never-run : filings with no rows in plan_holdings_staging (default)
 #           retry-unstaged : filings an earlier chunk run (--skip-from dirs) finished that still have
 #                       no staging rows -- rerun after a fix for filings that landed nothing
+#           short-blank : short filings with >= $5M of blank-asset_type staged rows (heading fix)
 #           short     : filings that have staging rows but are still short -- rerun these only after
 #                       the parser fix that applies to them is deployed; the regression guard keeps
 #                       stored rows if a rerun comes out worse
@@ -135,10 +136,13 @@ m AS (SELECT CAST(ack_id AS varchar) ack_id, sum(try_cast(plan_investment_amt AS
       FROM default.plan_mf_history_v3 GROUP BY 1),
 l AS (SELECT CAST(ack_id AS varchar) ack_id, sum(try_cast(plan_investment_amt AS double)) v
       FROM default.plan_alternatives_history GROUP BY 1),
-s AS (SELECT DISTINCT CAST(ack_id AS varchar) ack_id FROM default.plan_holdings_staging)
+s AS (SELECT CAST(ack_id AS varchar) ack_id,
+             coalesce(sum(CASE WHEN coalesce(trim(asset_type), '') = ''
+                               THEN try_cast(plan_investment_amt AS double) END), 0) blank_amt
+      FROM default.plan_holdings_staging GROUP BY 1)
 SELECT p.ack_id, pm.plan_type,
        greatest(p.mfc - coalesce(m.v, 0), 0) + greatest(p.altc - coalesce(l.v, 0), 0) gap,
-       s.ack_id IS NOT NULL staged
+       s.ack_id IS NOT NULL staged, coalesce(s.blank_amt, 0) blank_amt
 FROM p JOIN pm ON pm.ack_id = p.ack_id
 LEFT JOIN m ON m.ack_id = p.ack_id LEFT JOIN l ON l.ack_id = p.ack_id LEFT JOIN s ON s.ack_id = p.ack_id
 WHERE greatest(p.mfc - coalesce(m.v, 0), 0) + greatest(p.altc - coalesce(l.v, 0), 0) >= {min_gap}
@@ -180,6 +184,10 @@ def plan_gap(out_dir, chunk_size, min_gap, scope, exclude_types, skip_from):
         df = df[~df["staged"].astype(bool)]
     elif scope == "short":
         df = df[df["staged"].astype(bool)]
+    elif scope == "short-blank":
+        # (2026-11-18) Short filings whose staged rows carry >= $5M with a blank asset_type -- the
+        # rows the section-heading carry in text_extract (ffb723a7) types. Rerun after that fix.
+        df = df[df["staged"].astype(bool) & (df["blank_amt"].astype(float) >= 5_000_000)]
     if scope == "retry-unstaged":
         # (2026-11-16) After a parser fix for filings that landed nothing (unreadable-page fallback):
         # requeue filings an earlier chunk run finished (done/acks, quarantined left out) that still
@@ -648,7 +656,7 @@ def main():
     g.add_argument("--out", required=True)
     g.add_argument("--chunk-size", type=int, default=int(os.getenv("CHUNK_SIZE", "500")))
     g.add_argument("--min-gap", type=float, default=float(os.getenv("CHUNK_MIN_GAP", "50000000")))
-    g.add_argument("--scope", choices=["never-run", "short", "all", "retry-unstaged"], default="never-run")
+    g.add_argument("--scope", choices=["never-run", "short", "short-blank", "all", "retry-unstaged"], default="never-run")
     g.add_argument("--exclude-types", default=os.getenv("CHUNK_EXCLUDE_PLAN_TYPES", "Health & Welfare"))
     g.add_argument("--skip-from", action="append", default=[], help="chunk dir whose attempted filings to leave out")
     f = sub.add_parser("fetch")
