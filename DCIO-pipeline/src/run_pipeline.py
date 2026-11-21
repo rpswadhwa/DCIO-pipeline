@@ -615,9 +615,15 @@ def main():
             # only the unreadable pages to find the Schedule of Assets, then read those pages by
             # vision. Runs only when everything above produced no usable rows. UNREADABLE_FALLBACK=0
             # disables it.
+            # (2026-11-21) Also runs when the text tiers left fewer than 3 usable rows -- one junk
+            # row from a "see pages 19-22 of the attached report" pointer page used to block it
+            # (Wake Forest) -- and the vision rows replace the text rows only when they total
+            # more, so a genuine one- or two-holding filing keeps what it had.
+            from .unreadable_fallback import useful_row_stats
+            text_rows, text_total = useful_row_stats(page_data)
             if (note is None and pdf_stem not in page_overrides
                     and read_env("UNREADABLE_FALLBACK", "1") == "1"
-                    and not _has_useful_extracted_rows(page_data)):
+                    and text_rows < 3):
                 try:
                     from .unreadable_fallback import find_schedule
                     unread_nums, unread_rot = find_schedule(pdf_path)
@@ -631,7 +637,8 @@ def main():
                         )
                         from .unreadable_fallback import drop_repeated_vision_pages
                         vision_data = drop_repeated_vision_pages(vision_data)
-                        if _has_useful_extracted_rows(vision_data):
+                        if (_has_useful_extracted_rows(vision_data)
+                                and useful_row_stats(vision_data)[1] > text_total):
                             n_rows = sum(len(p.get("mapped_rows", [])) for p in vision_data)
                             print(f"    [unreadable] vision read {n_rows} row(s) from pages {unread_nums}")
                             page_data = vision_data
