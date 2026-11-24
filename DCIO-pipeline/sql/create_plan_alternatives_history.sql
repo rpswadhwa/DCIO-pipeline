@@ -23,3 +23,10 @@ TBLPROPERTIES (
     'format' = 'PARQUET',
     'write_compression' = 'ZSTD'
 );
+
+-- Later columns (already applied live):
+-- ALTER TABLE default.plan_alternatives_history ADD COLUMNS (
+--     matched_manager_name string, manager_match_confidence string, manager_match_method string);
+-- 2026-10-14: provider_master id from the provider_mapping_final ALT: aliases
+-- (post_extract_validator.apply_alt_provider_ids).
+-- ALTER TABLE default.plan_alternatives_history ADD COLUMNS (provider_id string);

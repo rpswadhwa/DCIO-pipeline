@@ -114,10 +114,13 @@ Do not run these prod reloads without explicit go-ahead — add here, then wait.
   recover it from, and `build_mf_rows_df`'s name-quality gate silently
   dropped the corrupted rows. Confirmed via direct repro: 1 of 8 Mutual
   Fund rows survived before the fix, 8 of 8 after.
-- Fix status: committed `4b48eeb9`, pushed to `origin/master` — **not yet
-  deployed to EC2**.
-- Rerun status: **not yet run** — needs EC2 deploy first, then a full
-  pipeline + classification rerun scoped to this ack_id.
+- Fix status: committed `4b48eeb9`, deployed to EC2 — **correction
+  (2026-10-01 audit): doc previously said "not yet deployed"; this was
+  stale. Verified via live MD5 hash comparison against EC2 that
+  `cleanup_investment_names.py` is byte-identical to local HEAD, which
+  includes this commit.**
+- Rerun status: **not yet run** — needs a full pipeline + classification
+  rerun scoped to this ack_id (deploy step is already done).
 
 ## Wilbur-Ellis 401(k) Plan
 - ack_id: `20251015152759NAL0002551539001`
@@ -192,11 +195,16 @@ Do not run these prod reloads without explicit go-ahead — add here, then wait.
   first page (page 14) is titled only "Notes to Financial Statements" and
   never states that phrase, so the whole page (5 Mutual Fund rows,
   ~$3.27B) was silently skipped.
-- Fix status: implemented and verified locally — narrow Oracle-only
-  exception added (page text contains both "ORACLE" and "NOTES TO
-  FINANCIAL STATEMENTS"). Not yet committed/deployed.
-- Rerun status: **not yet run** — needs commit + EC2 deploy first, then a
-  full pipeline + classification rerun scoped to this ack_id. Note: this
+- Fix status: committed `6458a2e7` (2026-08-28, "Add Oracle-specific
+  exception for untitled Schedule H first page"), deployed to EC2 —
+  **correction (2026-10-01 audit): doc previously said "Not yet
+  committed/deployed"; this was stale, the fix was already committed.
+  Verified via live MD5 hash comparison against EC2 that `text_extract.py`
+  is byte-identical to local HEAD, which includes this commit.** Narrow
+  Oracle-only exception (page text contains both "ORACLE" and "NOTES TO
+  FINANCIAL STATEMENTS").
+- Rerun status: **not yet run** — needs a full pipeline + classification
+  rerun scoped to this ack_id (deploy step is already done). Note: this
   plan also has a separate, unrelated `PENDING_AI` classification backlog
   (~90 rows) that this fix does not address.
 
@@ -209,11 +217,16 @@ Do not run these prod reloads without explicit go-ahead — add here, then wait.
   investments, footnoted) and puts the label as a PREFIX of the identity-
   of-issue field on every row, so the label was never matched and 41 of
   42 rows lost their asset_type and got dropped downstream.
-- Fix status: committed, deployed to EC2 not yet done — added a
-  line-start-anchored prefix match against the same lookup table. Full
-  page now sums to $322,953,560, exact match to certified total assets.
-- Rerun status: **not yet run** — needs EC2 deploy first, then a full
-  pipeline + classification rerun scoped to this ack_id. Note: the 13
+- Fix status: committed `8aa36583` (2026-08-28, "Recognize per-row category
+  labels prefixed on identity-of-issue field"), deployed to EC2 —
+  **correction (2026-10-01 audit): doc previously said "deployed to EC2 not
+  yet done"; this was stale. Verified via live MD5 hash comparison against
+  EC2 that `text_extract.py` is byte-identical to local HEAD, which
+  includes this commit.** Added a line-start-anchored prefix match against
+  the same lookup table. Full page now sums to $322,953,560, exact match to
+  certified total assets.
+- Rerun status: **not yet run** — needs a full pipeline + classification
+  rerun scoped to this ack_id (deploy step is already done). Note: the 13
   TIAA/CREF rows on this same page remain unresolved (separate, unfixed
   issue) even after this fix and after a rerun.
 
@@ -227,15 +240,19 @@ Do not run these prod reloads without explicit go-ahead — add here, then wait.
   Fund rows ($5,038,300 "BrokerageLink Fidelity Fund" + $10,985,609 "John
   Hancock Funds III Disciplined Value Fd Cl R6") were silently discarded
   along with the heading text.
-- Fix status: implemented and verified locally — new
-  `_HEADING_OFFERED_BY_STRIP_RE` strips just the heading clause and keeps
-  the row if real data remains. Mutual Fund total recovered from $758.2M to
-  $774.3M (certified target: $875.0M). Committed, not yet deployed to EC2.
+- Fix status: committed `e8de17f3` (2026-08-28, "Preserve fund data fused
+  onto an 'offered by' heading row"), deployed to EC2 — **correction
+  (2026-10-01 audit): doc previously said "Committed, not yet deployed to
+  EC2"; this was stale. Verified via live MD5 hash comparison against EC2
+  that `text_extract.py` is byte-identical to local HEAD, which includes
+  this commit.** New `_HEADING_OFFERED_BY_STRIP_RE` strips just the heading
+  clause and keeps the row if real data remains. Mutual Fund total recovered
+  from $758.2M to $774.3M (certified target: $875.0M).
   Known residuals not fixed: 1 duplicate Freedom Index 2055 row from an
   overlapping Camelot section split, and garbled `�`-value rows in the
   page 19 TIAA/CREF section.
-- Rerun status: **not yet run** — needs EC2 deploy first, then a full
-  pipeline + classification rerun scoped to this ack_id.
+- Rerun status: **not yet run** — needs a full pipeline + classification
+  rerun scoped to this ack_id (deploy step is already done).
 
 ## Bill & Melinda Gates Foundation Employee Retirement Plan
 - ack_id: `20250909140130NAL0012629043001`
@@ -664,7 +681,11 @@ Do not run these prod reloads without explicit go-ahead — add here, then wait.
   calls returning shape (31,1)/(36,1)/(34,1)/(10,1)/(16,1) tables for pages
   2-6. Zero rows reached `plan_holdings_staging`/`plan_mf_history_v3`
   against a certified `amt_mutual_funds` of $2,252,908,000.
-- Fix status: committed `9b842585` (not yet deployed to EC2). Added a check
+- Fix status: committed `9b842585`, deployed to EC2 — **correction
+  (2026-10-01 audit): doc previously said "not yet deployed to EC2"; this
+  was stale. Verified via live MD5 hash comparison against EC2 that
+  `text_extract.py` is byte-identical to local HEAD, which includes this
+  commit.** Added a check
   for pages present in `pages_with_tables` but absent from `mapped_pages`,
   routing them into the existing text-extraction retry
   (`extract_text_based_investments()`, already used by many other filers).
@@ -680,8 +701,8 @@ Do not run these prod reloads without explicit go-ahead — add here, then wait.
   `asset_type` (a separate, smaller, unfixed classification gap — inherited
   asset-type isn't carried into later text-extraction pages) brings the
   total to ~$2,265,082,691, within ~0.5% of certified.
-- Rerun status: **not yet run** — needs EC2 deploy first, then a full
-  pipeline + classification rerun scoped to this ack_id.
+- Rerun status: **not yet run** — needs a full pipeline + classification
+  rerun scoped to this ack_id (deploy step is already done).
   Expected recovery if run: 0 rows in `plan_holdings_staging` for this
   ack_id → 23 clean rows, Mutual Fund subtotal reconciling to roughly
   $2.27B against the $2,252,908,000 certified target (exact match pending
