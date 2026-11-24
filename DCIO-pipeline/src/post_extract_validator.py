@@ -1561,7 +1561,9 @@ ALT_JV_DATE_FUND_REGEX = r"\b(funds?|class|series|ltd)\b"
 # Custodian suffix on LP interests ("SUN CAPITAL PARTNERS VII LP COMMON STOCK",
 # "ASTORG VII COMMON STOCK EUR"); dropped for rule evaluation when what's left
 # carries a strong marker, so real stocks ("NVA HOLDINGS COMMON") still hold.
-ALT_JV_CUSTODIAN_SUFFIX_REGEX = r"\s+(pooled\s+)?common(\s+(stock|stk|s))?(\s+[a-z]{3})?\s*$"
+# "com" added 2026-10-18: "BLUE TORCH CREDIT OPPORTUNITIES I LP COM USD" ($4.3M)
+# was held by the com noise term.
+ALT_JV_CUSTODIAN_SUFFIX_REGEX = r"\s+(pooled\s+)?(common|com)(\s+(stock|stk|s))?(\s+[a-z]{3})?\s*$"
 ALT_JV_STRONG_REGEX = (
     r"\bl\.?\s?p\.?\b|\blimited\s+partnership|\bpartners\b|\boffshore\b|\bcayman\b|\bspc\b|segregated\s+portfolio|"
     r"\bventure|\bhedge|private\s+(equity|credit|debt|markets)|\bcapital\s+(partners|fund|opportunit)|\bopportunit|"
@@ -1602,6 +1604,41 @@ ALT_JV_LONG_ONLY_REGEX = (
     r"\bhigh\s+(yield|income)\b|\bemerging\s+markets?\s+(equity|bond|eq)\b|\bstock\s*-?\s*i?\b\s*$|"
     r"\bbank\s+loan\s+fund\b|\bmulti-?asset\s+credit\b"
 )
+# LP funds a custodian types as common stock (added 2026-10-18): "GROSVENOR
+# INSTITUTIONAL PARTNERS LP COMMON STOCK" $286M, "HIPEP VII PARTNERSHIP FUND
+# LP", "KAYNE PARTNERS FUND IV QP LP" -- 605 staging rows / $6.2B no pass
+# claimed, since ALT_NOISE_ASSET_TYPES vetoes the name passes and pass 5 only
+# read ALT_ROUTED_ASSET_TYPES. Such a row joins pass 5 as a partnership
+# interest when, after the custodian suffix, it has an LP fund form and no
+# public-security, listed-LP (MLPs, Ares Management LP, VICI Properties LP
+# bonds) or long-only term ("WCM FOCUSED INTERNATIONAL GROWTH FUND LP",
+# "DRZ EMERGING MARKETS LP") without an alt term.
+ALT_STOCK_LP_COMMON_SUFFIX_REGEX = r"\s+(pooled\s+)?common(\s+(stock|stk|s))?(\s+[a-z]{3})?\s*$"
+ALT_STOCK_LP_SUFFIX_REGEX = (
+    r"\s+(corporate\s+stock(\s+(common|pfd))?|common\s+stock(\s+usd)?|limited\s+partner|equity\s+securities)\s*$"
+)
+ALT_STOCK_LP_FORM_REGEX = (
+    r"\bl\.?\s?p\.?\b|limited\s+partner|\boffshore\b|\bfeeder\b|\bonshore\b|\bspc\b|\bscsp\b|"
+    r"\b(fund|fd)\s+([ivx]+|\d+)\b|\b(property|realty|real\s+estate)\s+(fund|fd|account)\b|\bpartners\s+[ivx]+\b|"
+    r"\bventure\s+(cap|partners|fund)|\bventures?\s+[ivx]+\b"
+)
+ALT_STOCK_LP_EXCLUDE_REGEX = (
+    r"\bsr\.?\s+unsecured\b|\bcallable\b|\bdue\s+\d|\bcom\b|\badr\b|\bcusip\b|\b144a\b|\bsecured\b|\bguar\b|"
+    r"\bnotes?\b|\bpool\b|\bgnma\b|\btsy\b|\btreas|\besop\b|stock\s+fund|\binc\b|\bnv\b|\bplc\b|\bcorp\b|"
+    r"shares\s+of|\bmlp\b|pipeline|midstream|\bunits?\b|ltd\s+part|\bcl\s+a\s+com|\d+\.\d+\s*%?\s*$|\d{2}/\d{2}\b|"
+    r"\bbonds?\b|shipbuilding|\bsh\s+ben\b|\bmanagement\s+l\.?\s?p\b|\btxo\b|williams\s+partners|vici\s+properties|"
+    r"american\s+homes|federal\s+realty|self-?direct|\boffshore\s+(ltd|engineering|nv|asa)\b|\bbw\s+offshore|\bclo\b|"
+    r"\bindex\b|\bmoney\s+market|\bcit\b|collective|energy\s+transfer|\bmplx\b|plains\s+(all|gp)|\bholdings\b"
+)
+ALT_STOCK_LP_LONG_ONLY_REGEX = (
+    r"\b(growth|value|smid|small\s*cap|mid\s*cap|large\s*cap|core\s+equity|international\s+equity|"
+    r"emerging\s+markets?|equity\s+income)\b"
+)
+ALT_STOCK_LP_ALT_REGEX = (
+    r"private|opportunit|credit|hedge|special\s+sit|distress|mezz|secondar|venture|buyout|co-?invest|infrastructure|"
+    r"property|realty|real\s+estate|multi-?strat|absolute|alpha|\b(fund|fd)\s+([ivx]+|\d+)\b|\b[ivx]+\s+(a\s+)?l\.?\s?p"
+)
+
 # Words dropped before comparing names for R03 / the sponsor-echo check.
 ALT_JV_NORM_STOPWORDS_REGEX = (
     r"\b(l\.?\s?p|ltd|limited|llc|inc|the|fund|class|series|plan|offshore|international|intl|"
@@ -1983,6 +2020,19 @@ def _alt_asset_type_pass_sql(glue_db: str, source: str, routed_sql: str, vehicle
     n = "c.nm"
     sp = "lower(c.sponsor_clean)"
     stripped = f"regexp_replace(lower(s.raw_entity_name), '{ALT_JV_CUSTODIAN_SUFFIX_REGEX}', '')"
+    noise_types = ", ".join("'" + t + "'" for t in sorted(ALT_NOISE_ASSET_TYPES))
+    # "common" suffix only: a trailing "COM" must still hit the exclude list
+    # ("ENTERPRISE PRODUCTS PARTNERS LP COM").
+    lp_nm = (f"regexp_replace(regexp_replace(lower(s.raw_entity_name), '{ALT_STOCK_LP_COMMON_SUFFIX_REGEX}', ''),"
+             f" '{ALT_STOCK_LP_SUFFIX_REGEX}', '')")
+    # see ALT_STOCK_LP_FORM_REGEX
+    stock_lp = (
+        f"(lower(trim(s.asset_type)) IN ({noise_types})"
+        f" AND regexp_like({lp_nm}, '{ALT_STOCK_LP_FORM_REGEX}')"
+        f" AND NOT regexp_like({lp_nm}, '{ALT_STOCK_LP_EXCLUDE_REGEX}')"
+        f" AND NOT (regexp_like({lp_nm}, '{ALT_STOCK_LP_LONG_ONLY_REGEX}')"
+        f" AND NOT regexp_like({lp_nm}, '{ALT_STOCK_LP_ALT_REGEX}')))"
+    )
     label = lambda x: f"regexp_like({x}, '{ALT_JV_LABEL_REGEX}')"
     # Trino inlines every CTE reference, and atr_routed re-runs passes 1-4, so
     # it is read exactly once: typed and routed rows share one relation and the
@@ -1994,19 +2044,21 @@ def _alt_asset_type_pass_sql(glue_db: str, source: str, routed_sql: str, vehicle
         atr_typed AS (
             SELECT s.ack_id, s.raw_entity_name, s.raw_sponsor_name, s.plan_investment_amt,
                    s.validation_status, s.asset_type, s._mgr,
-                   lower(trim(s.asset_type)) AS atype,
+                   CASE WHEN {stock_lp} THEN 'partnership interest' ELSE lower(trim(s.asset_type)) END AS atype,
                    CAST(s.plan_investment_amt AS double) AS amt_d,
                    trim(regexp_replace(coalesce(s.raw_sponsor_name, ''), '(\\s+[\\d,.]+)+\\s*$', '')) AS sponsor_clean,
                    {_alt_jv_norm_sql('s.raw_entity_name')} AS norm,
-                   CASE WHEN {_alt_jv_strong_sql(stripped)} THEN {stripped}
+                   CASE WHEN {stock_lp} THEN {lp_nm}
+                        WHEN {_alt_jv_strong_sql(stripped)} THEN {stripped}
                         ELSE lower(s.raw_entity_name) END AS nm,
-                   false AS is_r
+                   false AS is_r,
+                   {stock_lp} AS stock_lp
             FROM {source} s
-            WHERE lower(trim(s.asset_type)) IN ({routed_types})
+            WHERE lower(trim(s.asset_type)) IN ({routed_types}) OR {stock_lp}
             UNION ALL
             SELECT r.ack_id, r.raw_entity_name, NULL, NULL, NULL, NULL, NULL, NULL,
                    CAST(r.plan_investment_amt AS double), NULL,
-                   {_alt_jv_norm_sql('r.raw_entity_name')}, NULL, true
+                   {_alt_jv_norm_sql('r.raw_entity_name')}, NULL, true, false
             FROM atr_routed r
         ),
         atr_flag AS (
@@ -2069,12 +2121,14 @@ def _alt_asset_type_pass_sql(glue_db: str, source: str, routed_sql: str, vehicle
             WHERE NOT c.is_r
         ),
         atr_plan AS (
+            -- stock_lp rows sit on the filer's stock line, not its JV line: kept
+            -- out of the plan sums the certified-JV checks (P0, P1) read
             SELECT c.*,
-                   sum(CASE WHEN c.rule <> 'HELD' THEN 1 ELSE 0 END) {w} AS n_all,
-                   sum(CASE WHEN c.rule = 'R06' THEN 1 ELSE 0 END) {w} AS n_sec,
-                   sum(CASE WHEN c.rule IN ('R04', 'R08') THEN c.amt_d ELSE 0e0 END) {w} AS strong,
-                   sum(CASE WHEN c.rule IN ('R09', 'R10') THEN c.amt_d ELSE 0e0 END) {w} AS weak,
-                   sum(CASE WHEN c.rule = 'R07' THEN c.amt_d ELSE 0e0 END) {w} AS held,
+                   sum(CASE WHEN c.rule <> 'HELD' AND NOT c.stock_lp THEN 1 ELSE 0 END) {w} AS n_all,
+                   sum(CASE WHEN c.rule = 'R06' AND NOT c.stock_lp THEN 1 ELSE 0 END) {w} AS n_sec,
+                   sum(CASE WHEN c.rule IN ('R04', 'R08') AND NOT c.stock_lp THEN c.amt_d ELSE 0e0 END) {w} AS strong,
+                   sum(CASE WHEN c.rule IN ('R09', 'R10') AND NOT c.stock_lp THEN c.amt_d ELSE 0e0 END) {w} AS weak,
+                   sum(CASE WHEN c.rule = 'R07' AND NOT c.stock_lp THEN c.amt_d ELSE 0e0 END) {w} AS held,
                    -- JV money already in the target: held by name, or a duplicate
                    -- (R02/R03) of a routed row -- e.g. an R04 row routed under its
                    -- sponsor's fund name, which no longer matches the label by name
@@ -2092,6 +2146,9 @@ def _alt_asset_type_pass_sql(glue_db: str, source: str, routed_sql: str, vehicle
         atr_final AS (
             SELECT p.*,
                 CASE
+                    -- the private-stake (R10) promotion is
+                    -- for JV-line rows only
+                    WHEN p.stock_lp AND p.rule IN ('R07', 'R10') THEN 'R07'
                     WHEN p.rule = 'R09' AND p.p0 THEN 'P0'
                     WHEN p.rule = 'R09' AND p.p1 THEN 'P1'
                     WHEN p.rule = 'R10' AND (p.cert_x IS NULL OR p.p0 OR p.p1) THEN 'P3'
@@ -2110,7 +2167,8 @@ def _alt_asset_type_pass_sql(glue_db: str, source: str, routed_sql: str, vehicle
                 CASE WHEN f.final_rule = 'R04' THEN {vehicle_column_case('f.sponsor_clean')}
                      ELSE {vehicle_column_case('f.raw_entity_name')} END AS asset_type,
                 'LOW' AS classification_confidence,
-                concat('asset_type:', f.atype, ':', f.final_rule) AS classification_method,
+                concat('asset_type:', CASE WHEN f.stock_lp THEN 'stock_lp' ELSE f.atype END, ':', f.final_rule)
+                    AS classification_method,
                 true AS manual_review_required,
                 current_timestamp AS routed_at,
                 'Alternatives' AS asset_class,
