@@ -1628,7 +1628,12 @@ ALT_STOCK_LP_EXCLUDE_REGEX = (
     r"shares\s+of|\bmlp\b|pipeline|midstream|\bunits?\b|ltd\s+part|\bcl\s+a\s+com|\d+\.\d+\s*%?\s*$|\d{2}/\d{2}\b|"
     r"\bbonds?\b|shipbuilding|\bsh\s+ben\b|\bmanagement\s+l\.?\s?p\b|\btxo\b|williams\s+partners|vici\s+properties|"
     r"american\s+homes|federal\s+realty|self-?direct|\boffshore\s+(ltd|engineering|nv|asa)\b|\bbw\s+offshore|\bclo\b|"
-    r"\bindex\b|\bmoney\s+market|\bcit\b|collective|energy\s+transfer|\bmplx\b|plains\s+(all|gp)|\bholdings\b"
+    r"\bindex\b|\bmoney\s+market|\bcit\b|collective|energy\s+transfer|\bmplx\b|plains\s+(all|gp)|\bholdings\b|"
+    # 2026-11-24 preview: listed companies whose legal name ends in LP, and
+    # their bonds ("WESTERN GAS PARTNERS LP 4.75% 08-15-2028", "PVTPL SUNOCO
+    # LP"). "GLP CAPITAL PARTNERS IV-A LP" is a private fund and stays.
+    r"\d+(\.\d+)?\s*%|\d{2}-\d{2}-\d{2,4}\b|\bpvtpl\b|\bdtd\b|vornado|simon\s+prop|prologis|extra\s+space|"
+    r"sunoco|western\s+gas|enbridge|sabra\s+health|glp\s+capital\s+(l\.?\s?p\b|lp/)|jutal|nes\s+global"
 )
 ALT_STOCK_LP_LONG_ONLY_REGEX = (
     r"\b(growth|value|smid|small\s*cap|mid\s*cap|large\s*cap|core\s+equity|international\s+equity|"
