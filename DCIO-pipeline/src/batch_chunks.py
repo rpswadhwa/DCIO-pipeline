@@ -175,11 +175,20 @@ def _attempted(chunk_dirs):
     return seen
 
 
-def plan_gap(out_dir, chunk_size, min_gap, scope, exclude_types, skip_from):
+def plan_gap(out_dir, chunk_size, min_gap, scope, exclude_types, skip_from, acks_file=None):
     df = wr.athena.read_sql_query(GAP_SQL.format(min_gap=float(min_gap)), database="default", ctas_approach=False,
                                   s3_output=S3_OUTPUT, workgroup=WORKGROUP)
     print(f"[gap] {len(df)} filings with gap >= {min_gap:,.0f}")
     df = df[~df["plan_type"].isin(exclude_types)]
+    if acks_file:
+        # (2026-11-24) Re-run exactly the filings a parser fix targets (e.g. the 15 glyph-marker
+        # filings). They were all attempted before the fix, so the skip list does not apply.
+        wanted = set(_read_lines(acks_file))
+        df = df[df["ack_id"].isin(wanted)]
+        missing = wanted - set(df["ack_id"])
+        print(f"[gap] --acks-file: {len(df)} of {len(wanted)} listed filings queued"
+              + (f"; not in the gap list (closed or below --min-gap): {sorted(missing)}" if missing else ""))
+        skip_from = []
     if scope == "never-run":
         df = df[~df["staged"].astype(bool)]
     elif scope == "short":
@@ -660,6 +669,8 @@ def main():
     g.add_argument("--scope", choices=["never-run", "short", "short-blank", "all", "retry-unstaged"], default="never-run")
     g.add_argument("--exclude-types", default=os.getenv("CHUNK_EXCLUDE_PLAN_TYPES", "Health & Welfare"))
     g.add_argument("--skip-from", action="append", default=[], help="chunk dir whose attempted filings to leave out")
+    g.add_argument("--acks-file", default=os.getenv("CHUNK_GAP_ACKS") or None,
+                   help="only queue these ack_ids (one per line); ignores --skip-from")
     f = sub.add_parser("fetch")
     f.add_argument("--batch-date", required=True)
     f.add_argument("--manifest", required=True)
@@ -682,7 +693,7 @@ def main():
         return plan(a.batch_date, a.out, a.chunk_size, a.min_assets, excl)
     if a.cmd == "plan-gap":
         excl = {t.strip() for t in a.exclude_types.split(",") if t.strip()}
-        return plan_gap(a.out, a.chunk_size, a.min_gap, a.scope, excl, a.skip_from)
+        return plan_gap(a.out, a.chunk_size, a.min_gap, a.scope, excl, a.skip_from, a.acks_file)
     if a.cmd == "run":
         if a.tier != "gap" and not a.batch_date:
             ap.error("--batch-date is required unless --tier gap")
