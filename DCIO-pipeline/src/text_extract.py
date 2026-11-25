@@ -860,6 +860,22 @@ def _page_has_garbled_upright_text(page) -> bool:
     return (flagged / len(sample)) > 0.3
 
 
+_IDENTITY_ANY_RE = re.compile(r'identity\s+of\s+(?:issue|party)', re.IGNORECASE)
+_NOT_HELD_SCHEDULE_RE = re.compile(r'REPORTABLE\s+TRANSACTION|ACQUIRED\s+AND\s+DISPOSED|4\s*\(?\s*J\b')
+_UNTITLED_MIN_MONEY_LINES = 8
+
+
+def _is_untitled_holdings_header(header_text: str) -> bool:
+    """(2026-11-24) Header lines (upper-cased) of a holdings table that carries no
+    'Schedule H, Line 4i' title: the identity-of-issue/party column plus a current-value
+    column. Never a reportable-transaction or acquired-and-disposed schedule. (Custodian
+    'Detail Statement ... Assets and Liabilities' pages are left out on purpose: the
+    generic readers only get scraps from that layout -- it needs its own parser.)"""
+    if _NOT_HELD_SCHEDULE_RE.search(header_text):
+        return False
+    return bool(_IDENTITY_ANY_RE.search(header_text)) and "CURRENT" in header_text and "VALUE" in header_text
+
+
 def classify_pages_text(pdf_path: str, keywords_yml: str) -> List[Dict]:
     cfg = load_yaml(keywords_yml)
     keywords = [k.upper() for k in cfg.get("supplemental_schedule_keywords", [])]
@@ -954,8 +970,27 @@ def classify_pages_text(pdf_path: str, keywords_yml: str) -> List[Dict]:
                     "_neg_hits": neg_hits,
                     "_money_line_count": money_line_count,
                     "_is_narrative_keyword_match": is_narrative_keyword_match,
+                    "_untitled_schedule": (
+                        money_line_count >= _UNTITLED_MIN_MONEY_LINES
+                        and _is_untitled_holdings_header(header_text)
+                    ),
                 }
             )
+
+    # (2026-11-24) Fallback when no page qualified above. Some filers attach
+    # their holdings list with no "Schedule H, Line 4i" title at all: a
+    # recordkeeper "Attachment to Form 5500 / Assets Held at Year End" page,
+    # or a bare "(A) (B) (C) (D) (E) Identity of Party ... Current Value" table.
+    # These filings staged nothing because no page was ever picked (seen on
+    # Giorgi Global, Trust for Public Land, Sutter Medical, Curana Health,
+    # GCF). Only used when nothing else was found, so
+    # it can't double-count a filing that also has a titled schedule, and
+    # never on reportable-transaction or acquired-and-disposed schedules.
+    if not any(p["is_supplemental"] == 1 for p in pages):
+        for p in pages:
+            if p["_untitled_schedule"]:
+                p["is_supplemental"] = 1
+                p["_is_narrative_keyword_match"] = False
 
     # A multi-page investment schedule's own keyword text (e.g. "Schedule H,
     # Line 4i") can appear only on the schedule's first page or two --
@@ -1000,6 +1035,7 @@ def classify_pages_text(pdf_path: str, keywords_yml: str) -> List[Dict]:
         del p["_neg_hits"]
         del p["_money_line_count"]
         del p["_is_narrative_keyword_match"]
+        del p["_untitled_schedule"]
 
     return pages
 
@@ -3031,6 +3067,14 @@ def extract_tables_and_map(
             is_note_summary = bool(_note_summary_re.search(page_text))
             is_structural_schedule = _looks_like_structural_investment_schedule(page_text)
             is_target_schedule = has_line_4ij or (has_generic_schedule and has_asset_table_header and not is_note_summary) or is_structural_schedule
+            # (2026-11-24) A holdings table with no 4i title ("Assets Held at Year End"
+            # attachments, bare "Identity of Party ... Current Value" tables) that the page
+            # finder's untitled fallback picked would otherwise be dropped right here.
+            if not is_target_schedule and not is_note_summary:
+                _hdr = " ".join(
+                    [normalize_whitespace(l) for l in page_text.splitlines() if l.strip()][:12]
+                ).upper()
+                is_target_schedule = _is_untitled_holdings_header(_hdr)
 
             if is_target_schedule:
                 active_parser_profile = _infer_inline_text_parser_profile(page_text)
