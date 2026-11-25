@@ -72,6 +72,36 @@ _SHARE_CLASS_RE = _re.compile(
     _re.IGNORECASE,
 )
 
+# (2026-11-24) Bullet / check-box glyphs: some PDFs print a symbol (in a font with no Unicode
+# map) before fund names and in the table's tick-box columns, so pdfplumber reads
+# "(cid:98) Vanguard Explorer Adm" or "FID 500 INDEX Mutual Fund (cid:98) (cid:98)" (the name
+# cleaner later turns these into "cid98", sometimes glued on: "Mutual Fundcid98"). junk_detect
+# deletes any name containing cidNN as an OCR glyph artifact, which wiped every holding in 15
+# filings / $2.6B gap (retry2, e.g. ack 20261013131716NAL0003894433001). A marker that stands
+# between words or at either end of one is removed; one INSIDE a word (a letter directly on both
+# sides, "Va(cid:72)guard") means the word itself is garbled, so the row is left for the junk rule.
+_GLYPH_MARKER_RE = _re.compile(r"\(\s*cid\s*:\s*\d+\s*\)|cid\d+", _re.IGNORECASE)
+_GLYPH_INWORD_RE = _re.compile(r"(?<=[A-Za-z])(?:\(\s*cid\s*:\s*\d+\s*\)|cid\d+)(?=[A-Za-z])", _re.IGNORECASE)
+
+
+def strip_glyph_markers(rows: List[Dict]) -> int:
+    """Remove unmapped-glyph markers from issuer_name / investment_description, in place, unless
+    a marker sits inside a word. Returns the number of rows changed."""
+    changed = 0
+    for row in rows:
+        hit = False
+        for field in ("issuer_name", "investment_description"):
+            val = row.get(field)
+            if not isinstance(val, str) or "cid" not in val.lower() or _GLYPH_INWORD_RE.search(val):
+                continue
+            new = " ".join(_GLYPH_MARKER_RE.sub(" ", val).split())
+            if new != val.strip() and _re.search(r"[A-Za-z]{2}", new):
+                row[field] = new
+                hit = True
+        changed += hit
+    return changed
+
+
 def _normalize_for_manager_check(text):
     """Strip common wrapper words before checking against known managers."""
     t = text.lower().strip()
@@ -5714,6 +5744,11 @@ def run_post_extract_validation(
     if not rows:
         logger.warning("No rows found in SQLite — validation skipped entirely")
         return counts
+
+    # Bullet / tick-box glyphs off fund names BEFORE dedup / junk filter (see _GLYPH_MARKER_RE).
+    _n_glyph = strip_glyph_markers(rows)
+    if _n_glyph:
+        logger.info("Stripped bullet/tick-box glyph markers (cidNN) from %d row name(s)", _n_glyph)
 
     # Data hygiene (always on): remove exact within-plan scrape-duplicates up front, so
     # both the pass/fail total below and the loaded rows exclude them. Safe -- an identical
