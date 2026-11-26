@@ -331,10 +331,13 @@ def remove_total_rows(rows, verbose=True):
         # NEW: issuer is a pure asset-type/category label (e.g. "Registered Investment Companies",
         # "Mutual Fund"), description is not a real fund/manager name, and has a current_value.
         # These are subtotal rows that don't use the word "Total".
+        # (2026-11-26) Only when the description is not a real name either: Rite Aid and Petco print
+        # "Common/Collective Trusts" / "Mutual Funds" in the issuer column of every fund row, and the
+        # fund's own name in the description; those are holdings, not subtotals.
         if not is_total and issuer:
             value_str = str(row.get('current_value', '')).strip()
             has_value = bool(value_str) and value_str not in ('0', 'nan', '')
-            if has_value and not is_meaningful_description(issuer):
+            if has_value and not is_meaningful_description(issuer) and not is_meaningful_description(description):
                 is_total = True
 
         if is_total:

@@ -510,6 +510,24 @@ Local 705, International Brotherhood of Teamsters Pension Plan (ack
 20251002153605NAL0000429059002, pp.85-160): every heading and the grand total
 $1,788,321,430.58 tie.
 
+A fortieth layout, "jpm_fd406" (2026-11-26), is JPMorgan's custodian
+statement "FD406 ... DETAIL STATEMENT OF <trust> / ASSETS AND LIABILITIES"
+attached as the schedule (no Schedule H title or columns, so the page
+classifier never picks it; detect_unregistered_layout finds it on sight).
+Each page carries one "* * <part> * *" banner; only SECURITIES and OTHER
+ASSETS are holdings (CASH, futures, SUMMARY are not). Headings nest (currency
+/ EQUITIES / COMMON STOCK / UNDEFINED SECTOR), each closed by "TOTAL
+<heading>". A holding is a name line ending in its unit cost, then a line
+"[name continued] <market price> <cost> <market value> <gain>", then
+shares/accrual lines. Foreign-currency pages ("LOCAL MARKET VALUE" columns)
+print local amounts on the name line and base (USD) amounts on the second
+line; their TOTAL lines likewise print base amounts on the line below. The
+banner totals (TOTAL SECURITIES, TOTAL OTHER ASSETS) are the grand check.
+First seen on Vought Aircraft Master DB Trust (ack
+20260715132910NAL0003875344001, pp.17-44; open-end mutual funds
+$652,703,857.36, commingled $145,128,288.54) and BMW North America Master
+Trust (ack 20261015142307NAL0004159683001, pp.1-5).
+
 Registered per plan, not per filing: PLAN_PARSERS is keyed by plan_master
 plan_id (EIN-PN), which stays fixed across years while ack_id and page
 numbers change. run_pipeline.py resolves each PDF's ack_id to a plan_id via
@@ -2985,7 +3003,54 @@ def detect_unregistered_layout(pdf_path: str, candidate_pages: List[int]) -> Opt
             found = nt_print(pdf.pages[page_num - 1])
             if found:
                 return found
+    # JPMorgan's FD406 statement attached as the schedule (2026-11-26).
+    if _fd406_pages(pdf_path):
+        return {"layout": "jpm_fd406", "start_heading": r"."}
     return None
+
+
+_FD406_PAGE_RE = re.compile(r"\bFD406\s+PAGE\s+\d+")
+_FD406_TITLE_RE = re.compile(r"DETAIL\s+STATEMENT\s+OF\b")
+_FD406_AL_RE = re.compile(r"\bASSETS\s+AND\s+LIABILITIES\b")
+_FD406_ASOF_RE = re.compile(r"\bAS\s+OF\s+([A-Z]+)\s+(\d{1,2}),\s*(\d{4})")
+_FD406_BANNER_RE = re.compile(r"^\*\s*\*\s*([A-Z][A-Z ]*?)\s*\*\s*\*")
+# Banners whose rows are holdings; CASH, futures, SUMMARY etc. are not.
+_FD406_HOLDING_BANNERS = ("SECURITIES", "OTHER ASSETS")
+_FD406_MONTHS = {m: i for i, m in enumerate(
+    ("JANUARY", "FEBRUARY", "MARCH", "APRIL", "MAY", "JUNE", "JULY", "AUGUST",
+     "SEPTEMBER", "OCTOBER", "NOVEMBER", "DECEMBER"), start=1)}
+
+
+def _fd406_pages(pdf_path: str) -> List[int]:
+    """Pages of JPMorgan's FD406 assets-and-liabilities statement with a
+    holdings banner, latest "AS OF" date only (a filing can attach the prior
+    year's statement too); [] if none or the file cannot be read. Uses
+    pypdfium2's raw text, so every unrecognized filing can afford the scan."""
+    try:
+        import pypdfium2 as pdfium
+        doc = pdfium.PdfDocument(pdf_path)
+    except Exception:
+        return []
+    try:
+        if len(doc) > _NT_SCAN_MAX_PAGES:
+            return []
+        found = []
+        for i in range(len(doc)):
+            text = doc[i].get_textpage().get_text_range()
+            if not (_FD406_PAGE_RE.search(text) and _FD406_TITLE_RE.search(text) and _FD406_AL_RE.search(text)):
+                continue
+            if not any(re.search(r"\*\s*\*\s*" + b.replace(" ", r"\s+") + r"\s*\*\s*\*", text)
+                       for b in _FD406_HOLDING_BANNERS):
+                continue
+            m = _FD406_ASOF_RE.search(text)
+            as_of = (int(m.group(3)), _FD406_MONTHS.get(m.group(1), 0), int(m.group(2))) if m else (0, 0, 0)
+            found.append((as_of, i + 1))
+    finally:
+        doc.close()
+    if not found:
+        return []
+    latest = max(as_of for as_of, _ in found)
+    return [page for as_of, page in found if as_of == latest]
 
 
 def _title_scan_pages(pdf_path: str) -> List[int]:
@@ -3027,6 +3092,8 @@ def find_schedule_4i_pages(pdf_path: str, start_heading: str, layout: str = "def
     """
     run: List[int] = []
     start = None
+    if layout == "jpm_fd406":
+        return _fd406_pages(pdf_path)
     if layout in ("flat_cost_value", "inline_category", "nt_held_regions", "titled_appendix", "typed_description",
                   "typed_maturity_rate", "closing_totals", "nt_asset_detail", "colon_headings", "leading_shares",
                   "issuer_shares_category", "party_type_tree", "category_column", "summary_attached",
@@ -3394,6 +3461,8 @@ def parse_schedule_4i_pages(pdf_path: str, page_nums: List[int], layout: str = "
         return _parse_soi_revalued_cost(pdf_path, page_nums)
     if layout == "jpm_held":
         return _parse_jpm_held(pdf_path, page_nums, PLAN_PARSERS.get(plan_id, {}))
+    if layout == "jpm_fd406":
+        return _parse_jpm_fd406(pdf_path, page_nums)
     if layout == "bny_h30t":
         return _parse_bny_h30t(pdf_path, page_nums)
     if layout == "flat_cost_value":
@@ -3905,6 +3974,216 @@ def _parse_jpm_held(pdf_path: str, page_nums: List[int], options: Optional[Dict]
         invest_rows = sum(len(p["mapped_rows"]) for p in pages)
         grand_reconciled = abs(invest_value + options.get("grand_value_gap", 0) - grand_total[-1]) <= (
             1.0 + 0.5 * invest_rows)
+    return {"pages": pages, "sections": sections, "unparsed": unparsed,
+            "grand_total": grand_total, "grand_reconciled": grand_reconciled}
+
+
+_FD406_COLUMN_WORDS = {"UNIT", "COST", "MARKET", "PRICE", "VALUE", "UNREALIZED", "GAIN(LOSS)", "SHARES/PAR",
+                       "ACCRUED", "INCOME", "LOCAL", "BASE", "TOTAL", "ACCRUAL", "CURRENCY"}
+_FD406_RULE_RE = re.compile(r"^_+(\s+_+)*$")
+_FD406_FOOTER_RE = re.compile(r"^JPMorgan\s+Investor\s+Services$|Schedule\s+H,?\s+Line\s+4i|^EIN\b|^Plan\s+Year\s+End",
+                              re.I)
+# "<9-char security id> <class letter> <5-digit account>" on a holding's 2nd or 3rd line (BMW).
+_FD406_IDENT_RE = re.compile(r"(?:^|\s)([A-Z0-9]{9})\s+[A-Z]\s+\d{5}(?=\s|$)")
+_FD406_RATE_DATE_RE = re.compile(r"(\d+\.\d+)%\s+(\d{2}/\d{2}/\d{4})")
+# Heading -> asset_type, innermost heading first, first match wins.
+_FD406_ASSET_TYPES = [
+    (r"OPEN\s+END\s+MUTUAL|^MUTUAL\s+FUNDS?$", "Mutual Fund"),
+    (r"COMMINGLED|COLLECTIVE", "Common/Collective Trust Fund"),
+    (r"PARTNERSHIP", "Partnership Interest"),
+    (r"^STIF$|SHORT\s+TERM", "Short-Term Investment Fund"),
+    (r"INSURANCE", "Insurance General Account"),
+    (r"GOVERNMENT|TREASURY|FIXED\s+INCOME|CORPORATE\s+BONDS?|ASSET\s+BACKED|MORTGAGE|MUNICIPAL", "Bond"),
+    (r"PREFERRED", "Preferred Stock"),
+    (r"COMMON\s+STOCK|^EQUITIES$", "Common Stock"),
+]
+
+
+def _fd406_amount_only(line: str) -> bool:
+    """A shares/accrual line: amounts, currency codes and a security id only."""
+    tokens = _FD406_IDENT_RE.sub(" ", line).split()
+    return bool(tokens) and all(_NUM_RE.match(t) or re.fullmatch(r"[A-Z]{3}", t) for t in tokens)
+
+
+def _parse_jpm_fd406(pdf_path: str, page_nums: List[int]) -> Optional[Dict]:
+    """parse_schedule_4i_pages for the jpm_fd406 layout (see module docstring).
+    Rows come only from the SECURITIES and OTHER ASSETS banners; every heading
+    and each banner's TOTAL line are reconciled."""
+    pdf_stem = pdf_path.rsplit("/", 1)[-1].rsplit(".", 1)[0]
+    page_nums = sorted(set(page_nums))
+    infos = {}
+    with pdfplumber.open(pdf_path) as pdf:
+        for page_num in page_nums:
+            if not 1 <= page_num <= len(pdf.pages):
+                return None
+            text = pdf.pages[page_num - 1].extract_text() or ""
+            if not (_FD406_PAGE_RE.search(text) and _FD406_TITLE_RE.search(text)):
+                return None
+            lines = [l.strip() for l in text.split("\n") if l.strip()]
+            b = next((i for i, l in enumerate(lines) if _FD406_BANNER_RE.match(l)), None)
+            if b is None:
+                return None
+            j = b + 1
+            while j < len(lines) and all(t in _FD406_COLUMN_WORDS for t in lines[j].split()):
+                j += 1
+            foreign = "LOCAL MARKET VALUE" in " ".join(lines[:j])
+            infos[page_num] = [_FD406_BANNER_RE.match(lines[b]).group(1).strip(), foreign, lines[j:]]
+    # Drop the filer's own page footer: trailing lines repeated on most pages.
+    if len(page_nums) >= 3:
+        tails = Counter(l for _, _, body in infos.values() for l in set(body[-8:]))
+        repeated = {l for l, n in tails.items() if n >= 0.6 * len(page_nums) and re.search(r"[a-z]", l, re.I)
+                    and not l.startswith("TOTAL ")}
+    else:
+        repeated = set()
+    for info in infos.values():
+        body = info[2]
+        while body and (body[-1] in repeated or _FD406_FOOTER_RE.search(body[-1])):
+            body.pop()
+
+    sections, unparsed, pages = [], [], []
+    stack: List[Dict] = []
+    banner_cur = None
+    banner_value: Dict[str, float] = {}
+    banner_rows: Dict[str, int] = {}
+    banner_totals: Dict[str, List[float]] = {}
+    pending = None       # name line waiting for its amounts line
+    total_wait = None    # foreign TOTAL waiting for its base-currency line
+    after_value = False  # skipping a holding's shares/accrual lines
+    last_row = None
+
+    def close(name: str, amounts: List[float], page_num: int, line: str) -> None:
+        nonlocal stack
+        cost, value = amounts[0] or 0.0, amounts[1] or 0.0
+        if name == banner_cur:
+            banner_totals[name] = [cost, value]
+            stack = []
+            return
+        for k in range(len(stack) - 1, -1, -1):
+            if stack[k]["heading"] == name:
+                stack[k]["subtotal"] = [cost, value]
+                stack = stack[:k]
+                return
+        unparsed.append({"page_number": page_num, "line": line})
+
+    for page_num in page_nums:
+        banner, foreign, body = infos[page_num]
+        mapped_rows = []
+        if banner != banner_cur:
+            banner_cur, stack, pending, total_wait, after_value = banner, [], None, None, False
+        if banner in _FD406_HOLDING_BANNERS:
+            for line in body:
+                if _FD406_RULE_RE.match(line):
+                    continue
+                if total_wait is not None:
+                    t = _trailing_nums(line, 3)
+                    name, total_wait = total_wait, None
+                    if t and not t[0]:
+                        close(name, t[1][:2], page_num, f"TOTAL {name}")
+                        after_value = True
+                        continue
+                    unparsed.append({"page_number": page_num, "line": f"TOTAL {name} (no base line)"})
+                if after_value and _fd406_amount_only(line):
+                    m = _FD406_IDENT_RE.search(line)
+                    if m and last_row is not None and not last_row["asset_identifier"]:
+                        last_row["asset_identifier"] = m.group(1)
+                    continue
+                after_value, last_row = False, None
+                if pending is not None:
+                    t = _trailing_nums(line, 4)
+                    if t is None:
+                        unparsed.append({"page_number": pending["page"], "line": pending["line"]})
+                        pending = None
+                    else:
+                        _, cost, value, _ = t[1]
+                        cont = t[0]
+                        m = _FD406_IDENT_RE.search(cont)
+                        ident = m.group(1) if m else ""
+                        if m:
+                            cont = (cont[:m.start()] + cont[m.end():]).strip()
+                        description = f"{pending['name']} {cont}".strip()
+                        rd = _FD406_RATE_DATE_RE.search(description)
+                        asset_type = next((label for s in reversed(stack) for pattern, label in _FD406_ASSET_TYPES
+                                           if re.search(pattern, s["heading"])), "")
+                        for s in stack:
+                            s["rows"] += 1
+                            s["cost"] += cost or 0.0
+                            s["value"] += value or 0.0
+                        banner_value[banner] = banner_value.get(banner, 0.0) + (value or 0.0)
+                        banner_rows[banner] = banner_rows.get(banner, 0) + 1
+                        row = {
+                            "issuer_name": "",
+                            "investment_description": description,
+                            "asset_type": asset_type,
+                            "asset_type_source": "heading" if asset_type else "none",
+                            "par_value": "",
+                            "cost": _fmt(cost),
+                            "current_value": _fmt(value),
+                            "units_or_shares": "",
+                            "asset_identifier": ident,
+                            "interest_rate": rd.group(1) if rd else "",
+                            "maturity_date": rd.group(2) if rd else "",
+                            "section_heading": stack[-1]["heading"] if stack else "",
+                            "extraction_method": "sch4i_text",
+                            "page_number": pending["page"],
+                            "row_id": len(mapped_rows) + 1,
+                        }
+                        if not asset_type:
+                            row["asset_type"] = detect_asset_type(description)
+                            row["asset_type_source"] = "row" if row["asset_type"] else "none"
+                        # Holdings sold during the year (market value 0) count but aren't loaded.
+                        if value:
+                            mapped_rows.append(row)
+                        pending, after_value, last_row = None, True, row
+                        continue
+                if line.startswith("SUB TOTAL"):
+                    after_value = True
+                    continue
+                if line.startswith("TOTAL "):
+                    t = _trailing_nums(line, 3)
+                    if t is None:
+                        unparsed.append({"page_number": page_num, "line": line})
+                        continue
+                    name = t[0][len("TOTAL "):].strip()
+                    if foreign:
+                        total_wait = name
+                    else:
+                        close(name, t[1][:2], page_num, line)
+                        after_value = True
+                    continue
+                t = _trailing_nums(line, 4 if foreign else 1)
+                if t and t[0] and not _fd406_amount_only(line):
+                    pending = {"name": t[0], "page": page_num, "line": line}
+                    continue
+                if _trailing_nums(line, 1) is None and re.search(r"[A-Z]", line):
+                    section = {"heading": line, "asset_type": next(
+                        (label for pattern, label in _FD406_ASSET_TYPES if re.search(pattern, line)), ""),
+                        "partial": False, "rows": 0, "cost": 0.0, "value": 0.0, "subtotal": None}
+                    stack.append(section)
+                    sections.append(section)
+                    continue
+                unparsed.append({"page_number": page_num, "line": line})
+        pages.append({
+            "pdf": pdf_path, "pdf_stem": pdf_stem, "page_number": page_num,
+            "mapped_rows": mapped_rows, "ocr_cells": [], "normalized_path": pdf_path,
+        })
+
+    for section in sections:
+        sub = section["subtotal"]
+        section["cost_diff"] = None if sub is None else section["cost"] - sub[0]
+        section["value_diff"] = None if sub is None else section["value"] - sub[1]
+        if sub is None:
+            section["reconciled"] = None if section["rows"] else True
+        else:
+            tol = 1.0 + 0.01 * section["rows"]
+            section["reconciled"] = abs(section["value_diff"]) <= tol and abs(section["cost_diff"]) <= tol
+    grand_total, grand_reconciled = None, None
+    if banner_totals:
+        grand_total = [sum(t[0] for t in banner_totals.values()), sum(t[1] for t in banner_totals.values())]
+        grand_reconciled = all(
+            b in banner_totals and abs(banner_value.get(b, 0.0) - banner_totals[b][1]) <= 1.0 + 0.01 * n
+            for b, n in banner_rows.items())
+    elif banner_rows:
+        grand_reconciled = False
     return {"pages": pages, "sections": sections, "unparsed": unparsed,
             "grand_total": grand_total, "grand_reconciled": grand_reconciled}
 
