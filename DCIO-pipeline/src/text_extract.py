@@ -39,8 +39,11 @@ def _page_values_are_in_thousands(text: str) -> bool:
         # while other pages of the same filing print "(In Thousands)"
         # normally) -- \s* still requires a word boundary before "in", so it
         # won't fire on "within thousands" or similar.
+        # (2026-11-27) "dollars?\s*in" too: RWJBarnabas 403(b)'s text layer has no spaces at
+        # all -- "(DollarsinThousands)" -- so neither "dollars\s+in" nor "\bin" (no word
+        # boundary inside "sin") fired and every row loaded at 1/1000.
         r'\b(?:in\s*thousands|amounts?\s+(?:are\s+)?in\s*thousands|'
-        r'dollars?\s+in\s*thousands|thousands\s+of\s+dollars|\$\s*000s?|'
+        r'dollars?\s*in\s*thousands|thousands\s+of\s+dollars|\$\s*000s?|'
         # Some filers use "(amounts in 000's)" instead of the word "thousands";
         # the apostrophe often extracts as a stray/garbled character (curly
         # quote, PDF font mojibake) rather than a plain ' , so match any
@@ -61,7 +64,7 @@ def _page_values_are_in_millions(text: str) -> bool:
     """Return True when page text declares dollar amounts in millions."""
     return bool(re.search(
         r'\b(?:in\s+millions|amounts?\s+(?:are\s+)?in\s+millions|'
-        r'dollars?\s+in\s+millions|millions\s+of\s+dollars)\b',
+        r'dollars?\s*in\s*millions|millions\s+of\s+dollars)\b',
         text or '',
         re.IGNORECASE,
     ))

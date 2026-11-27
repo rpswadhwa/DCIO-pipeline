@@ -88,6 +88,12 @@ _PROMPT_INSTRUCTIONS = (
     "line above the row, before any other heading/subtotal -- or empty string "
     "if no such heading exists. Just copy the printed text, do not interpret "
     "or classify it), "
+    "printed_type (copy the EXACT, VERBATIM investment-type wording printed ON "
+    "THIS ROW outside the fund's own name -- usually a separate description or "
+    "type column, e.g. 'COLLECTIVE INVESTMENT TRUST', 'Mutual Fund', "
+    "'Common/Collective Trust', 'Pooled Separate Account', 'Company Stock Fund' "
+    "-- or empty string if the row prints no such wording. Never copy the "
+    "fund's name itself here, and do not interpret or classify it), "
     "current_value (the row's current/fair value EXACTLY as printed on the "
     "page, digits only, no $ sign or commas, as a plain number -- copy the "
     "printed figure verbatim, do NOT multiply or rescale it yourself even if "
@@ -172,6 +178,27 @@ def _apply_scale(row: dict, scale_multiplier: float) -> None:
     row["current_value"] = str(int(scaled)) if scaled.is_integer() else str(scaled)
 
 
+def _apply_printed_type(row: dict, llm_row: dict, page_num: int, row_idx: int, tag: str) -> None:
+    """(2026-11-27) The type the PDF prints on the row wins over the model's own label.
+
+    The prompt's rule (1) "use the row's printed type" was only an instruction: the model returns
+    just its final label, and the deterministic backfill below ran only when that label was blank.
+    Amazon 401(k)'s scanned schedule prints "COLLECTIVE INVESTMENT TRUST" beside Vanguard Target
+    2020-2070 / Inst 500 Index Trust, yet the model fell back to general knowledge and said Mutual
+    Fund for 19 of 24 rows. Now the model copies that wording (printed_type) and our own detector
+    classifies it; the model's label is kept only when the row prints no recognisable type.
+    """
+    printed = str(llm_row.get("printed_type") or "").strip()
+    detected = detect_asset_type(printed) if printed else ""
+    if not detected or detected not in _KNOWN_ASSET_TYPES:
+        return
+    if row["asset_type"] and row["asset_type"] != detected:
+        print(f"    [{tag}] page {page_num} row {row_idx}: printed type {printed!r} -> "
+              f"{detected!r} (model said {row['asset_type']!r})")
+    row["asset_type"] = detected
+    row["asset_type_source"] = "row"
+
+
 def _process_page(pdf_path: str, pdf_stem: str, page_num: int, provider: str, model: str,
                   plan_instructions: str = "") -> dict:
     empty = {
@@ -212,6 +239,7 @@ def _process_page(pdf_path: str, pdf_stem: str, page_num: int, provider: str, mo
             val = llm_row.get(field, "")
             row[field] = "" if val is None else str(val).strip()
         _apply_scale(row, scale_multiplier)
+        _apply_printed_type(row, llm_row, page_num, row_idx, "llm_row_extract")
 
         if not row["asset_type"]:
             # Deterministic backfill: don't trust the LLM to apply the heading

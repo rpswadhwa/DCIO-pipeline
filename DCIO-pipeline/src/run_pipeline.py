@@ -915,6 +915,15 @@ def main():
     )
     _write_csv(removed_totals_path, removed_totals)
 
+    # (2026-11-27) Schedule printed with no scale label while the statements page says "in
+    # thousands" and its investments figure matches the rows (Amazon, Endeavor). See statement_scale.
+    try:
+        from .statement_scale import apply_statement_scale
+        apply_statement_scale(clean_rows, supplemental_pages,
+                              provider=llm_full_extract_provider, model=llm_full_extract_model)
+    except Exception as _ss_exc:
+        print(f"  [statement_scale] skipped due to error: {_ss_exc}")
+
     print("\n[STEP 5] Rebuild database")
     reset_db(db_path, schema_sql)
     load_cleaned_pipeline_results(db_path, supplemental_pages, pages, clean_rows, plan_info_map, plan_year=plan_year)

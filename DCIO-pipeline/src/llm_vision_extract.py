@@ -32,6 +32,7 @@ from .llm_row_extract import (
     _PROMPT_INSTRUCTIONS,
     _RETRY_BACKOFF_SEC,
     _SCHEMA_FIELDS,
+    _apply_printed_type,
     _apply_scale,
     _parse_llm_response,
 )
@@ -94,6 +95,7 @@ def _process_page_vision(pdf_path: str, pdf_stem: str, page_num: int, provider: 
             val = llm_row.get(field, "")
             row[field] = "" if val is None else str(val).strip()
         _apply_scale(row, scale_multiplier)
+        _apply_printed_type(row, llm_row, page_num, row_idx, "llm_vision_extract")
 
         if not row["asset_type"]:
             section_heading = str(llm_row.get("section_heading") or "").strip()
