@@ -67,6 +67,60 @@ def test_printed_type_beats_model_label():
     assert row == {"asset_type": "Common/Collective Trust Fund", "asset_type_source": "row"}
 
 
+_GE_P17 = """Registered investment companies:
+Dodge & Cox Income Fund 88,230
+Fidelity Treasury Only Money Market Fund 12,140
+Synthetic guaranteed investment contracts:
+Massachusetts Mutual Life Insurance Company:
+Goldman Sachs Trust Co Term Fund 2025 696
+Goldman Sachs Trust Co Term Fund 2026 9,564
+"""
+
+
+def test_section_heading_retypes_model_mf_rows():  # GE HealthCare (2026-11-28)
+    from src.llm_row_extract import _apply_page_headings
+    rows = [{"investment_description": d, "asset_type": "Mutual Fund", "asset_type_source": "inferred"}
+            for d in ("Dodge & Cox", "Term 2025", "Term 2026")]
+    assert _apply_page_headings(rows, ["88,230", "696", "9,564"], _GE_P17, 17) == 2
+    assert [r["asset_type"] for r in rows] == ["Mutual Fund", "Stable Value Fund", "Stable Value Fund"]
+
+
+def test_section_heading_never_beats_printed_row_type():
+    from src.llm_row_extract import _apply_page_headings
+    rows = [{"investment_description": "T", "asset_type": "Mutual Fund", "asset_type_source": "row"}]
+    assert _apply_page_headings(rows, ["696"], _GE_P17, 17) == 0
+
+
+def test_squashed_text_reread(monkeypatch):  # RWJBarnabas (2026-11-28)
+    import src.llm_row_extract as m
+
+    class _Page:
+        def extract_text(self, x_tolerance=3):
+            return "AmericanFundsGrowthFundofAmerica 1,234" if x_tolerance == 3 else "American Funds Growth Fund of America 1,234"
+
+    class _Pdf:
+        pages = [_Page()]
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+
+    monkeypatch.setattr(m.pdfplumber, "open", lambda p: _Pdf())
+    assert m._get_page_text("x.pdf", 1).startswith("American Funds Growth")
+
+
+def test_continuation_page_inherits_thousands(monkeypatch):  # CNA (2026-11-28)
+    import src.llm_row_extract as m
+    texts = {15: "Schedule H, Line 4i\n(In thousands)\nIGT Fund 5,000",
+             16: "Identity of issue Current value\nVanguard Intl Growth 92,297",
+             17: "Schedule of Assets\nOther 1,000"}
+    monkeypatch.setattr(m, "_get_page_text", lambda p, n: texts[n])
+    pages = [{"page_number": 15, "scale_multiplier": 1000, "mapped_rows": [{"current_value": "5000000"}]},
+             {"page_number": 16, "scale_multiplier": 1, "mapped_rows": [{"current_value": "92297"}]},
+             {"page_number": 17, "scale_multiplier": 1, "mapped_rows": [{"current_value": "1000"}]}]
+    assert m._inherit_continuation_scale("x.pdf", pages) == 1
+    assert float(pages[1]["mapped_rows"][0]["current_value"]) == 92297000
+    assert pages[2]["mapped_rows"][0]["current_value"] == "1000"   # own title -> left alone
+
+
 def test_model_label_kept_when_no_printed_type():
     row = {"asset_type": "Mutual Fund", "asset_type_source": "inferred"}
     _apply_printed_type(row, {"printed_type": ""}, 18, 3, "t")

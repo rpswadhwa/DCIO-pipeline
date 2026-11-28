@@ -66,6 +66,9 @@ ASSET_TYPE_PATTERNS = [
     (r'Self[\-\s]?Directed\s+Brokerage',                       'Self-Directed Brokerage Account'),
     (r'Collective\s+Funds?',                                    'Commingled Fund'),
     (r'Stable\s+Value\s+Funds?',                                'Stable Value Fund'),
+    # (2026-11-28) GE HealthCare: "Synthetic guaranteed investment contracts:" heads the
+    # wrapped Goldman Sachs Term Fund rows; no pattern matched it, so the model typed them MF.
+    (r'(?:Synthetic\s+)?Guaranteed\s+Investment\s+Contracts?',  'Stable Value Fund'),
     (r'Money\s+Market\s+Funds?',                                'Money Market Fund'),
     # No canonical pattern here previously mapped this DOL Schedule H, 4i
     # heading at all -- it silently fell through the one-cell heading

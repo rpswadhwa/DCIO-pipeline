@@ -23,7 +23,7 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pdfplumber
 
-from .asset_type_patterns import detect_asset_type
+from .asset_type_patterns import detect_asset_type, detect_asset_type_strict
 from .llm_provider import call_llm_json
 
 _MAX_WORKERS = int(os.environ.get("LLM_ROW_EXTRACT_MAX_WORKERS", "6"))
@@ -120,11 +120,87 @@ _PROMPT_INSTRUCTIONS = (
 )
 
 
+def _space_share(text: str) -> float:
+    s = (text or "").replace("\n", "")
+    return s.count(" ") / max(len(s), 1)
+
+
+# (2026-11-28) Squashed text layer (RWJBarnabas 403(b)): word gaps on the page are narrower than
+# pdfplumber's default x_tolerance=3, so "American Funds Target date 2035 R6" reads as
+# "AmericanFundsTargetdate2035R6" and the model splits it into issuer "AmericanFunds". Normal
+# pages read identically at x_tolerance=1 (measured: CNA, GE, Brookfield, Exeter, UL); RWJ's
+# schedule pages go 0.04 -> 0.15 space share. Re-read only when the default text is
+# space-starved AND the tighter read restores a clear margin of spaces.
+_SQUASHED_SPACE_SHARE = 0.10
+_SQUASHED_MIN_GAIN = 0.03
+
+
 def _get_page_text(pdf_path: str, page_num: int) -> str:
     with pdfplumber.open(pdf_path) as pdf:
         if page_num < 1 or page_num > len(pdf.pages):
             return ""
-        return pdf.pages[page_num - 1].extract_text() or ""
+        page = pdf.pages[page_num - 1]
+        text = page.extract_text() or ""
+        if text.strip() and _space_share(text) < _SQUASHED_SPACE_SHARE:
+            tight = page.extract_text(x_tolerance=1) or ""
+            if _space_share(tight) - _space_share(text) >= _SQUASHED_MIN_GAIN:
+                print(f"    [llm_row_extract] page {page_num}: squashed text layer "
+                      f"({_space_share(text):.2f} spaces) -> re-read at x_tolerance=1 "
+                      f"({_space_share(tight):.2f})")
+                return tight
+        return text
+
+
+# (2026-11-28) A printed section heading wins over the model's own guess (GE HealthCare RSP:
+# Goldman Sachs Trust Co "Term Fund 2025-2028" printed under "Synthetic guaranteed investment
+# contracts:" were labelled Mutual Fund from general knowledge). The deterministic heading
+# backfill below only ever filled a BLANK type, so the heading never got a say. Here each
+# value-less line that IS a type label (detect_asset_type_strict) opens a section; label-less
+# lines such as the wrapper issuer "Massachusetts Mutual Life Insurance Company:" leave it open.
+# Rows are placed by their printed value. Only a non-MF heading overrides, and never a type the
+# row prints itself -- same downgrade-only stance as section_typing.py.
+_MF_HEADING_TYPES = frozenset({"Mutual Fund", "Money Market Fund", "ETF", "Mutual Fund/Collective Trust"})
+_LINE_TRAILING_NUM = re.compile(r"(\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?\s*\)?\s*$")
+
+
+def _page_sections(page_text: str) -> list:
+    """[(printed value digits, heading type)] for each value line, in page order."""
+    out, current = [], ""
+    for line in (page_text or "").splitlines():
+        s = line.strip()
+        if not s:
+            continue
+        m = _LINE_TRAILING_NUM.search(s)
+        if m and re.search(r"\d{2,}", m.group(1)):
+            out.append((m.group(1).replace(",", ""), current))
+            continue
+        label = detect_asset_type_strict(re.sub(r"^\W+|\W+$", "", s))
+        if label:
+            current = label
+    return out
+
+
+def _apply_page_headings(mapped_rows: list, raw_values: list, page_text: str, page_num: int) -> int:
+    sections = _page_sections(page_text)
+    changed = 0
+    for row, raw in zip(mapped_rows, raw_values):
+        if row.get("asset_type_source") == "row":
+            continue                                   # printed on the row itself: keep
+        if row.get("asset_type") not in _MF_HEADING_TYPES:
+            continue                                   # only an MF over-count is corrected here
+        digits = re.sub(r"[^0-9.]", "", str(raw or "")).split(".")[0]
+        hits = {t for v, t in sections if v == digits} if digits else set()
+        if len(hits) != 1:
+            continue                                   # unplaced or ambiguous: keep
+        heading = hits.pop()
+        if not heading or heading in _MF_HEADING_TYPES or heading not in _KNOWN_ASSET_TYPES:
+            continue
+        if row.get("asset_type") != heading:
+            print(f"    [llm_row_extract] page {page_num}: {row.get('investment_description')!r} "
+                  f"under heading -> {heading!r} (model said {row.get('asset_type')!r})")
+            row["asset_type"], row["asset_type_source"] = heading, "heading"
+            changed += 1
+    return changed
 
 
 def _parse_llm_response(raw_text: str) -> tuple:
@@ -232,12 +308,14 @@ def _process_page(pdf_path: str, pdf_stem: str, page_num: int, provider: str, mo
 
     scale_multiplier, llm_rows = _parse_llm_response(raw)
     mapped_rows = []
+    raw_values = []
     row_headings = {}
     for row_idx, llm_row in enumerate(llm_rows, start=1):
         row = {f: "" for f in _SCHEMA_FIELDS}
         for field in _SCHEMA_FIELDS:
             val = llm_row.get(field, "")
             row[field] = "" if val is None else str(val).strip()
+        raw_values.append(row["current_value"])
         _apply_scale(row, scale_multiplier)
         _apply_printed_type(row, llm_row, page_num, row_idx, "llm_row_extract")
 
@@ -271,6 +349,7 @@ def _process_page(pdf_path: str, pdf_stem: str, page_num: int, provider: str, mo
         row["row_id"] = row_idx
         row_headings[row_idx] = str(llm_row.get("section_heading") or "").strip()
         mapped_rows.append(row)
+    _apply_page_headings(mapped_rows, raw_values, page_text, page_num)
 
     scale_note = f", scale_multiplier={scale_multiplier:g}" if scale_multiplier != 1 else ""
     print(f"    [llm_row_extract] page {page_num}: {len(mapped_rows)} row(s) via {provider}/{model}{scale_note}")
@@ -311,4 +390,38 @@ def extract_investments_via_llm(
         }
         by_page = {futures[fut]: fut.result() for fut in futures}
 
-    return [by_page[p] for p in page_nums]
+    pages = [by_page[p] for p in page_nums]
+    _inherit_continuation_scale(pdf_path, pages)
+    return pages
+
+
+# (2026-11-28) CNA 401(k) prints "(In thousands)" once, on p15, the first of a seven-page schedule.
+# Pages 16-21 repeat the column header but no label, so each page read alone came back x1 and the
+# mutual funds on p21 (Vanguard Intl Growth 92,297; PIMCO All Asset 13,806) loaded at 1/1000.
+# A page inherits the scale of the page immediately before it when it is a continuation: it
+# prints no schedule title and no scale label of its own. Pages are read concurrently, so this
+# runs once all of them are back.
+_SCHEDULE_TITLE = re.compile(r"schedule\s*h|line\s*4\s*i|schedule\s*of\s*assets|statements?\s*of\s*net", re.I)
+
+
+def _inherit_continuation_scale(pdf_path: str, pages: list) -> int:
+    from .text_extract import _page_values_are_in_millions, _page_values_are_in_thousands
+    inherited = 0
+    by_num = {p.get("page_number"): p for p in pages}
+    for p in sorted(pages, key=lambda e: e.get("page_number") or 0):
+        prev = by_num.get((p.get("page_number") or 0) - 1)
+        if not prev or (prev.get("scale_multiplier") or 1) != 1000 or (p.get("scale_multiplier") or 1) != 1:
+            continue
+        if not p.get("mapped_rows"):
+            continue
+        text = _get_page_text(pdf_path, p["page_number"])
+        if _SCHEDULE_TITLE.search(text) or _page_values_are_in_thousands(text) or _page_values_are_in_millions(text):
+            continue                                   # a page with its own title/label speaks for itself
+        for row in p["mapped_rows"]:
+            _apply_scale(row, 1000)
+        p["scale_multiplier"] = 1000
+        inherited += 1
+        print(f"    [llm_row_extract] page {p['page_number']}: continuation of page "
+              f"{prev['page_number']} (in thousands), no title or label of its own -> "
+              f"{len(p['mapped_rows'])} row(s) x1000")
+    return inherited
