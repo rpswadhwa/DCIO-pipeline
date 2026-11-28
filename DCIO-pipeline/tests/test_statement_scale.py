@@ -16,6 +16,13 @@ def test_squashed_dollars_in_thousands_label():
     assert _page_value_scale_factor("thousands of participants") == 1
 
 
+def test_dollar_and_omitted_thousands_labels():  # Exeter Finance, GE HealthCare
+    assert _page_value_scale_factor("SUPPLEMENTAL SCHEDULE\n($ thousands)") == 1000
+    assert _page_value_scale_factor("December 31, 2025\n(000s omitted)") == 1000
+    assert _page_value_scale_factor("($000s)") == 1000
+    assert _page_value_scale_factor("Total 1,000 shares $ 5,000") == 1
+
+
 def test_statement_figures_only_from_investment_lines():
     text = ("Statements of Net Assets Available for Benefits\n(In Thousands)\n"
             "Investments, at fair value $ 43,831,067 $ 34,167,624\nTotal receivables 734,471 426,120")

@@ -53,6 +53,14 @@ def _page_values_are_in_thousands(text: str) -> bool:
         re.IGNORECASE,
     ):
         return True
+    # (2026-11-27) Labels that open with "(" or "$", where the leading \b above can never match:
+    # Exeter Finance 401(k) prints "($ thousands)", GE HealthCare RSP prints "(000s omitted)".
+    if re.search(
+        r'\(\s*\$\s*(?:in\s*)?thousands\s*\)|\b000\W{0,2}s?\s*omitted\b|\(\s*\$\s*000\W{0,2}s?\s*\)',
+        text or '',
+        re.IGNORECASE,
+    ):
+        return True
     # Some filers (e.g. ALLETE) print a bare standalone "Thousands" label as its
     # own header line instead of an "in thousands" phrase. Anchored to a whole
     # line (not just a substring) so it doesn't fire on unrelated prose that
